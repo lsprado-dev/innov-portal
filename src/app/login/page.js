@@ -225,7 +225,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
             <div>
               <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Utilizador / E-mail</label>
-              <input type="text" required placeholder="Ex: adm-innov" value={emailLogin} onChange={(e) => setEmailLogin(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
+              <input type="text" required placeholder="Ex: victor" value={emailLogin} onChange={(e) => setEmailLogin(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
             </div>
             <div>
               <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Senha Segura</label>
