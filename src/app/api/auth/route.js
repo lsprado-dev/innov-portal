@@ -20,12 +20,14 @@ const encriptarSenha = (text) => {
 
 export async function POST(request) {
   try {
-    const { email, password } = await request.json();
+  const { email, password } = await request.json();
 
-    // Atalho inteligente: se o admin digitar só "victor", completa com o novo domínio
-    let emailFinal = email;
-    if (!email.includes('@')) {
-      emailFinal = `${email}@innovbusiness.com.br`;
+    // Limpa espaços invisíveis e converte tudo para minúsculo
+    let emailTratado = email.trim().toLowerCase(); 
+
+    let emailFinal = emailTratado;
+    if (!emailTratado.includes('@')) {
+      emailFinal = `${emailTratado}@innovbusiness.com.br`;
     }
 
     // ========================================================
