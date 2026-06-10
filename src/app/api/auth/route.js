@@ -1,39 +1,61 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabase';
 
+// E-mails reais e atualizados da sua equipe
 const EQUIPE_INTERNA = {
-  'adm-innov@innovative.com': 'Victor (Admin)',
-  'societario-innov@innovative.com': 'Maria (Societário)',
-  'contabil-innov@innovative.com': 'Helena (Contábil)',
-  'fiscal-innov@innovative.com': 'Luiza (Fiscal)',
-  'rh-innov@innovative.com': 'Karen (RH)',
-  'suporte-innov@innovative.com': 'Beatriz (Suporte)',
-  'financeiro-innov@innovative.com': 'Lucas (Financeiro)'
+  'victor@innovbusiness.com.br': 'Victor (Admin)',
+  'societario@innovbusiness.com.br': 'Maria (Societário)',
+  'mensalistas@innovbusiness.com.br': 'Helena (Contábil)',
+  'fiscal@innovbusiness.com.br': 'Luiza (Fiscal)',
+  'rh@innovbusiness.com.br': 'Karen (RH)',
+  'supporte@innovbusiness.com.br': 'Beatriz (Suporte)', // Mantive 'supporte' conforme o seu SQL
+  'lucas@innovbusiness.com.br': 'Lucas (Financeiro)'
+};
+
+// Função de criptografia reversível para validar os Clientes
+const encriptarSenha = (text) => {
+  if (!text) return '';
+  return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
 };
 
 export async function POST(request) {
   try {
     const { email, password } = await request.json();
 
+    // Atalho inteligente: se o admin digitar só "victor", completa com o novo domínio
     let emailFinal = email;
     if (!email.includes('@')) {
-      emailFinal = `${email}@innovative.com`;
+      emailFinal = `${email}@innovbusiness.com.br`;
     }
 
-    // 1. Validação da Equipe Interna (Lendo a senha oculta do ambiente)
+    // ========================================================
+    // 1. Validação da Equipe Interna (Via Supabase Auth Nativo)
+    // ========================================================
     if (EQUIPE_INTERNA[emailFinal]) {
-      if (password === process.env.ADMIN_PASSWORD) {
+      // Usa o e-mail real e a senha limpa para validar no Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: emailFinal,
+        password: password,
+      });
+
+      if (authData?.user) {
+        // Puxa o nome do metadata ou usa o fallback do objeto EQUIPE_INTERNA
+        const nomeAdmin = authData.user.user_metadata?.nome || EQUIPE_INTERNA[emailFinal];
+        
         return NextResponse.json({
           success: true,
           tipo: 'interno',
-          nome: EQUIPE_INTERNA[emailFinal]
+          nome: nomeAdmin,
+          id: authData.user.id
         });
       } else {
         return NextResponse.json({ success: false, error: 'Senha incorreta para este membro da equipe.' }, { status: 401 });
       }
     }
 
-    // 2. Validação do Cliente
+    // ========================================================
+    // 2. Validação do Cliente (Via tabela customizada 'clientes')
+    // ========================================================
     const { data: cliente, error: clienteError } = await supabase
       .from('clientes')
       .select('*')
@@ -46,10 +68,15 @@ export async function POST(request) {
     }
 
     if (cliente) {
+      // Criptografa a senha digitada para comparar com o que está salvo no banco
+      const senhaCriptografadaCliente = encriptarSenha(password);
+
+      // Regra da senha padrão (6 primeiros dígitos do CNPJ)
       const apenasNumeros = cliente.cnpj.replace(/\D/g, '');
       const senhaCNPJ = apenasNumeros.substring(0, 6);
 
-      if (password === senhaCNPJ) {
+      // Permite o login se for a senha padrão OU a senha nova alterada e criptografada
+      if (password === senhaCNPJ || cliente.senha === senhaCriptografadaCliente) {
         return NextResponse.json({
           success: true,
           tipo: 'cliente',
@@ -61,7 +88,11 @@ export async function POST(request) {
       }
     }
 
+    // ========================================================
+    // 3. Se não achou na equipe e nem nos clientes
+    // ========================================================
     return NextResponse.json({ success: false, error: 'Usuário ou e-mail não encontrado no sistema.' }, { status: 404 });
+    
   } catch (err) {
     console.error('Erro crítico na rota de autenticação:', err.message);
     return NextResponse.json({ success: false, error: 'Erro interno no servidor de login.' }, { status: 500 });

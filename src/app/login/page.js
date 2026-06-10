@@ -111,7 +111,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailLogin, password: encriptarSenha(senha) }) // Envia criptografada
+        body: JSON.stringify({ email: emailLogin, password: senha }) // Envia a senha limpa para a API
       });
 
       const data = await response.json();
