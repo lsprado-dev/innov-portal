@@ -25,8 +25,10 @@ const decriptarSenha = (cipher) => {
 const LISTA_COLABORADORES = [
   'Victor (Admin)',
   'Maria (Societário)',
-  'Helena (Contábil)',
+  'Helena (Societário e Suporte)',
   'Luiza (Fiscal)',
+  'Nogueira (Fiscal)',
+  'Vanessa (Contábil)',
   'Karen (RH)',
   'Beatriz (Suporte)',
   'Lucas (Financeiro)'

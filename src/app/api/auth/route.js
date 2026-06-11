@@ -5,10 +5,12 @@ import { supabase } from '../../lib/supabase';
 const EQUIPE_INTERNA = {
   'victor@innovbusiness.com.br': 'Victor (Admin)',
   'societario@innovbusiness.com.br': 'Maria (Societário)',
-  'mensalistas@innovbusiness.com.br': 'Helena (Contábil)',
+  'mensalistas@innovbusiness.com.br': 'Helena (Societário e Suporte)',
+  'fiscal2@innovbusiness.com.br': 'Nogueira (Fiscal)',
+  'contabil@innovbusiness.com.br': 'Vanessa (Contábil)',
   'fiscal@innovbusiness.com.br': 'Luiza (Fiscal)',
   'rh@innovbusiness.com.br': 'Karen (RH)',
-  'supporte@innovbusiness.com.br': 'Beatriz (Suporte)', // Mantive 'supporte' conforme o seu SQL
+  'suporte@innovbusiness.com.br': 'Beatriz (Suporte)',
   'lucas@innovbusiness.com.br': 'Lucas (Financeiro)'
 };
 
