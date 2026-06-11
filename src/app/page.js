@@ -3,6 +3,20 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { enviarEmailDemanda } from '@/lib/email';
+
+// Dicionário rápido para mapear nome da equipe para e-mail
+const OBTER_EMAIL_FUNCIONARIO = {
+  'Victor (Admin)': 'victor@innovbusiness.com.br',
+  'Maria (Societário)': 'societario@innovbusiness.com.br',
+  'Helena (Societário e Suporte)': 'mensalistas@innovbusiness.com.br',
+  'Luiza (Fiscal)': 'fiscal@innovbusiness.com.br',
+  'Nogueira (Fiscal)': 'fiscal2@innovbusiness.com.br',
+  'Vanessa (Contábil)': 'contabil@innovbusiness.com.br',
+  'Karen (RH)': 'rh@innovbusiness.com.br',
+  'Beatriz (Suporte)': 'suporte@innovbusiness.com.br',
+  'Lucas (Financeiro)': 'lucas@innovbusiness.com.br'
+};
 
 // Funções de Criptografia Reversível com tolerância a senhas antigas
 const encriptarSenha = (text) => {
@@ -378,10 +392,36 @@ export default function AdminPage() {
     e.preventDefault();
     if (!formDemanda.descricao.trim() || !formDemanda.data_entrega) return;
     setSubindo(true);
+    
+    // 1. Salva a demanda no banco de dados
     const { error } = await supabase.from('demandas_equipe').insert([{
-      criado_por: operador, atribuido_para: formDemanda.atribuido_para, descricao: formDemanda.descricao.trim(), data_entrega: formDemanda.data_entrega, prioridade: formDemanda.prioridade, status: 'pendente'
+      criado_por: operador, 
+      atribuido_para: formDemanda.atribuido_para, 
+      descricao: formDemanda.descricao.trim(), 
+      data_entrega: formDemanda.data_entrega, 
+      prioridade: formDemanda.prioridade, 
+      status: 'pendente'
     }]);
-    if (!error) { setFormDemanda({ descricao: '', atribuido_para: 'Victor (Admin)', data_entrega: '', prioridade: 'Média' }); carregarDados(); }
+    
+    // 2. Se salvou certinho, limpa o formulário e dispara o alerta premium!
+    if (!error) { 
+      const emailDestino = OBTER_EMAIL_FUNCIONARIO[formDemanda.atribuido_para];
+      
+      if (emailDestino) {
+        // Dispara o servidor de e-mail em background sem travar a tela
+        enviarEmailDemanda({
+          to: emailDestino,
+          nomeDestinatario: formDemanda.atribuido_para,
+          nomeRemetente: operador, // Puxa seu nome logado automaticamente
+          tituloDemanda: `Nova Tarefa - Prioridade ${formDemanda.prioridade}`,
+          descricao: formDemanda.descricao.trim(),
+          prazo: new Date(formDemanda.data_entrega).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
+        }).catch(err => console.error("Falha no disparo automágico:", err));
+      }
+
+      setFormDemanda({ descricao: '', atribuido_para: 'Victor (Admin)', data_entrega: '', prioridade: 'Média' }); 
+      carregarDados(); 
+    }
     setSubindo(false);
   }
 
