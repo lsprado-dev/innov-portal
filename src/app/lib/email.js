@@ -18,7 +18,7 @@ export async function enviarEmailDemanda({
     const { data, error } = await resend.emails.send({
       from: 'Innov Portal <sistema@innovbusiness.com.br>',
       to: [to],
-      subject: `Nova Tarefa: ${tituloDemanda}`,
+      subject: ` Nova Demanda: ${tituloDemanda}`,
       html: `
         <div style="background-color: #f1f5f9; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
