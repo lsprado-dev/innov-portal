@@ -964,9 +964,9 @@ export default function AdminPage() {
                         </span>
                         <span className="text-[11px] text-zinc-500">{new Date(pedido.criado_em).toLocaleString('pt-BR')}</span>
                       </div>
-                      <p className="text-sm text-zinc-200 font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
-                        "{pedido.descricao}"
-                      </p>
+                     <p className="text-sm text-zinc-200 font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
+  &ldquo;{pedido.descricao}&rdquo;
+</p>
                     </div>
                     <div className="flex gap-2 w-full md:w-auto whitespace-nowrap mt-2 md:mt-0">
                       <Link href={`/cliente/${pedido.cliente_id}`} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm text-center">
