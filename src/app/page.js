@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from './lib/supabase'; // Ajustado para a pasta real
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { enviarEmailDemanda } from '@/lib/email';
+import { enviarEmailDemanda } from './lib/email'; // Ajustado para a pasta real
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
