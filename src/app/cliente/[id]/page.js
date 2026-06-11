@@ -3,6 +3,12 @@ import { useEffect, useState, use } from 'react';
 import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { enviarEmailDemanda } from '../../lib/email'; 
+
+// Dicionário rápido para mapear nome da equipe para e-mail
+const OBTER_EMAIL_FUNCIONARIO = {
+  'Lucas (Financeiro)': 'lucas@innovbusiness.com.br'
+};
 
 // Função de Criptografia Reversível para salvar de forma segura no Supabase
 const encriptarSenha = (text) => {
@@ -23,6 +29,23 @@ const IconFolderLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill=
 const IconChartLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
 const IconUsersLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
 const IconDocLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+const IconFinanceiroLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+
+// Nova inteligência de meses do Financeiro
+const CICLO_FINANCEIRO = [
+  { id: '01', ref: 'Janeiro', pag: 'Fevereiro' },
+  { id: '02', ref: 'Fevereiro', pag: 'Março' },
+  { id: '03', ref: 'Março', pag: 'Abril' },
+  { id: '04', ref: 'Abril', pag: 'Maio' },
+  { id: '05', ref: 'Maio', pag: 'Junho' },
+  { id: '06', ref: 'Junho', pag: 'Julho' },
+  { id: '07', ref: 'Julho', pag: 'Agosto' },
+  { id: '08', ref: 'Agosto', pag: 'Setembro' },
+  { id: '09', ref: 'Setembro', pag: 'Outubro' },
+  { id: '10', ref: 'Outubro', pag: 'Novembro' },
+  { id: '11', ref: 'Novembro', pag: 'Dezembro' },
+  { id: '12', ref: 'Dezembro', pag: 'Jan de 2027' }
+];
 
 const IconFolderSolid = () => <svg className="w-6 h-6 text-[#d4af37]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>;
 const IconFile = () => <svg className="w-6 h-6 text-[#d4af37] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>;
@@ -93,6 +116,8 @@ export default function ClientePage({ params: paramsPromise }) {
   const [salvandoSenha, setSalvandoSenha] = useState(false);
 
   const [alertasSemArquivo, setAlertasSemArquivo] = useState({});
+  const [boletosSolicitados, setBoletosSolicitados] = useState([]); // Memória anti-spam
+  const [mensalidadesPagas, setMensalidadesPagas] = useState([]); // Memória do checkbox
 
   const [carregando, setCarregando] = useState(true);
   const [subindoArquivo, setSubindoArquivo] = useState(false);
@@ -181,6 +206,12 @@ export default function ClientePage({ params: paramsPromise }) {
       // 2. Carrega arquivos ativos (fora da lixeira)
       const { data } = await supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
       if (data) setArquivos(data);
+
+      // 3. Carrega status de pagamentos manuais (apenas Financeiro)
+      if (pastaAtiva === 'financeiro') {
+        const { data: pagas } = await supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id);
+        if (pagas) setMensalidadesPagas(pagas.map(p => p.mes_ref));
+      }
     } 
     else if (abaPrincipal === 'envios') {
       const { data } = await supabase.from('envios_cliente').select('*').eq('cliente_id', id).is('data_exclusao', null).order('criado_em', { ascending: false });
@@ -218,6 +249,16 @@ export default function ClientePage({ params: paramsPromise }) {
       
       lixeiraCompleta.sort((a, b) => new Date(b.data_exclusao) - new Date(a.data_exclusao));
       setItensLixeira(lixeiraCompleta);
+    }
+  }
+
+  async function togglePagoManual(mesRef, estaPago) {
+    if (estaPago) {
+      await supabase.from('mensalidades_status').delete().match({ cliente_id: id, mes_ref: mesRef });
+      setMensalidadesPagas(prev => prev.filter(m => m !== mesRef));
+    } else {
+      await supabase.from('mensalidades_status').insert([{ cliente_id: id, mes_ref: mesRef }]);
+      setMensalidadesPagas(prev => [...prev, mesRef]);
     }
   }
 
@@ -293,6 +334,85 @@ export default function ClientePage({ params: paramsPromise }) {
     alert('Documento publicado com sucesso!');
     await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" na pasta ${pastaAtiva}.`);
     carregarDadosDaAba();
+    setSubindoArquivo(false);
+  }
+
+  async function handleUploadFinanceiro(e, mesRef) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) return alert('O ficheiro excede 15MB.');
+
+    setSubindoArquivo(true);
+    const timestamp = Date.now();
+    const caminhoArquivo = `${id}/financeiro/${mesRef}_${timestamp}_${file.name}`;
+
+    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
+    if (storageError) { alert('Erro no Storage'); setSubindoArquivo(false); return; }
+
+    // Envia com subpasta nula para não quebrar o banco, o sistema vai ler pelo caminhoArquivo
+    const { error: dbError } = await supabase.from('arquivos_portal').insert([{
+      cliente_id: id, 
+      setor: 'financeiro', 
+      subpasta_id: null, 
+      nome_original: file.name, 
+      caminho_storage: caminhoArquivo, 
+      enviado_por: operador
+    }]);
+
+    if (dbError) {
+      alert('Erro ao registrar no banco de dados: ' + dbError.message);
+      setSubindoArquivo(false);
+      return;
+    }
+
+    alert(`Comprovante de ${mesRef} anexado com sucesso!`);
+    await registrarAuditoria('COMPROVANTE_ENVIADO', `Enviou o comprovante referente a ${mesRef}.`);
+    carregarDadosDaAba();
+    setSubindoArquivo(false);
+  }
+
+  async function handleSolicitarBoleto(mesRef) {
+    if (!confirm(`Deseja solicitar à equipe o reenvio do boleto referente a ${mesRef}?`)) return;
+    
+    setSubindoArquivo(true);
+    
+    // Define a prioridade para o dia seguinte
+    const dataAmanha = new Date();
+    dataAmanha.setDate(dataAmanha.getDate() + 1);
+    const dataAmanhaStr = dataAmanha.toISOString().split('T')[0];
+
+    // 1. Cria a demanda direto no seu painel
+    const { error } = await supabase.from('demandas_equipe').insert([{
+      criado_por: cliente.nome_empresa, 
+      atribuido_para: 'Lucas (Financeiro)', 
+      descricao: `Solicitação de Boleto - Ref: ${mesRef}`, 
+      data_entrega: dataAmanhaStr, 
+      prioridade: 'Alta', 
+      status: 'pendente'
+    }]);
+
+    if (!error) {
+      // 2. Dispara o e-mail mágico
+      try {
+        await enviarEmailDemanda({
+          to: OBTER_EMAIL_FUNCIONARIO['Lucas (Financeiro)'],
+          nomeDestinatario: 'Lucas (Financeiro)',
+          nomeRemetente: cliente.nome_empresa,
+          tituloDemanda: `Nova Solicitação de Boleto - Ref: ${mesRef}`,
+          descricao: `O cliente ${cliente.nome_empresa} (CNPJ: ${cliente.cnpj}) está solicitando o envio do boleto da competência ${mesRef} pelo portal.`,
+          prazo: new Date(dataAmanhaStr).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
+        });
+      } catch (err) {
+        console.error("Falha ao notificar por e-mail:", err);
+      }
+      
+      alert('Solicitação enviada com sucesso! O Financeiro já foi notificado e enviará o boleto em breve.');
+      await registrarAuditoria('BOLETO_SOLICITADO', `Solicitou a 2ª via do boleto de ${mesRef}.`);
+      setBoletosSolicitados(prev => [...prev, mesRef]); // Bloqueia o botão para este mês!
+    } else {
+      alert('Erro ao enviar solicitação: ' + error.message);
+    }
     setSubindoArquivo(false);
   }
 
@@ -646,30 +766,143 @@ export default function ClientePage({ params: paramsPromise }) {
         ========================================== */}
         {abaPrincipal === 'pastas' && (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-              <button onClick={() => setPastaAtiva('contabil')} className={`p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contabil' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+            <div className="flex flex-col md:flex-row w-full gap-4 mb-10">
+              <button onClick={() => setPastaAtiva('contabil')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contabil' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconFolderLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Contábil</h3>
                 <p className="text-[10px] text-zinc-400">Balanços e DREs</p>
               </button>
-              <button onClick={() => setPastaAtiva('fiscal')} className={`p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'fiscal' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => setPastaAtiva('fiscal')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'fiscal' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconChartLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Fiscal</h3>
                 <p className="text-[10px] text-zinc-400">Guias e Impostos</p>
               </button>
-              <button onClick={() => setPastaAtiva('rh')} className={`p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'rh' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => setPastaAtiva('rh')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'rh' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconUsersLarge />
                 <h3 className="text-sm font-bold text-white mb-1">DP / RH</h3>
                 <p className="text-[10px] text-zinc-400">Folhas e Recibos</p>
               </button>
-              <button onClick={() => setPastaAtiva('contrato')} className={`p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contrato' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => setPastaAtiva('contrato')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contrato' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconDocLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Contratos</h3>
                 <p className="text-[10px] text-zinc-400">Atos e Alterações</p>
               </button>
+              <button onClick={() => setPastaAtiva('financeiro')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'financeiro' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-[#d4af37]/50'}`}>
+                <IconFinanceiroLarge />
+                <h3 className="text-sm font-bold text-white mb-1">Financeiro</h3>
+                <p className="text-[10px] text-zinc-400">Controle de mensalidades</p>
+              </button>
             </div>
 
-            {pastaAtiva && (
+            {pastaAtiva === 'financeiro' ? (
+              <div className="bg-[#1b263b] p-8 rounded-xl border border-[#d4af37]/30 shadow-xl mb-10">
+                <div className="border-b border-zinc-800 pb-4 mb-6">
+                  <h3 className="text-xl font-bold text-[#d4af37]">Gestão Financeira</h3>
+                  <p className="text-sm text-zinc-400 mt-1">Anexe aqui os comprovantes referentes a cada competência. O vencimento ocorre sempre no mês subsequente.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {CICLO_FINANCEIRO.map((mes) => {
+                    const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
+                    const pagoManualmente = mensalidadesPagas.includes(mes.ref);
+                    const isPago = comprovanteEnviado || pagoManualmente;
+
+                    // Lógica mágica de datas
+                    const hoje = new Date();
+                    const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10), 10);
+                    dataLiberacao.setHours(0, 0, 0, 0); 
+                    
+                    const estaLiberado = hoje >= dataLiberacao;
+                    const mesAbertura = (parseInt(mes.id, 10) + 1) > 12 ? 1 : (parseInt(mes.id, 10) + 1);
+
+                    // Estilização inteligente do Card
+                    let estiloCard = '';
+                    if (isPago) {
+                      estiloCard = 'bg-emerald-500/10 border-emerald-500/40';
+                    } else if (estaLiberado) {
+                      estiloCard = 'bg-[#0d1b2a] border-zinc-700 shadow-[0_0_15px_rgba(212,175,55,0.05)]'; 
+                    } else {
+                      estiloCard = 'bg-[#0d1b2a]/30 border-zinc-800/30 opacity-50 grayscale pointer-events-none';
+                    }
+
+                    return (
+                      <div key={mes.id} className={`p-4 rounded-xl border flex flex-col justify-between h-44 transition-all relative ${estiloCard}`}>
+                        
+                        {/* Cabeçalho do Card: Nome travado na esquerda, Checkbox na direita */}
+                        <div className="flex justify-between items-start gap-2">
+                          
+                          {/* LADO ESQUERDO */}
+                          <div className="flex-1">
+                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
+                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              Vencimento 20 de {mes.pag}
+                            </p>
+                            {isPago && (
+                              <div className="mt-2">
+                                <span className="bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Pago</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* LADO DIREITO */}
+                          {(estaLiberado || isPago) && (
+                            <div className="pointer-events-auto flex-shrink-0 z-10 pt-0.5">
+                              <label className={`flex items-center gap-2 ${comprovanteEnviado ? 'cursor-default' : 'cursor-pointer'} group`} title={comprovanteEnviado ? "Pago via comprovante" : "Marcar como pago manualmente"}>
+                                <span className={`text-[10px] font-bold text-white transition-all opacity-0 group-hover:opacity-100 ${isPago ? 'group-hover:text-emerald-400' : 'group-hover:text-[#d4af37]'}`}>Pago</span>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isPago} 
+                                  disabled={!!comprovanteEnviado}
+                                  onChange={() => togglePagoManual(mes.ref, isPago)} 
+                                  className="w-5 h-5 cursor-pointer transition-colors"
+                                  style={{ accentColor: isPago ? '#10b981' : '#d4af37' }} 
+                                />
+                              </label>
+                            </div>
+                          )}
+                          
+                        </div>
+                        
+                        <div className="mt-2">
+                          {comprovanteEnviado ? (
+                            <div className="flex flex-col gap-2 mt-1">
+                              <div className="flex gap-2">
+                                <button onClick={() => baixarDocumento(comprovanteEnviado.caminho_storage)} className="flex-1 text-[11px] border border-emerald-500/50 text-emerald-400 py-1.5 rounded font-bold shadow-sm hover:bg-emerald-500 hover:text-black transition pointer-events-auto">Ver Comprovante</button>
+                                {isInterno && (
+                                  <button onClick={() => handleMoverParaLixeira(comprovanteEnviado, 'portal')} className="px-2 bg-red-500/10 text-red-500 rounded border border-red-500/20 hover:bg-red-500 hover:text-white transition pointer-events-auto" title="Excluir"><IconTrashTab /></button>
+                                )}
+                              </div>
+                            </div>
+                          ) : estaLiberado ? (
+                            <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
+                              <label className="block text-center text-[11px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition cursor-pointer shadow-sm">
+                                {subindoArquivo ? 'Aguarde...' : '+ Anexar Comprovante'}
+                                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => handleUploadFinanceiro(e, mes.ref)} disabled={subindoArquivo} />
+                              </label>
+                              {!isPago && (
+                                <button 
+                                  onClick={() => handleSolicitarBoleto(mes.ref)} 
+                                  disabled={subindoArquivo || boletosSolicitados.includes(mes.ref)} 
+                                  className={`block w-full text-center text-[10px] border py-1.5 rounded font-bold transition ${boletosSolicitados.includes(mes.ref) ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10 cursor-not-allowed' : 'border-zinc-600 text-zinc-300 hover:bg-zinc-800 hover:text-white'}`}
+                                >
+                                  {boletosSolicitados.includes(mes.ref) ? 'Solicitação Enviada ✓' : 'Solicitar Boleto'}
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2 mt-1">
+                              <span className="block text-center text-[10px] text-zinc-600 py-2 border border-zinc-800/30 rounded font-bold">
+                                Abre dia 10/{String(mesAbertura).padStart(2, '0')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : pastaAtiva && (
               <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
                   {/* BREADCRUMBS INTELIGENTES */}

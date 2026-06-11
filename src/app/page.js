@@ -171,6 +171,20 @@ export default function AdminPage() {
     dataLimite.setDate(dataLimite.getDate() - 30);
     const dataLimiteISO = dataLimite.toISOString();
     
+    // 1. Busca quais são os arquivos físicos no Storage que já venceram
+    const { data: arqVencidos } = await supabase.from('arquivos_portal').select('caminho_storage').lt('data_exclusao', dataLimiteISO);
+    const { data: envVencidos } = await supabase.from('envios_cliente').select('caminho_storage').lt('data_exclusao', dataLimiteISO);
+    
+    let caminhosParaDeletar = [];
+    if (arqVencidos) caminhosParaDeletar = [...caminhosParaDeletar, ...arqVencidos.map(a => a.caminho_storage)];
+    if (envVencidos) caminhosParaDeletar = [...caminhosParaDeletar, ...envVencidos.map(a => a.caminho_storage)];
+    
+    // 2. Apaga o PDF/Imagem real do HD do servidor (Evita custo fantasma)
+    if (caminhosParaDeletar.length > 0) {
+      await supabase.storage.from('documentos').remove(caminhosParaDeletar);
+    }
+
+    // 3. Finalmente, limpa os registros textuais do banco de dados
     await supabase.from('arquivos_portal').delete().lt('data_exclusao', dataLimiteISO);
     await supabase.from('envios_cliente').delete().lt('data_exclusao', dataLimiteISO);
 

@@ -4,6 +4,9 @@ export const metadata = {
   title: 'Innovative Business',
   description: 'Portal Digital da Contabilidade',
   manifest: '/manifest.json',
+};
+
+export const viewport = {
   themeColor: '#0d1b2a',
 };
 
