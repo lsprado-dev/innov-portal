@@ -151,6 +151,12 @@ export default function AdminPage() {
     setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
   }
 
+  // SISTEMA DE CONFIRMAÇÃO PREMIUM (Adeus confirm nativo)
+  const [dialogo, setDialogo] = useState({ aberto: false, titulo: '', mensagem: '', acao: null, tipo: 'perigo' });
+  function confirmarAcao(titulo, mensagem, acao, tipo = 'perigo') {
+    setDialogo({ aberto: true, titulo, mensagem, acao, tipo });
+  }
+
   useEffect(() => {
     const tipoUsuario = localStorage.getItem('usuario_tipo');
     const nomeUsuario = localStorage.getItem('usuario_nome');
@@ -401,20 +407,22 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
-  async function deletarAlerta(id) {
-    if(!confirm('Deseja excluir esta cobrança permanentemente?')) return;
-    setSubindo(true);
-    const { error } = await supabase.from('alertas_clientes').delete().eq('id', id);
-    if (!error) await carregarDados();
-    setSubindo(false);
+  function deletarAlerta(id) {
+    confirmarAcao('Excluir Cobrança', 'Tem certeza que deseja excluir esta cobrança permanentemente?', async () => {
+      setSubindo(true);
+      const { error } = await supabase.from('alertas_clientes').delete().eq('id', id);
+      if (!error) await carregarDados();
+      setSubindo(false);
+    });
   }
 
-  async function atenderPedidoCliente(id) {
-    if (!confirm('Deseja marcar esta solicitação do cliente como atendida?')) return;
-    setSubindo(true);
-    const { error } = await supabase.from('pedidos_cliente').update({ status: 'atendido' }).eq('id', id);
-    if (!error) await carregarDados();
-    setSubindo(false);
+  function atenderPedidoCliente(id) {
+    confirmarAcao('Marcar como Atendida', 'Deseja marcar esta solicitação do cliente como atendida?', async () => {
+      setSubindo(true);
+      const { error } = await supabase.from('pedidos_cliente').update({ status: 'atendido' }).eq('id', id);
+      if (!error) await carregarDados();
+      setSubindo(false);
+    }, 'sucesso');
   }
 
   async function handleCriarDemanda(e) {
@@ -458,12 +466,13 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
-  async function deletarDemanda(id) {
-    if (!confirm('Deseja excluir?')) return;
-    setSubindo(true);
-    const { error } = await supabase.from('demandas_equipe').delete().eq('id', id);
-    if (!error) await carregarDados();
-    setSubindo(false);
+  function deletarDemanda(id) {
+    confirmarAcao('Excluir Tarefa', 'Tem certeza que deseja apagar esta demanda da lista?', async () => {
+      setSubindo(true);
+      const { error } = await supabase.from('demandas_equipe').delete().eq('id', id);
+      if (!error) await carregarDados();
+      setSubindo(false);
+    });
   }
 
   function calcularPrazo(dataString) {
@@ -483,21 +492,23 @@ export default function AdminPage() {
     return { texto: `Termina em ${diffDias} dias`, cor: 'text-emerald-400 font-medium' };
   }
 
-  async function aceitarEMoverParaHistorico(doc) {
-    if (!confirm('Mover para o histórico?')) return;
-    setSubindo(true);
-    const { error } = await supabase.from('envios_cliente').update({ status: 'historico' }).eq('id', doc.id);
-    if (!error) await carregarDados(); 
-    setSubindo(false);
+  function aceitarEMoverParaHistorico(doc) {
+    confirmarAcao('Mover Documento', 'Deseja mover este documento para o histórico?', async () => {
+      setSubindo(true);
+      const { error } = await supabase.from('envios_cliente').update({ status: 'historico' }).eq('id', doc.id);
+      if (!error) await carregarDados(); 
+      setSubindo(false);
+    }, 'sucesso');
   }
 
-  async function rejeitarEDeletar(doc) {
-    if (!confirm('Apagar permanentemente?')) return;
-    setSubindo(true);
-    await supabase.storage.from('documentos').remove([doc.caminho_storage]);
-    await supabase.from('envios_cliente').delete().eq('id', doc.id);
-    await carregarDados();
-    setSubindo(false);
+  function rejeitarEDeletar(doc) {
+    confirmarAcao('Apagar Documento', 'Tem certeza que deseja apagar permanentemente este documento?', async () => {
+      setSubindo(true);
+      await supabase.storage.from('documentos').remove([doc.caminho_storage]);
+      await supabase.from('envios_cliente').delete().eq('id', doc.id);
+      await carregarDados();
+      setSubindo(false);
+    });
   }
 
   function baixarDocumento(caminho) {
@@ -559,21 +570,22 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
-  async function rejeitarSolicitacao(id) {
-    if (!confirm('Deseja realmente recusar e apagar esta solicitação de cadastro?')) return;
-    setSubindo(true);
-    const { error } = await supabase.from('solicitacoes_cadastro').delete().eq('id', id);
-    if (!error) await carregarDados();
-    setSubindo(false);
+  function rejeitarSolicitacao(id) {
+    confirmarAcao('Recusar Solicitação', 'Deseja realmente recusar e apagar esta solicitação de cadastro?', async () => {
+      setSubindo(true);
+      const { error } = await supabase.from('solicitacoes_cadastro').delete().eq('id', id);
+      if (!error) await carregarDados();
+      setSubindo(false);
+    });
   }
 
-  async function deletarCliente(id) {
-    if (confirm('Tem certeza? Essa ação é IRREVERSÍVEL.')) { 
+  function deletarCliente(id) {
+    confirmarAcao('Excluir Cliente', 'Essa ação é IRREVERSÍVEL. Todos os dados desta empresa serão apagados.', async () => {
       setSubindo(true);
       await supabase.from('clientes').delete().eq('id', id); 
       await carregarDados(); 
       setSubindo(false);
-    }
+    });
   }
 
   const eGestor = operador === 'Victor (Admin)' || operador === 'Lucas (Financeiro)';
@@ -1362,13 +1374,14 @@ export default function AdminPage() {
                         const ref = itens[0];
                         const isExpanded = automacaoExpandida === titulo;
 
-                        const deletarRegraCompleta = async () => {
-                           if(!confirm(`Deseja excluir esta automação para TODOS os ${itens.length} clientes vinculados?`)) return;
-                           setSubindo(true);
-                           const ids = itens.map(i => i.id);
-                           await supabase.from('alertas_clientes').delete().in('id', ids);
-                           await carregarDados();
-                           setSubindo(false);
+                        const deletarRegraCompleta = () => {
+                           confirmarAcao('Excluir Automação', `Deseja excluir esta automação para TODOS os ${itens.length} clientes vinculados?`, async () => {
+                               setSubindo(true);
+                               const ids = itens.map(i => i.id);
+                               await supabase.from('alertas_clientes').delete().in('id', ids);
+                               await carregarDados();
+                               setSubindo(false);
+                           });
                         };
 
                         return (
@@ -1551,6 +1564,32 @@ export default function AdminPage() {
         )}
 
       </div>
+
+      {/* SISTEMA DE CONFIRMAÇÃO (Substitui o alert feio do navegador) */}
+      {dialogo.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-sm p-6 shadow-[0_0_40px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+            <h3 className={`text-xl font-black mb-2 ${dialogo.tipo === 'perigo' ? 'text-red-500' : 'text-[#d4af37]'}`}>
+              {dialogo.tipo === 'perigo' ? '⚠️ ' : '✅ '}{dialogo.titulo}
+            </h3>
+            <p className="text-zinc-300 text-sm mb-8 leading-relaxed">{dialogo.mensagem}</p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setDialogo({ ...dialogo, aberto: false })} 
+                className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => { dialogo.acao(); setDialogo({ ...dialogo, aberto: false }); }} 
+                className={`px-5 py-2.5 text-[#0d1b2a] text-sm font-extrabold rounded-lg transition shadow-lg ${dialogo.tipo === 'perigo' ? 'bg-red-500 hover:bg-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-[#d4af37] hover:bg-yellow-500 shadow-[0_0_15px_rgba(212,175,55,0.3)]'}`}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SISTEMA DE TOASTS PREMIUM */}
       <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">

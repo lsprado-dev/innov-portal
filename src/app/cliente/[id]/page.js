@@ -98,9 +98,12 @@ export default function ClientePage({ params: paramsPromise }) {
   const [pastas, setPastas] = useState([]);
   const [subpastaAtiva, setSubpastaAtiva] = useState(null);
 
-  // ESTADOS PARA O BOTÃO MOVER
+  // ESTADOS PARA OS BOTÕES MOVER E RENOMEAR
   const [arquivoMovendo, setArquivoMovendo] = useState(null);
   const [destinoPastaMover, setDestinoPastaMover] = useState('');
+  
+  const [arquivoRenomeando, setArquivoRenomeando] = useState(null);
+  const [novoNomeArquivo, setNovoNomeArquivo] = useState('');
 
   const [arquivos, setArquivos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -123,6 +126,18 @@ export default function ClientePage({ params: paramsPromise }) {
   const [carregando, setCarregando] = useState(true);
   const [subindoArquivo, setSubindoArquivo] = useState(false);
   const [isDragging, setIsDragging] = useState(false); // Radar do Drag & Drop
+
+  // SISTEMA DE CONFIRMAÇÃO PREMIUM
+  const [dialogo, setDialogo] = useState({ aberto: false, titulo: '', mensagem: '', acao: null, tipo: 'perigo' });
+  function confirmarAcao(titulo, mensagem, acao, tipo = 'perigo') {
+    setDialogo({ aberto: true, titulo, mensagem, acao, tipo });
+  }
+
+  // SISTEMA DE MODAL DE INPUT (Substitui os prompts nativos de Pastas e Arquivos)
+  const [inputModal, setInputModal] = useState({ aberto: false, titulo: '', valor: '', placeholder: '', acao: null });
+  function abrirInputModal(titulo, valorAtual, placeholder, acao) {
+    setInputModal({ aberto: true, titulo, valor: valorAtual, placeholder, acao });
+  }
 
   // FUNÇÃO MÁGICA DOS TOASTS (Remove sozinho após 4 segundos)
   function mostrarToast(mensagem, tipo = 'sucesso') {
@@ -276,50 +291,54 @@ export default function ClientePage({ params: paramsPromise }) {
   // ===============================================
   // GESTÃO DE PASTAS (APENAS ADMIN)
   // ===============================================
-  async function handleCriarPasta() {
-    const nomePasta = prompt('Qual é o nome da nova pasta?');
-    if (!nomePasta || nomePasta.trim() === '') return;
-    
-    const { error } = await supabase.from('pastas_portal').insert([{
-      cliente_id: id,
-      setor: pastaAtiva,
-      nome: nomePasta.trim(),
-      parent_id: subpastaAtiva || null // MAGIA: Se ele estiver dentro de uma pasta, salva como filha dela!
-    }]);
-
-    if (!error) {
-      await registrarAuditoria('PASTA_CRIADA', `Criou a pasta "${nomePasta.trim()}" no setor de ${pastaAtiva}.`);
-      carregarDadosDaAba();
-    }
+  function handleCriarPasta() {
+    abrirInputModal('Nova Pasta', '', 'Digite o nome da pasta...', async (nomePasta) => {
+      if (!nomePasta || nomePasta.trim() === '') return;
+      setSubindoArquivo(true);
+      const { error } = await supabase.from('pastas_portal').insert([{
+        cliente_id: id,
+        setor: pastaAtiva,
+        nome: nomePasta.trim(),
+        parent_id: subpastaAtiva || null
+      }]);
+      if (!error) {
+        await registrarAuditoria('PASTA_CRIADA', `Criou a pasta "${nomePasta.trim()}" no setor de ${pastaAtiva}.`);
+        await carregarDadosDaAba();
+      }
+      setSubindoArquivo(false);
+    });
   }
 
-  async function handleRenomearPasta(pasta) {
-    const novoNome = prompt('Renomear pasta para:', pasta.nome);
-    if (!novoNome || novoNome.trim() === '' || novoNome === pasta.nome) return;
-
-    const { error } = await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).eq('id', pasta.id);
-    if (!error) carregarDadosDaAba();
+  function handleRenomearPasta(pasta) {
+    abrirInputModal('Renomear Pasta', pasta.nome, 'Novo nome da pasta...', async (novoNome) => {
+      if (!novoNome || novoNome.trim() === '' || novoNome === pasta.nome) return;
+      setSubindoArquivo(true);
+      const { error } = await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).eq('id', pasta.id);
+      if (!error) await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
   }
 
-  async function handleDeletarPasta(pasta) {
-    if (!confirm(`Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles serão movidos automaticamente para a tela inicial deste setor para evitar perda de dados.`)) return;
-    
-    await supabase.from('pastas_portal').delete().eq('id', pasta.id);
-    setSubpastaAtiva(null);
-    carregarDadosDaAba();
+  function handleDeletarPasta(pasta) {
+    confirmarAcao('Excluir Pasta', `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs ficheiros dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`, async () => {
+      setSubindoArquivo(true);
+      await supabase.from('pastas_portal').delete().eq('id', pasta.id);
+      setSubpastaAtiva(null);
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
   }
 
   // ===============================================
   // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
   // ===============================================
   async function handleUpload(eOrFile) {
-    // MAGIA: Aceita tanto clique no botão (e.target.files) quanto Drag & Drop (eOrFile direto)
     const file = eOrFile?.target?.files ? eOrFile.target.files[0] : eOrFile;
     if (!file || !pastaAtiva) return;
 
     if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede o tamanho máximo de 15MB.', 'erro');
 
-    setSubindoArquivo(true); // Trava a tela
+    setSubindoArquivo(true);
     const timestamp = Date.now();
     const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
     const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
@@ -334,7 +353,7 @@ export default function ClientePage({ params: paramsPromise }) {
 
     mostrarToast('Documento publicado com sucesso!', 'sucesso');
     await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" na pasta ${pastaAtiva}.`);
-    carregarDadosDaAba();
+    await carregarDadosDaAba();
     setSubindoArquivo(false);
   }
 
@@ -360,32 +379,32 @@ export default function ClientePage({ params: paramsPromise }) {
 
     mostrarToast(`Comprovante de ${mesRef} anexado com sucesso!`, 'sucesso');
     await registrarAuditoria('COMPROVANTE_ENVIADO', `Enviou o comprovante referente a ${mesRef}.`);
-    carregarDadosDaAba();
+    await carregarDadosDaAba();
     setSubindoArquivo(false);
   }
 
-  async function handleSolicitarBoleto(mesRef) {
-    if (!confirm(`Deseja solicitar à equipa o reenvio do boleto referente a ${mesRef}?`)) return;
-    
-    setSubindoArquivo(true);
-    const dataAmanha = new Date();
-    dataAmanha.setDate(dataAmanha.getDate() + 1);
-    const dataAmanhaStr = dataAmanha.toISOString().split('T')[0];
+  function handleSolicitarBoleto(mesRef) {
+    confirmarAcao('Solicitar 2ª Via', `Deseja solicitar à equipa o reenvio do boleto referente a ${mesRef}?`, async () => {
+      setSubindoArquivo(true);
+      const dataAmanha = new Date();
+      dataAmanha.setDate(dataAmanha.getDate() + 1);
+      const dataAmanhaStr = dataAmanha.toISOString().split('T')[0];
 
-    const { error } = await supabase.from('demandas_equipe').insert([{ criado_por: cliente.nome_empresa, atribuido_para: 'Lucas (Financeiro)', descricao: `Solicitação de Boleto - Ref: ${mesRef}`, data_entrega: dataAmanhaStr, prioridade: 'Alta', status: 'pendente' }]);
+      const { error } = await supabase.from('demandas_equipe').insert([{ criado_por: cliente.nome_empresa, atribuido_para: 'Lucas (Financeiro)', descricao: `Solicitação de Boleto - Ref: ${mesRef}`, data_entrega: dataAmanhaStr, prioridade: 'Alta', status: 'pendente' }]);
 
-    if (!error) {
-      try {
-        await enviarEmailDemanda({ to: OBTER_EMAIL_FUNCIONARIO['Lucas (Financeiro)'], nomeDestinatario: 'Lucas (Financeiro)', nomeRemetente: cliente.nome_empresa, tituloDemanda: `Nova Solicitação de Boleto - Ref: ${mesRef}`, descricao: `O cliente ${cliente.nome_empresa} está solicitando o boleto da competência ${mesRef}.`, prazo: new Date(dataAmanhaStr).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) });
-      } catch (err) { console.error("Falha ao notificar por e-mail:", err); }
-      
-      mostrarToast('Solicitação enviada com sucesso! O Financeiro foi notificado.', 'sucesso');
-      await registrarAuditoria('BOLETO_SOLICITADO', `Solicitou a 2ª via do boleto de ${mesRef}.`);
-      setBoletosSolicitados(prev => [...prev, mesRef]); 
-    } else {
-      mostrarToast('Erro ao enviar solicitação: ' + error.message, 'erro');
-    }
-    setSubindoArquivo(false);
+      if (!error) {
+        try {
+          await enviarEmailDemanda({ to: OBTER_EMAIL_FUNCIONARIO['Lucas (Financeiro)'], nomeDestinatario: 'Lucas (Financeiro)', nomeRemetente: cliente.nome_empresa, tituloDemanda: `Nova Solicitação de Boleto - Ref: ${mesRef}`, descricao: `O cliente ${cliente.nome_empresa} está solicitando o boleto da competência ${mesRef}.`, prazo: new Date(dataAmanhaStr).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) });
+        } catch (err) { console.error("Falha ao notificar por e-mail:", err); }
+        
+        mostrarToast('Solicitação enviada com sucesso! O Financeiro foi notificado.', 'sucesso');
+        await registrarAuditoria('BOLETO_SOLICITADO', `Solicitou a 2ª via do boleto de ${mesRef}.`);
+        setBoletosSolicitados(prev => [...prev, mesRef]); 
+      } else {
+        mostrarToast('Erro ao enviar solicitação: ' + error.message, 'erro');
+      }
+      setSubindoArquivo(false);
+    }, 'sucesso');
   }
 
   async function confirmarMovimentacao(e) {
@@ -400,61 +419,65 @@ export default function ClientePage({ params: paramsPromise }) {
       mostrarToast('Arquivo movido com sucesso!', 'sucesso');
       setArquivoMovendo(null);
       setDestinoPastaMover('');
-      carregarDadosDaAba();
+      await carregarDadosDaAba();
     } else {
       mostrarToast('Erro ao mover arquivo: ' + error.message, 'erro');
     }
     setSubindoArquivo(false);
   }
 
-  async function handleMoverParaLixeira(arq, origem) {
-    if (!confirm('Deseja mover este arquivo para a Lixeira? Ele ficará salvo por 30 dias.')) return;
-    setSubindoArquivo(true); // Trava a tela
-    const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
-    const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
-    if (!error) { mostrarToast('Movido para a lixeira.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); carregarDadosDaAba(); }
-    setSubindoArquivo(false);
+  function handleMoverParaLixeira(arq, origem) {
+    confirmarAcao('Mover para a Lixeira', 'Deseja mover este ficheiro para a Lixeira? Ele ficará protegido lá por 30 dias antes da exclusão.', async () => {
+      setSubindoArquivo(true);
+      const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
+      const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
+      if (!error) { mostrarToast('Movido para a lixeira.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); await carregarDadosDaAba(); }
+      setSubindoArquivo(false);
+    });
   }
 
   async function handleRestaurarDaLixeira(arq) {
-    setSubindoArquivo(true); // Trava a tela
+    setSubindoArquivo(true); 
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: null }).eq('id', arq.id);
-    if (!error) { mostrarToast('Arquivo restaurado!', 'sucesso'); carregarDadosDaAba(); }
+    if (!error) { mostrarToast('Arquivo restaurado!', 'sucesso'); await carregarDadosDaAba(); }
     setSubindoArquivo(false);
   }
 
-  async function handleDeletarPermanente(arq) {
-    if (!confirm('PERIGO: Este arquivo será apagado permanentemente. Deseja continuar?')) return;
-    setSubindoArquivo(true); // Trava a tela
-    await supabase.storage.from('documentos').remove([arq.caminho_storage]);
-    const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
-    await supabase.from(tabela).delete().eq('id', arq.id);
-    mostrarToast('Arquivo deletado permanentemente.', 'aviso');
-    carregarDadosDaAba();
-    setSubindoArquivo(false);
-  }
-
-  async function handleEsvaziarLixeira() {
-    if (!confirm('Esvaziar a lixeira agora? TODOS os arquivos aqui serão DELETADOS PERMANENTEMENTE.')) return;
-    setSubindoArquivo(true); // Trava a tela
-    for (const arq of itensLixeira) {
+  function handleDeletarPermanente(arq) {
+    confirmarAcao('Excluir Definitivamente', 'PERIGO: Este ficheiro será apagado permanentemente dos servidores e não poderá ser recuperado. Deseja continuar?', async () => {
+      setSubindoArquivo(true);
       await supabase.storage.from('documentos').remove([arq.caminho_storage]);
       const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       await supabase.from(tabela).delete().eq('id', arq.id);
-    }
-    mostrarToast('Lixeira esvaziada com sucesso.', 'sucesso');
-    carregarDadosDaAba();
-    setSubindoArquivo(false);
+      mostrarToast('Ficheiro deletado permanentemente.', 'aviso');
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
   }
 
-  async function handleRenomear(arquivoId, nomeAtual) {
-    const novoNome = prompt('Digite o novo nome para o ficheiro:', nomeAtual);
-    if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
-    setSubindoArquivo(true); // Trava a tela
-    const { error } = await supabase.from('arquivos_portal').update({ nome_original: novoNome.trim() }).eq('id', arquivoId);
-    if (!error) { mostrarToast('Arquivo renomeado.', 'sucesso'); carregarDadosDaAba(); }
-    setSubindoArquivo(false);
+  function handleEsvaziarLixeira() {
+    confirmarAcao('Esvaziar Lixeira', 'Esvaziar a lixeira agora? TODOS os ficheiros aqui presentes serão DELETADOS PERMANENTEMENTE.', async () => {
+      setSubindoArquivo(true);
+      for (const arq of itensLixeira) {
+        await supabase.storage.from('documentos').remove([arq.caminho_storage]);
+        const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
+        await supabase.from(tabela).delete().eq('id', arq.id);
+      }
+      mostrarToast('Lixeira esvaziada com sucesso.', 'sucesso');
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
+  }
+
+  function handleRenomear(arq) {
+    abrirInputModal('Renomear Ficheiro', arq.nome_original, 'Digite o novo nome...', async (novoNome) => {
+      if (!novoNome || novoNome.trim() === '' || novoNome === arq.nome_original) return;
+      setSubindoArquivo(true);
+      const { error } = await supabase.from('arquivos_portal').update({ nome_original: novoNome.trim() }).eq('id', arq.id);
+      if (!error) { mostrarToast('Ficheiro renomeado.', 'sucesso'); await carregarDadosDaAba(); }
+      setSubindoArquivo(false);
+    });
   }
 
   function baixarDocumento(caminhoStorage) {
@@ -497,22 +520,23 @@ export default function ClientePage({ params: paramsPromise }) {
     const { error: dbError } = await supabase.from('alertas_clientes').update({ status: 'respondido', caminho_arquivo: caminhoArquivo }).eq('id', alerta.id);
     if (!dbError) {
       mostrarToast('Documento enviado! A Innovative foi notificada.', 'sucesso');
-      carregarDadosDaAba();
+      await carregarDadosDaAba();
       atualizarBadgeGlobal(id);
     }
     setSubindoArquivo(false);
   }
 
-  async function handleConcluirDemanda0Arquivo(alerta) {
-    if (!confirm('Pretende marcar esta demanda como concluída sem anexar arquivos?')) return;
-    setSubindoArquivo(true);
-    const { error } = await supabase.from('alertas_clientes').update({ status: 'respondido' }).eq('id', alerta.id);
-    if (!error) {
-      mostrarToast('Demanda concluída com sucesso!', 'sucesso');
-      carregarDadosDaAba();
-      atualizarBadgeGlobal(id);
-    }
-    setSubindoArquivo(false);
+  function handleConcluirDemanda0Arquivo(alerta) {
+    confirmarAcao('Concluir sem Ficheiros', 'Pretende marcar esta pendência como concluída sem anexar ficheiros?', async () => {
+      setSubindoArquivo(true);
+      const { error } = await supabase.from('alertas_clientes').update({ status: 'respondido' }).eq('id', alerta.id);
+      if (!error) {
+        mostrarToast('Demanda concluída com sucesso!', 'sucesso');
+        await carregarDadosDaAba();
+        atualizarBadgeGlobal(id);
+      }
+      setSubindoArquivo(false);
+    }, 'sucesso');
   }
 
   function adicionarMaisUm() { setEnviosPre([...enviosPre, { id: Date.now(), descricao: '', arquivo: null }]); }
@@ -669,7 +693,7 @@ export default function ClientePage({ params: paramsPromise }) {
           MODAL DE MOVER ARQUIVO (APENAS ADMIN)
       ========================================== */}
       {arquivoMovendo && isInterno && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]">
           <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
               <h3 className="text-lg font-bold text-[#d4af37]">Mover Arquivo</h3>
@@ -700,9 +724,11 @@ export default function ClientePage({ params: paramsPromise }) {
         </div>
       )}
 
+      
+
       {/* MODAL GESTÃO DE PERFIL E TROCA DE SENHA */}
       {mostrarModalPerfil && cliente && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]">
           <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
               <h3 className="text-lg font-bold text-[#d4af37]">Configurações da Conta</h3>
@@ -1030,7 +1056,7 @@ export default function ClientePage({ params: paramsPromise }) {
                           {isInterno && (
                             <>
                               <button onClick={() => setArquivoMovendo(arq)} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
-                              <button onClick={() => handleRenomear(arq.id, arq.nome_original)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
+                              <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
                               <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
                             </>
                           )}
@@ -1320,8 +1346,63 @@ export default function ClientePage({ params: paramsPromise }) {
 
       </div>
 
+      {/* SISTEMA DE MODAL COM INPUT PREMIUM (Substitui prompt nativo) */}
+      {inputModal.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-[#d4af37]">{inputModal.titulo}</h3>
+              <button type="button" onClick={() => setInputModal({ ...inputModal, aberto: false })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); inputModal.acao(inputModal.valor); setInputModal({ ...inputModal, aberto: false }); }} className="p-5 space-y-4">
+              <div>
+                <input 
+                  type="text" 
+                  autoFocus
+                  required
+                  placeholder={inputModal.placeholder}
+                  value={inputModal.valor} 
+                  onChange={(e) => setInputModal({...inputModal, valor: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setInputModal({ ...inputModal, aberto: false })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">Confirmar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SISTEMA DE CONFIRMAÇÃO PREMIUM (Substitui o alert feio do navegador) */}
+      {dialogo.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-sm p-6 shadow-[0_0_40px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+            <h3 className={`text-xl font-black mb-2 ${dialogo.tipo === 'perigo' ? 'text-red-500' : 'text-[#d4af37]'}`}>
+              {dialogo.tipo === 'perigo' ? '⚠️ ' : '✅ '}{dialogo.titulo}
+            </h3>
+            <p className="text-zinc-300 text-sm mb-8 leading-relaxed whitespace-pre-wrap">{dialogo.mensagem}</p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setDialogo({ ...dialogo, aberto: false })} 
+                className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => { dialogo.acao(); setDialogo({ ...dialogo, aberto: false }); }} 
+                className={`px-5 py-2.5 text-[#0d1b2a] text-sm font-extrabold rounded-lg transition shadow-lg ${dialogo.tipo === 'perigo' ? 'bg-red-500 hover:bg-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-[#d4af37] hover:bg-yellow-500 shadow-[0_0_15px_rgba(212,175,55,0.3)]'}`}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SISTEMA DE TOASTS PREMIUM */}
-      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[9999999] flex flex-col gap-3 pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border pointer-events-auto transition-all backdrop-blur-md min-w-[280px] max-w-sm transform translate-y-0 opacity-100 ${
             toast.tipo === 'erro' ? 'bg-red-500/10 border-red-500/30 text-red-100' :
