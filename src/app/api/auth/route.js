@@ -22,7 +22,7 @@ const encriptarSenha = (text) => {
 
 export async function POST(request) {
   try {
-  const { email, password } = await request.json();
+    const { email, password } = await request.json();
 
     // Limpa espaços invisíveis e converte tudo para minúsculo
     let emailTratado = email.trim().toLowerCase(); 
@@ -36,66 +36,92 @@ export async function POST(request) {
     // 1. Validação da Equipe Interna (Via Supabase Auth Nativo)
     // ========================================================
     if (EQUIPE_INTERNA[emailFinal]) {
-      // Usa o e-mail real e a senha limpa para validar no Supabase
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData } = await supabase.auth.signInWithPassword({
         email: emailFinal,
         password: password,
       });
 
       if (authData?.user) {
-        // Puxa o nome do metadata ou usa o fallback do objeto EQUIPE_INTERNA
         const nomeAdmin = authData.user.user_metadata?.nome || EQUIPE_INTERNA[emailFinal];
-        
-        return NextResponse.json({
-          success: true,
-          tipo: 'interno',
-          nome: nomeAdmin,
-          id: authData.user.id
-        });
+        return NextResponse.json({ success: true, tipo: 'interno', nome: nomeAdmin, id: authData.user.id });
       } else {
         return NextResponse.json({ success: false, error: 'Senha incorreta para este membro da equipe.' }, { status: 401 });
       }
     }
 
     // ========================================================
-    // 2. Validação do Cliente (Via tabela customizada 'clientes')
+    // 2. Validação do Cliente (Titular principal ou Sócio)
     // ========================================================
-    const { data: cliente, error: clienteError } = await supabase
+    let clienteFinal = null;
+    let isSocio = false;
+    let socioDados = null;
+
+    // A) Primeiro, procura pelo e-mail do titular da empresa
+    const { data: clienteTitular } = await supabase
       .from('clientes')
       .select('*')
       .eq('email', emailFinal)
       .maybeSingle();
 
-    if (clienteError) {
-      console.error('Erro ao buscar no Supabase:', clienteError.message);
-      return NextResponse.json({ success: false, error: 'Erro de comunicação com o banco de dados.' }, { status: 500 });
-    }
-
-    if (cliente) {
-      // Criptografa a senha digitada para comparar com o que está salvo no banco
-      const senhaCriptografadaCliente = encriptarSenha(password);
-
-      // Regra da senha padrão (6 primeiros dígitos do CNPJ)
-      const apenasNumeros = cliente.cnpj.replace(/\D/g, '');
-      const senhaCNPJ = apenasNumeros.substring(0, 6);
-
-      // Permite o login se for a senha padrão OU a senha nova alterada e criptografada
-      if (password === senhaCNPJ || cliente.senha === senhaCriptografadaCliente) {
-        return NextResponse.json({
-          success: true,
-          tipo: 'cliente',
-          nome: cliente.nome_contato || 'Cliente',
-          id: cliente.id
-        });
-      } else {
-        return NextResponse.json({ success: false, error: 'Senha incorreta para esta empresa.' }, { status: 401 });
+    if (clienteTitular) {
+      clienteFinal = clienteTitular;
+    } else {
+      // B) Se não for o titular, VARREDURA FLEXÍVEL NO JSON! 
+      // Puxa os clientes e acha o sócio sem ligar pra maiúsculas ou minúsculas
+      const { data: todosClientes } = await supabase.from('clientes').select('*');
+      
+      if (todosClientes) {
+        for (const cli of todosClientes) {
+          if (cli.socios && Array.isArray(cli.socios)) {
+            const socioEncontrado = cli.socios.find(s => s.email && s.email.trim().toLowerCase() === emailFinal);
+            if (socioEncontrado) {
+              clienteFinal = cli;
+              isSocio = true;
+              socioDados = socioEncontrado;
+              break; // Achou o sócio, para a busca na hora!
+            }
+          }
+        }
       }
     }
 
+    // Se depois disso tudo não achou ninguém, bloqueia o acesso
+    if (!clienteFinal) {
+      return NextResponse.json({ success: false, error: 'Usuário ou e-mail não encontrado no sistema.' }, { status: 404 });
+    }
+
     // ========================================================
-    // 3. Se não achou na equipe e nem nos clientes
+    // 3. Validação de Senha (Titular VS Sócio)
     // ========================================================
-    return NextResponse.json({ success: false, error: 'Usuário ou e-mail não encontrado no sistema.' }, { status: 404 });
+    const senhaCriptografadaDigitada = encriptarSenha(password);
+    
+    // Regra da senha padrão (6 primeiros dígitos do CNPJ)
+    const apenasNumeros = clienteFinal.cnpj.replace(/\D/g, '');
+    const senhaCNPJ = apenasNumeros.substring(0, 6);
+
+    let loginAprovado = false;
+
+    if (isSocio) {
+      // Compara com a senha do JSON do sócio
+      if (socioDados.senha === senhaCriptografadaDigitada || password === senhaCNPJ) loginAprovado = true;
+    } else {
+      // Compara com a senha do titular
+      if (clienteFinal.senha === senhaCriptografadaDigitada || password === senhaCNPJ) loginAprovado = true;
+    }
+
+    if (loginAprovado) {
+      // Se for sócio, mostra o nome dele no topo da tela. Se não, mostra o contato da empresa.
+      const nomePainel = isSocio ? socioDados.nome : (clienteFinal.nome_contato || clienteFinal.nome_empresa || 'Cliente');
+
+      return NextResponse.json({
+        success: true,
+        tipo: 'cliente',
+        nome: nomePainel,
+        id: clienteFinal.id
+      });
+    } else {
+      return NextResponse.json({ success: false, error: 'Senha incorreta para esta conta.' }, { status: 401 });
+    }
     
   } catch (err) {
     console.error('Erro crítico na rota de autenticação:', err.message);

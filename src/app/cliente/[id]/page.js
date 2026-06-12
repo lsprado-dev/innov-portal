@@ -117,6 +117,11 @@ export default function ClientePage({ params: paramsPromise }) {
   const [mostrarModalPerfil, setMostrarModalPerfil] = useState(false);
   const [novaSenha, setNovaSenha] = useState('');
   const [salvandoSenha, setSalvandoSenha] = useState(false);
+  
+  // NOVOS ESTADOS PARA GESTÃO DE SÓCIOS
+  const [contaSelecionadaSenha, setContaSelecionadaSenha] = useState('principal');
+  const [mostrarFormSocio, setMostrarFormSocio] = useState(false);
+  const [formSocio, setFormSocio] = useState({ nome: '', email: '', celular: '' });
 
   const [alertasSemArquivo, setAlertasSemArquivo] = useState({});
   const [boletosSolicitados, setBoletosSolicitados] = useState([]); // Memória anti-spam
@@ -320,7 +325,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleDeletarPasta(pasta) {
-    confirmarAcao('Excluir Pasta', `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs ficheiros dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`, async () => {
+    confirmarAcao('Excluir Pasta', `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`, async () => {
       setSubindoArquivo(true);
       await supabase.from('pastas_portal').delete().eq('id', pasta.id);
       setSubpastaAtiva(null);
@@ -336,7 +341,7 @@ export default function ClientePage({ params: paramsPromise }) {
     const file = eOrFile?.target?.files ? eOrFile.target.files[0] : eOrFile;
     if (!file || !pastaAtiva) return;
 
-    if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede o tamanho máximo de 15MB.', 'erro');
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('O arquivo excede o tamanho máximo de 15MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -360,7 +365,7 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleUploadFinanceiro(e, mesRef) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede 15MB.', 'erro');
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('O arquivo excede 15MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -427,7 +432,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleMoverParaLixeira(arq, origem) {
-    confirmarAcao('Mover para a Lixeira', 'Deseja mover este ficheiro para a Lixeira? Ele ficará protegido lá por 30 dias antes da exclusão.', async () => {
+    confirmarAcao('Mover para a Lixeira', 'Deseja mover este arquivo para a Lixeira? Ele ficará protegido lá por 30 dias antes da exclusão.', async () => {
       setSubindoArquivo(true);
       const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
@@ -445,7 +450,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleDeletarPermanente(arq) {
-    confirmarAcao('Excluir Definitivamente', 'PERIGO: Este ficheiro será apagado permanentemente dos servidores e não poderá ser recuperado. Deseja continuar?', async () => {
+    confirmarAcao('Excluir Definitivamente', 'PERIGO: Este arquivo será apagado permanentemente dos servidores e não poderá ser recuperado. Deseja continuar?', async () => {
       setSubindoArquivo(true);
       await supabase.storage.from('documentos').remove([arq.caminho_storage]);
       const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
@@ -457,7 +462,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleEsvaziarLixeira() {
-    confirmarAcao('Esvaziar Lixeira', 'Esvaziar a lixeira agora? TODOS os ficheiros aqui presentes serão DELETADOS PERMANENTEMENTE.', async () => {
+    confirmarAcao('Esvaziar Lixeira', 'Esvaziar a lixeira agora? TODOS os arquivos aqui presentes serão DELETADOS PERMANENTEMENTE.', async () => {
       setSubindoArquivo(true);
       for (const arq of itensLixeira) {
         await supabase.storage.from('documentos').remove([arq.caminho_storage]);
@@ -485,17 +490,76 @@ export default function ClientePage({ params: paramsPromise }) {
     window.open(data.publicUrl, '_blank');
   }
 
+  async function handleAdicionarSocio(e) {
+    e.preventDefault();
+    const sociosAtuais = cliente.socios || [];
+    if (sociosAtuais.length >= 2) return mostrarToast('O limite máximo é de 2 sócios adicionais.', 'erro');
+
+    setSubindoArquivo(true);
+    // Senha padrão de fábrica: 6 primeiros dígitos do CNPJ
+    const senhaPadrao = cliente.cnpj.replace(/\D/g, '').substring(0, 6);
+    
+    const novoSocio = {
+      id: Date.now().toString(),
+      nome: formSocio.nome.trim(),
+      email: formSocio.email.trim(),
+      celular: formSocio.celular.trim(),
+      senha: encriptarSenha(senhaPadrao)
+    };
+
+    const novaLista = [...sociosAtuais, novoSocio];
+    const { error } = await supabase.from('clientes').update({ socios: novaLista }).eq('id', id);
+
+    if (!error) {
+      mostrarToast(`Sócio adicionado! A senha provisória é ${senhaPadrao}`, 'sucesso');
+      setCliente({ ...cliente, socios: novaLista });
+      setFormSocio({ nome: '', email: '', celular: '' });
+      setMostrarFormSocio(false);
+    } else {
+      mostrarToast('Erro ao adicionar sócio: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
+  function handleRemoverSocio(socioId) {
+    confirmarAcao('Remover Acesso', 'Tem certeza que deseja revogar o acesso deste sócio permanentemente?', async () => {
+      setSubindoArquivo(true);
+      const novaLista = (cliente.socios || []).filter(s => s.id !== socioId);
+      const { error } = await supabase.from('clientes').update({ socios: novaLista }).eq('id', id);
+      if (!error) {
+        mostrarToast('Acesso do sócio revogado com sucesso.', 'sucesso');
+        setCliente({ ...cliente, socios: novaLista });
+        if (contaSelecionadaSenha === socioId) setContaSelecionadaSenha('principal');
+      }
+      setSubindoArquivo(false);
+    });
+  }
+
   async function handleAlterarSenha(e) {
     e.preventDefault();
     if (novaSenha.trim().length < 6) return mostrarToast('A nova senha deve possuir no mínimo 6 caracteres.', 'erro');
     setSalvandoSenha(true);
-    const { error } = await supabase.from('clientes').update({ senha: encriptarSenha(novaSenha.trim()), senha_alterada: true }).eq('id', id);
-    if (!error) {
-      mostrarToast('Senha atualizada com sucesso!', 'sucesso');
-      setNovaSenha('');
-      setMostrarModalPerfil(false);
+
+    if (contaSelecionadaSenha === 'principal') {
+      // Altera a senha do dono da empresa
+      const { error } = await supabase.from('clientes').update({ senha: encriptarSenha(novaSenha.trim()), senha_alterada: true }).eq('id', id);
+      if (!error) {
+        mostrarToast('Senha principal atualizada com sucesso!', 'sucesso');
+        setNovaSenha('');
+        setMostrarModalPerfil(false);
+      } else mostrarToast('Erro ao atualizar a senha: ' + error.message, 'erro');
     } else {
-      mostrarToast('Erro ao atualizar a senha: ' + error.message, 'erro');
+      // Altera a senha do sócio específico no JSON
+      const sociosAtualizados = (cliente.socios || []).map(s => 
+        s.id === contaSelecionadaSenha ? { ...s, senha: encriptarSenha(novaSenha.trim()) } : s
+      );
+      const { error } = await supabase.from('clientes').update({ socios: sociosAtualizados }).eq('id', id);
+      if (!error) {
+        mostrarToast('Senha do sócio atualizada com sucesso!', 'sucesso');
+        setCliente({ ...cliente, socios: sociosAtualizados });
+        setNovaSenha('');
+        setMostrarModalPerfil(false);
+      } else mostrarToast('Erro ao atualizar a senha: ' + error.message, 'erro');
     }
     setSalvandoSenha(false);
   }
@@ -508,7 +572,7 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleResponderAlerta(e, alerta) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede 15MB.', 'erro');
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('O arquivo excede 15MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -527,7 +591,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleConcluirDemanda0Arquivo(alerta) {
-    confirmarAcao('Concluir sem Ficheiros', 'Pretende marcar esta pendência como concluída sem anexar ficheiros?', async () => {
+    confirmarAcao('Concluir sem Ficheiros', 'Pretende marcar esta pendência como concluída sem anexar arquivos?', async () => {
       setSubindoArquivo(true);
       const { error } = await supabase.from('alertas_clientes').update({ status: 'respondido' }).eq('id', alerta.id);
       if (!error) {
@@ -547,10 +611,10 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleEnviarParaContabilidade(e) {
     e.preventDefault();
     const validos = enviosPre.filter(item => item.arquivo && item.descricao.trim());
-    if (validos.length === 0) return mostrarToast('Preencha a descrição e selecione um ficheiro.', 'erro');
+    if (validos.length === 0) return mostrarToast('Preencha a descrição e selecione um arquivo.', 'erro');
 
     for (const item of validos) {
-      if (item.arquivo.size > 15 * 1024 * 1024) return mostrarToast(`O ficheiro "${item.arquivo.name}" excede 15MB.`, 'erro');
+      if (item.arquivo.size > 15 * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede 15MB.`, 'erro');
     }
 
     setSubindoArquivo(true);
@@ -623,7 +687,7 @@ export default function ClientePage({ params: paramsPromise }) {
       const files = e.dataTransfer.files;
       if (files && files.length > 0) handleUpload(files[0]);
     } else {
-      mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar ficheiros.', 'aviso');
+      mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar o arquivo.', 'aviso');
     }
   }
 
@@ -681,7 +745,7 @@ export default function ClientePage({ params: paramsPromise }) {
         <div className="fixed inset-0 z-[99998] bg-[#d4af37]/10 backdrop-blur-md flex items-center justify-center border-[6px] border-dashed border-[#d4af37] m-4 rounded-3xl pointer-events-none">
           <div className="bg-[#1b263b] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
             <span className="text-7xl animate-bounce">📂</span>
-            <h2 className="text-3xl font-black text-[#d4af37]">Solte o ficheiro aqui</h2>
+            <h2 className="text-3xl font-black text-[#d4af37]">Solte o arquivo aqui</h2>
             <p className="text-zinc-300 font-medium text-lg">
               Será publicado na pasta: <span className="text-white font-bold">{pastas.find(p => p.id === subpastaAtiva)?.nome || pastaAtiva}</span>
             </p>
@@ -689,84 +753,8 @@ export default function ClientePage({ params: paramsPromise }) {
         </div>
       )}
 
-      {/* ==========================================
-          MODAL DE MOVER ARQUIVO (APENAS ADMIN)
-      ========================================== */}
-      {arquivoMovendo && isInterno && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]">
-          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
-              <h3 className="text-lg font-bold text-[#d4af37]">Mover Arquivo</h3>
-              <button onClick={() => setArquivoMovendo(null)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
-            </div>
-            <form onSubmit={confirmarMovimentacao} className="p-5 space-y-4">
-              <p className="text-sm text-zinc-300">
-                Selecione o destino para o arquivo <strong className="text-white block mt-1 truncate">{arquivoMovendo.nome_original}</strong>
-              </p>
-              <select 
-                value={destinoPastaMover} 
-                onChange={(e) => setDestinoPastaMover(e.target.value)}
-                className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37]"
-              >
-                <option value="">Pasta Principal (Raiz do Setor {pastaAtiva})</option>
-                {pastas.map(p => (
-                  <option key={p.id} value={p.id}>📂 {p.nome}</option>
-                ))}
-              </select>
-              <div className="pt-4 flex justify-end gap-2">
-                <button type="button" onClick={() => setArquivoMovendo(null)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
-                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
-                  {subindoArquivo ? 'A Mover...' : 'Confirmar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      
-
-      {/* MODAL GESTÃO DE PERFIL E TROCA DE SENHA */}
-      {mostrarModalPerfil && cliente && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]">
-          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
-              <h3 className="text-lg font-bold text-[#d4af37]">Configurações da Conta</h3>
-              <button onClick={() => setMostrarModalPerfil(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
-            </div>
-            
-            <div className="p-5 space-y-4">
-              <div>
-                <p className="text-xs text-zinc-500 uppercase font-bold tracking-wider mb-0.5">Empresa / Razão Social</p>
-                <p className="text-white text-sm font-semibold">{cliente.nome_empresa}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-zinc-500 uppercase font-bold tracking-wider mb-0.5">CNPJ</p>
-                  <p className="text-white text-sm font-mono">{cliente.cnpj}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-zinc-500 uppercase font-bold tracking-wider mb-0.5">Telemóvel</p>
-                  <p className="text-white text-sm">{cliente.celular || 'Não cadastrado'}</p>
-                </div>
-              </div>
-              
-              <div className="border-t border-zinc-800 pt-5 mt-4">
-                <h4 className="text-sm font-bold text-orange-400 mb-3 uppercase tracking-wider">Alterar Senha do Portal</h4>
-                <form onSubmit={handleAlterarSenha} className="flex gap-2">
-                  <input type="text" required placeholder="Introduza a nova senha..." value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} className="flex-1 bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-400" />
-                  <button type="submit" disabled={salvandoSenha} className="bg-orange-500 hover:bg-orange-600 text-white font-extrabold px-5 py-2 rounded-lg text-sm transition shadow-md">
-                    {salvandoSenha ? 'A Gravar...' : 'Atualizar'}
-                  </button>
-                </form>
-                <p className="text-[10px] text-zinc-500 mt-2">A senha salva será exigida já na sua próxima autenticação.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-5xl mx-auto">
+      {/* ÂNCORA Z-0 PARA MATAR O LOGO E A BARRA VOADORA */}
+      <div className="relative z-0 max-w-5xl mx-auto">
         
         {/* BARRA SUPERIOR COMPACTA */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 bg-[#1b263b]/30 p-4 rounded-xl border border-zinc-800/60 gap-4 shadow-sm">
@@ -1080,7 +1068,7 @@ export default function ClientePage({ params: paramsPromise }) {
               <div className="mb-10 border-b border-zinc-800 pb-8">
                 <header className="mb-6">
                   <h3 className="text-xl font-bold text-[#d4af37]">Enviar Documentos para a Contabilidade</h3>
-                  <p className="text-xs text-zinc-400 mt-1">Insira a descrição e anexe os ficheiros (PDF ou Imagem).</p>
+                  <p className="text-xs text-zinc-400 mt-1">Insira a descrição e anexe os arquivos (PDF ou Imagem).</p>
                 </header>
                 <form onSubmit={handleEnviarParaContabilidade} className="space-y-4">
                   {enviosPre.map((item) => (
@@ -1101,7 +1089,7 @@ export default function ClientePage({ params: paramsPromise }) {
                   <div className="pt-2 flex flex-col sm:flex-row sm:justify-between gap-3">
                     <button type="button" onClick={adicionarMaisUm} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold px-5 py-2.5 rounded-lg text-sm transition">Anexar + 1 Documento</button>
                     <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-6 py-2.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg disabled:opacity-50">
-                      {subindoArquivo ? 'A enviar ficheiros...' : 'Enviar Tudo'}
+                      {subindoArquivo ? 'A enviar arquivos...' : 'Enviar Tudo'}
                     </button>
                   </div>
                 </form>
@@ -1332,7 +1320,7 @@ export default function ClientePage({ params: paramsPromise }) {
                           </button>
                         ) : (
                           <span className="w-full text-center whitespace-nowrap text-xs bg-zinc-800 text-zinc-400 px-4 py-3 rounded-lg font-bold shadow-sm cursor-not-allowed">
-                            Concluído sem ficheiros
+                            Concluído sem arquivos
                           </span>
                         )
                       )}
@@ -1345,6 +1333,145 @@ export default function ClientePage({ params: paramsPromise }) {
         )}
 
       </div>
+
+      {/* ==========================================
+          MODAL DE MOVER ARQUIVO (REPOSICIONADO PARA CORRIGIR Z-INDEX)
+      ========================================== */}
+      {arquivoMovendo && isInterno && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
+              <h3 className="text-lg font-bold text-[#d4af37]">Mover Arquivo</h3>
+              <button onClick={() => setArquivoMovendo(null)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={confirmarMovimentacao} className="p-5 space-y-4">
+              <p className="text-sm text-zinc-300">
+                Selecione o destino para o arquivo <strong className="text-white block mt-1 truncate">{arquivoMovendo.nome_original}</strong>
+              </p>
+              <select 
+                value={destinoPastaMover} 
+                onChange={(e) => setDestinoPastaMover(e.target.value)}
+                className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+              >
+                <option value="">Pasta Principal (Raiz do Setor {pastaAtiva})</option>
+                {pastas.map(p => (
+                  <option key={p.id} value={p.id}>📂 {p.nome}</option>
+                ))}
+              </select>
+              <div className="pt-4 flex justify-end gap-2">
+                <button type="button" onClick={() => setArquivoMovendo(null)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
+                  {subindoArquivo ? 'A Mover...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GESTÃO DE PERFIL E TROCA DE SENHA (REPOSICIONADO PARA CORRIGIR Z-INDEX) */}
+      {mostrarModalPerfil && cliente && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-lg flex flex-col shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center sticky top-0 z-10">
+              <h3 className="text-lg font-bold text-[#d4af37]">Configurações da Conta</h3>
+              <button onClick={() => setMostrarModalPerfil(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            
+            <div className="p-5 space-y-6">
+              {/* DADOS PRINCIPAIS */}
+              <div>
+                <p className="text-xs text-zinc-500 uppercase font-bold tracking-wider mb-0.5">Titular Principal / Empresa</p>
+                <p className="text-white font-semibold">{cliente.nome_empresa}</p>
+                <p className="text-xs text-zinc-400 mt-1">{cliente.email} • CNPJ: {cliente.cnpj}</p>
+              </div>
+
+              {/* GESTÃO DE SÓCIOS */}
+              <div className="border-t border-zinc-800 pt-5">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-sm font-bold text-[#d4af37] uppercase tracking-wider">Acessos Secundários (Sócios)</h4>
+                  {(cliente.socios || []).length < 2 && !mostrarFormSocio && (
+                    <button onClick={() => setMostrarFormSocio(true)} className="text-[10px] bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37] hover:text-[#0d1b2a] px-3 py-1.5 rounded-md font-bold transition">
+                      + Adicionar
+                    </button>
+                  )}
+                </div>
+
+                {(cliente.socios || []).length === 0 && !mostrarFormSocio && (
+                  <p className="text-xs text-zinc-500 italic">Nenhum sócio ou utilizador adicional registado.</p>
+                )}
+
+                {/* Lista de Sócios */}
+                <div className="space-y-2 mb-3">
+                  {(cliente.socios || []).map(socio => (
+                    <div key={socio.id} className="bg-[#0d1b2a] border border-zinc-700/50 p-3 rounded-lg flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-white font-bold">{socio.nome}</p>
+                        <p className="text-[10px] text-zinc-400">{socio.email} • {socio.celular}</p>
+                      </div>
+                      <button onClick={() => handleRemoverSocio(socio.id)} className="text-xs text-red-400 hover:text-red-300 font-bold transition p-1">Revogar</button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Formulário de Adição */}
+                {mostrarFormSocio && (
+                  <form onSubmit={handleAdicionarSocio} className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-700 mb-4 animate-in fade-in duration-300 space-y-3">
+                    <div>
+                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Nome Completo</label>
+                      <input type="text" required value={formSocio.nome} onChange={e => setFormSocio({...formSocio, nome: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white focus:border-[#d4af37] outline-none" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">E-mail</label>
+                        <input type="email" required value={formSocio.email} onChange={e => setFormSocio({...formSocio, email: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white focus:border-[#d4af37] outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Telemóvel</label>
+                        <input type="tel" required value={formSocio.celular} onChange={e => setFormSocio({...formSocio, celular: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white focus:border-[#d4af37] outline-none" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+                      <button type="button" onClick={() => setMostrarFormSocio(false)} className="text-[11px] font-bold text-zinc-400 hover:text-white px-3 py-1">Cancelar</button>
+                      <button type="submit" disabled={subindoArquivo} className="text-[11px] font-bold bg-[#d4af37] text-black px-4 py-1.5 rounded hover:bg-yellow-500 shadow-sm">Salvar Sócio</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+              
+              {/* TROCA DE SENHA COM DROPDOWN INTELIGENTE */}
+              <div className="border-t border-zinc-800 pt-5">
+                <h4 className="text-sm font-bold text-orange-400 mb-3 uppercase tracking-wider">Gestão de Senhas</h4>
+                <form onSubmit={handleAlterarSenha} className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">De qual conta deseja alterar a senha?</label>
+                    <select 
+                      value={contaSelecionadaSenha} 
+                      onChange={e => setContaSelecionadaSenha(e.target.value)} 
+                      className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-400"
+                    >
+                      <option value="principal">Titular: {cliente.email}</option>
+                      {(cliente.socios || []).map(s => (
+                        <option key={s.id} value={s.id}>Sócio: {s.email}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Nova Senha</label>
+                      <input type="text" required placeholder="Nova senha segura..." value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-400" />
+                    </div>
+                    <button type="submit" disabled={salvandoSenha} className="bg-orange-500 hover:bg-orange-600 text-white font-extrabold px-5 py-2.5 rounded-lg text-sm transition shadow-md h-[42px]">
+                      {salvandoSenha ? 'A Gravar...' : 'Atualizar'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SISTEMA DE MODAL COM INPUT PREMIUM (Substitui prompt nativo) */}
       {inputModal.aberto && (
