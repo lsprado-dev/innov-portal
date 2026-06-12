@@ -98,12 +98,14 @@ export default function ClientePage({ params: paramsPromise }) {
   const [pastas, setPastas] = useState([]);
   const [subpastaAtiva, setSubpastaAtiva] = useState(null);
 
-  // ESTADOS PARA OS BOTÕES MOVER E RENOMEAR
-  const [arquivoMovendo, setArquivoMovendo] = useState(null);
+  // ESTADOS PARA OS BOTÕES MOVER, RENOMEAR E MULTI-SELEÇÃO
+  const [arquivosMovendo, setArquivosMovendo] = useState([]); 
   const [destinoPastaMover, setDestinoPastaMover] = useState('');
   
   const [arquivoRenomeando, setArquivoRenomeando] = useState(null);
   const [novoNomeArquivo, setNovoNomeArquivo] = useState('');
+  
+  const [selecionados, setSelecionados] = useState([]);
 
   const [arquivos, setArquivos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -208,6 +210,7 @@ export default function ClientePage({ params: paramsPromise }) {
   useEffect(() => {
     setBusca(''); 
     setMostrarAutocomplete(false);
+    setSelecionados([]); // Limpa a seleção ao trocar de aba
     
     // Reset da subpasta ao trocar de aba principal ou setor
     if (abaPrincipal === 'pastas') {
@@ -337,28 +340,64 @@ export default function ClientePage({ params: paramsPromise }) {
   // ===============================================
   // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
   // ===============================================
-  async function handleUpload(eOrFile) {
-    const file = eOrFile?.target?.files ? eOrFile.target.files[0] : eOrFile;
-    if (!file || !pastaAtiva) return;
-
-    if (file.size > 15 * 1024 * 1024) return mostrarToast('O arquivo excede o tamanho máximo de 15MB.', 'erro');
-
-    setSubindoArquivo(true);
-    const timestamp = Date.now();
-    const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
-    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
-
-    if (storageError) {
-      mostrarToast('Erro no Storage: ' + storageError.message, 'erro');
-      setSubindoArquivo(false);
-      return;
+  async function handleUpload(eOrFiles) {
+    let files = [];
+    // Descobre de onde vieram os arquivos (Botão ou Drag & Drop)
+    if (eOrFiles?.target?.files) {
+      files = Array.from(eOrFiles.target.files);
+    } else if (eOrFiles instanceof FileList) {
+      files = Array.from(eOrFiles);
+    } else if (Array.isArray(eOrFiles)) {
+      files = eOrFiles;
+    } else if (eOrFiles instanceof File) {
+      files = [eOrFiles];
     }
 
-    await supabase.from('arquivos_portal').insert([{ cliente_id: id, setor: pastaAtiva, subpasta_id: subpastaAtiva, nome_original: file.name, caminho_storage: caminhoArquivo, enviado_por: operador }]);
+    if (files.length === 0 || !pastaAtiva) return;
 
-    mostrarToast('Documento publicado com sucesso!', 'sucesso');
-    await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" na pasta ${pastaAtiva}.`);
-    await carregarDadosDaAba();
+    // Trava de segurança (Máximo 10)
+    if (files.length > 10) {
+      return mostrarToast('Por favor, selecione no máximo 10 arquivos por vez.', 'erro');
+    }
+
+    setSubindoArquivo(true);
+    let sucessoCount = 0;
+
+    // Loop que sobe arquivo por arquivo
+    for (const file of files) {
+      if (file.size > 15 * 1024 * 1024) {
+        mostrarToast(`Ignorado: "${file.name}" excede 15MB.`, 'erro');
+        continue;
+      }
+
+      const timestamp = Date.now();
+      const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
+      
+      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
+
+      if (storageError) {
+        mostrarToast(`Erro no arquivo "${file.name}": ${storageError.message}`, 'erro');
+        continue;
+      }
+
+      await supabase.from('arquivos_portal').insert([{ 
+        cliente_id: id, 
+        setor: pastaAtiva, 
+        subpasta_id: subpastaAtiva, 
+        nome_original: file.name, 
+        caminho_storage: caminhoArquivo, 
+        enviado_por: operador 
+      }]);
+
+      await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" na pasta ${pastaAtiva}.`);
+      sucessoCount++;
+    }
+
+    if (sucessoCount > 0) {
+      mostrarToast(`${sucessoCount} documento(s) publicado(s) com sucesso!`, 'sucesso');
+      await carregarDadosDaAba();
+    }
+    
     setSubindoArquivo(false);
   }
 
@@ -412,21 +451,63 @@ export default function ClientePage({ params: paramsPromise }) {
     }, 'sucesso');
   }
 
+  // ===============================================
+  // AÇÕES EM LOTE (MULTI-SELEÇÃO)
+  // ===============================================
+  function toggleSelecao(id) {
+    setSelecionados(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  }
+
+  function toggleSelecionarTodos() {
+    if (selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0) {
+      setSelecionados([]); 
+    } else {
+      setSelecionados(arquivosFiltradosDaBusca.map(a => a.id)); 
+    }
+  }
+
+  function handleExcluirSelecionados() {
+    confirmarAcao('Excluir Selecionados', `Deseja mover ${selecionados.length} arquivo(s) para a lixeira?`, async () => {
+      setSubindoArquivo(true);
+      for (const id of selecionados) {
+        await supabase.from('arquivos_portal').update({ data_exclusao: new Date().toISOString() }).eq('id', id);
+      }
+      mostrarToast(`${selecionados.length} arquivo(s) movido(s) para a lixeira.`, 'aviso');
+      setSelecionados([]);
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
+  }
+
+  async function handleBaixarSelecionados() {
+    for (const id of selecionados) {
+      const arq = arquivosFiltradosDaBusca.find(a => a.id === id);
+      if (arq) {
+        baixarDocumento(arq.caminho_storage);
+        await new Promise(resolve => setTimeout(resolve, 300)); 
+      }
+    }
+    setSelecionados([]);
+  }
+
   async function confirmarMovimentacao(e) {
     e.preventDefault();
-    if (!arquivoMovendo) return;
+    if (arquivosMovendo.length === 0) return;
     
     setSubindoArquivo(true);
     const destino = destinoPastaMover === '' ? null : destinoPastaMover;
-    const { error } = await supabase.from('arquivos_portal').update({ subpasta_id: destino }).eq('id', arquivoMovendo.id);
+    
+    const ids = arquivosMovendo.map(a => a.id);
+    const { error } = await supabase.from('arquivos_portal').update({ subpasta_id: destino }).in('id', ids);
     
     if (!error) {
-      mostrarToast('Arquivo movido com sucesso!', 'sucesso');
-      setArquivoMovendo(null);
+      mostrarToast(`${arquivosMovendo.length} arquivo(s) movido(s) com sucesso!`, 'sucesso');
+      setArquivosMovendo([]);
       setDestinoPastaMover('');
+      setSelecionados([]);
       await carregarDadosDaAba();
     } else {
-      mostrarToast('Erro ao mover arquivo: ' + error.message, 'erro');
+      mostrarToast('Erro ao mover arquivos: ' + error.message, 'erro');
     }
     setSubindoArquivo(false);
   }
@@ -455,7 +536,7 @@ export default function ClientePage({ params: paramsPromise }) {
       await supabase.storage.from('documentos').remove([arq.caminho_storage]);
       const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       await supabase.from(tabela).delete().eq('id', arq.id);
-      mostrarToast('Ficheiro deletado permanentemente.', 'aviso');
+      mostrarToast('Arquivo deletado permanentemente.', 'aviso');
       await carregarDadosDaAba();
       setSubindoArquivo(false);
     });
@@ -476,11 +557,11 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleRenomear(arq) {
-    abrirInputModal('Renomear Ficheiro', arq.nome_original, 'Digite o novo nome...', async (novoNome) => {
+    abrirInputModal('Renomear Arquivo', arq.nome_original, 'Digite o novo nome...', async (novoNome) => {
       if (!novoNome || novoNome.trim() === '' || novoNome === arq.nome_original) return;
       setSubindoArquivo(true);
       const { error } = await supabase.from('arquivos_portal').update({ nome_original: novoNome.trim() }).eq('id', arq.id);
-      if (!error) { mostrarToast('Ficheiro renomeado.', 'sucesso'); await carregarDadosDaAba(); }
+      if (!error) { mostrarToast('Arquivo renomeado.', 'sucesso'); await carregarDadosDaAba(); }
       setSubindoArquivo(false);
     });
   }
@@ -591,7 +672,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleConcluirDemanda0Arquivo(alerta) {
-    confirmarAcao('Concluir sem Ficheiros', 'Pretende marcar esta pendência como concluída sem anexar arquivos?', async () => {
+    confirmarAcao('Concluir sem Arquivos', 'Pretende marcar esta pendência como concluída sem anexar arquivos?', async () => {
       setSubindoArquivo(true);
       const { error } = await supabase.from('alertas_clientes').update({ status: 'respondido' }).eq('id', alerta.id);
       if (!error) {
@@ -685,7 +766,8 @@ export default function ClientePage({ params: paramsPromise }) {
     setIsDragging(false);
     if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') {
       const files = e.dataTransfer.files;
-      if (files && files.length > 0) handleUpload(files[0]);
+      // Agora manda a lista inteira de arquivos arrastados!
+      if (files && files.length > 0) handleUpload(files);
     } else {
       mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar o arquivo.', 'aviso');
     }
@@ -729,16 +811,6 @@ export default function ClientePage({ params: paramsPromise }) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      
-      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
-      {subindoArquivo && (
-        <div className="fixed inset-0 z-[99999] bg-[#0d1b2a]/70 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/30 flex flex-col items-center gap-5 shadow-[0_0_50px_rgba(212,175,55,0.15)]">
-            <div className="w-12 h-12 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin"></div>
-            <p className="text-[#d4af37] font-bold tracking-wide animate-pulse text-lg">A processar...</p>
-          </div>
-        </div>
-      )}
 
       {/* 📂 O OVERLAY DO GOOGLE DRIVE (Drag & Drop) */}
       {isDragging && (
@@ -999,8 +1071,8 @@ export default function ClientePage({ params: paramsPromise }) {
                           + Nova Pasta
                         </button>
                         <label className="bg-[#d4af37] text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-sm text-center whitespace-nowrap">
-                          {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivo'}
-                          <input type="file" accept="application/pdf,image/*" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
+                          {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivos'}
+                          <input type="file" multiple accept="application/pdf,image/*" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
                         </label>
                       </div>
                     )}
@@ -1030,29 +1102,53 @@ export default function ClientePage({ params: paramsPromise }) {
                 {arquivosFiltradosDaBusca.length === 0 ? (
                   <p className="text-zinc-400 text-center py-8">Nenhum documento nesta área ainda.</p>
                 ) : (
-                  <div className="space-y-3">
-                    {arquivosFiltradosDaBusca.map((arq) => (
-                      <div key={arq.id} className="p-4 bg-[#0d1b2a] rounded-lg border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <IconFile />
-                          <div className="min-w-0 w-full">
-                            <p className="text-sm text-zinc-200 font-medium truncate max-w-md">{arq.nome_original}</p>
-                            <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                  <>
+                    {/* BARRA DE AÇÕES EM LOTE */}
+                    <div className="flex items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-3 rounded-lg mb-4">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition">
+                        <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0} onChange={toggleSelecionarTodos} />
+                        Selecionar Todos
+                      </label>
+                      
+                      {selecionados.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-[#d4af37] mr-2">{selecionados.length} selecionado(s)</span>
                           {isInterno && (
                             <>
-                              <button onClick={() => setArquivoMovendo(arq)} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
-                              <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
-                              <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
+                              <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-1.5 rounded text-blue-400 font-bold transition">Mover</button>
+                              <button onClick={handleExcluirSelecionados} className="text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-1.5 rounded text-red-400 font-bold transition">Excluir</button>
                             </>
                           )}
-                          <button onClick={() => baixarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Visualizar / Baixar</button>
+                          <button onClick={handleBaixarSelecionados} className="text-[10px] bg-[#d4af37] text-black px-3 py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-sm">Baixar</button>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      {arquivosFiltradosDaBusca.map((arq) => (
+                        <div key={arq.id} className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0 transition-all ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/5 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} />
+                            <IconFile />
+                            <div className="min-w-0 w-full cursor-pointer" onClick={() => toggleSelecao(arq.id)}>
+                              <p className="text-sm text-zinc-200 font-medium truncate max-w-md">{arq.nome_original}</p>
+                              <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                            {isInterno && (
+                              <>
+                                <button onClick={() => setArquivosMovendo([arq])} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
+                                <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
+                                <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
+                              </>
+                            )}
+                            <button onClick={() => baixarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -1078,7 +1174,7 @@ export default function ClientePage({ params: paramsPromise }) {
                         <input type="text" required placeholder="Ex: Extrato Bancário de Maio..." value={item.descricao} onChange={(e) => alterarDescricao(item.id, e.target.value)} className="w-full bg-[#1b263b] border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                       </div>
                       <div className="w-full md:w-auto">
-                        <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Ficheiro</label>
+                        <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
                         <input type="file" required accept="application/pdf,image/*" onChange={(e) => alterarArquivo(item.id, e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                       </div>
                       {enviosPre.length > 1 && (
@@ -1124,7 +1220,7 @@ export default function ClientePage({ params: paramsPromise }) {
                         <IconFile />
                         <div className="min-w-0 w-full">
                           <p className="text-sm text-zinc-200 font-medium truncate max-w-md">{arq.nome_documento}</p>
-                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Ficheiro: <span className="text-zinc-400 font-mono break-all">{arq.nome_original}</span> | Colocado em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Arquivo: <span className="text-zinc-400 font-mono break-all">{arq.nome_original}</span> | Colocado em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto">
@@ -1337,16 +1433,16 @@ export default function ClientePage({ params: paramsPromise }) {
       {/* ==========================================
           MODAL DE MOVER ARQUIVO (REPOSICIONADO PARA CORRIGIR Z-INDEX)
       ========================================== */}
-      {arquivoMovendo && isInterno && (
+      {arquivosMovendo.length > 0 && isInterno && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
           <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
-              <h3 className="text-lg font-bold text-[#d4af37]">Mover Arquivo</h3>
-              <button onClick={() => setArquivoMovendo(null)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+              <h3 className="text-lg font-bold text-[#d4af37]">Mover {arquivosMovendo.length > 1 ? 'Arquivos' : 'Arquivo'}</h3>
+              <button onClick={() => setArquivosMovendo([])} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
             <form onSubmit={confirmarMovimentacao} className="p-5 space-y-4">
               <p className="text-sm text-zinc-300">
-                Selecione o destino para o arquivo <strong className="text-white block mt-1 truncate">{arquivoMovendo.nome_original}</strong>
+                Selecione o destino para {arquivosMovendo.length > 1 ? <strong className="text-[#d4af37]">{arquivosMovendo.length} arquivos selecionados</strong> : <strong className="text-white block mt-1 truncate">{arquivosMovendo[0].nome_original}</strong>}
               </p>
               <select 
                 value={destinoPastaMover} 
@@ -1359,7 +1455,7 @@ export default function ClientePage({ params: paramsPromise }) {
                 ))}
               </select>
               <div className="pt-4 flex justify-end gap-2">
-                <button type="button" onClick={() => setArquivoMovendo(null)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="button" onClick={() => setArquivosMovendo([])} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
                   {subindoArquivo ? 'A Mover...' : 'Confirmar'}
                 </button>
@@ -1524,6 +1620,16 @@ export default function ClientePage({ params: paramsPromise }) {
                 Confirmar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
+      {subindoArquivo && (
+        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
+            <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
+            <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
           </div>
         </div>
       )}
