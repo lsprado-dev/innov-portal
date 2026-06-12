@@ -122,6 +122,7 @@ export default function ClientePage({ params: paramsPromise }) {
   const [toasts, setToasts] = useState([]); // Memória dos Toasts
   const [carregando, setCarregando] = useState(true);
   const [subindoArquivo, setSubindoArquivo] = useState(false);
+  const [isDragging, setIsDragging] = useState(false); // Radar do Drag & Drop
 
   // FUNÇÃO MÁGICA DOS TOASTS (Remove sozinho após 4 segundos)
   function mostrarToast(mensagem, tipo = 'sucesso') {
@@ -311,13 +312,14 @@ export default function ClientePage({ params: paramsPromise }) {
   // ===============================================
   // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
   // ===============================================
-  async function handleUpload(e) {
-    const file = e.target.files[0];
+  async function handleUpload(eOrFile) {
+    // MAGIA: Aceita tanto clique no botão (e.target.files) quanto Drag & Drop (eOrFile direto)
+    const file = eOrFile?.target?.files ? eOrFile.target.files[0] : eOrFile;
     if (!file || !pastaAtiva) return;
 
     if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede o tamanho máximo de 15MB.', 'erro');
 
-    setSubindoArquivo(true);
+    setSubindoArquivo(true); // Trava a tela
     const timestamp = Date.now();
     const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
     const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
@@ -363,7 +365,7 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   async function handleSolicitarBoleto(mesRef) {
-    if (!confirm(`Deseja solicitar à equipe o reenvio do boleto referente a ${mesRef}?`)) return;
+    if (!confirm(`Deseja solicitar à equipa o reenvio do boleto referente a ${mesRef}?`)) return;
     
     setSubindoArquivo(true);
     const dataAmanha = new Date();
@@ -407,29 +409,35 @@ export default function ClientePage({ params: paramsPromise }) {
 
   async function handleMoverParaLixeira(arq, origem) {
     if (!confirm('Deseja mover este arquivo para a Lixeira? Ele ficará salvo por 30 dias.')) return;
+    setSubindoArquivo(true); // Trava a tela
     const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
     if (!error) { mostrarToast('Movido para a lixeira.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); carregarDadosDaAba(); }
+    setSubindoArquivo(false);
   }
 
   async function handleRestaurarDaLixeira(arq) {
+    setSubindoArquivo(true); // Trava a tela
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: null }).eq('id', arq.id);
     if (!error) { mostrarToast('Arquivo restaurado!', 'sucesso'); carregarDadosDaAba(); }
+    setSubindoArquivo(false);
   }
 
   async function handleDeletarPermanente(arq) {
     if (!confirm('PERIGO: Este arquivo será apagado permanentemente. Deseja continuar?')) return;
+    setSubindoArquivo(true); // Trava a tela
     await supabase.storage.from('documentos').remove([arq.caminho_storage]);
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     await supabase.from(tabela).delete().eq('id', arq.id);
     mostrarToast('Arquivo deletado permanentemente.', 'aviso');
     carregarDadosDaAba();
+    setSubindoArquivo(false);
   }
 
   async function handleEsvaziarLixeira() {
     if (!confirm('Esvaziar a lixeira agora? TODOS os arquivos aqui serão DELETADOS PERMANENTEMENTE.')) return;
-    setSubindoArquivo(true);
+    setSubindoArquivo(true); // Trava a tela
     for (const arq of itensLixeira) {
       await supabase.storage.from('documentos').remove([arq.caminho_storage]);
       const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
@@ -443,8 +451,10 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleRenomear(arquivoId, nomeAtual) {
     const novoNome = prompt('Digite o novo nome para o ficheiro:', nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
+    setSubindoArquivo(true); // Trava a tela
     const { error } = await supabase.from('arquivos_portal').update({ nome_original: novoNome.trim() }).eq('id', arquivoId);
     if (!error) { mostrarToast('Arquivo renomeado.', 'sucesso'); carregarDadosDaAba(); }
+    setSubindoArquivo(false);
   }
 
   function baixarDocumento(caminhoStorage) {
@@ -573,11 +583,88 @@ export default function ClientePage({ params: paramsPromise }) {
   // Filtra as pastas para mostrar apenas as que estão no nível atual
   const pastasAtuais = pastas.filter(p => (p.parent_id || null) === (subpastaAtiva || null));
 
-  if (carregando) return <div className="min-h-screen bg-[#0d1b2a] text-white flex items-center justify-center">A carregar portal...</div>;
+  // Lógica do Drag and Drop (Arrastar e Soltar)
+  function handleDragOver(e) {
+    e.preventDefault();
+    if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') setIsDragging(true);
+  }
+  function handleDragLeave(e) {
+    e.preventDefault();
+    setIsDragging(false);
+  }
+  function handleDrop(e) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') {
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) handleUpload(files[0]);
+    } else {
+      mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar ficheiros.', 'aviso');
+    }
+  }
+
+  // Efeito SKELETON (Carregamento Premium)
+  if (carregando) return (
+    <div className="min-h-screen bg-[#0d1b2a] p-6 md:p-12 flex flex-col gap-10 pointer-events-none">
+      {/* Skeleton do Header */}
+      <div className="flex justify-between items-center animate-pulse mb-4">
+        <div className="w-64 h-12 bg-zinc-800 rounded-lg"></div>
+        <div className="flex gap-4">
+          <div className="w-24 h-8 bg-zinc-800 rounded-lg"></div>
+          <div className="w-16 h-8 bg-red-500/20 rounded-lg"></div>
+        </div>
+      </div>
+      {/* Skeleton da Navegação */}
+      <div className="flex gap-6 animate-pulse border-b border-zinc-800 pb-2">
+        <div className="w-32 h-6 bg-zinc-800 rounded"></div>
+        <div className="w-32 h-6 bg-zinc-800 rounded"></div>
+        <div className="w-32 h-6 bg-zinc-800 rounded"></div>
+      </div>
+      {/* Skeleton dos Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 animate-pulse">
+        {[1,2,3,4,5].map(i => <div key={i} className="h-28 bg-[#1b263b] border border-zinc-800 rounded-xl"></div>)}
+      </div>
+      {/* Skeleton da Área de Conteúdo */}
+      <div className="flex-1 bg-[#1b263b] border border-zinc-800 rounded-xl p-8 animate-pulse mt-4">
+        <div className="w-48 h-8 bg-zinc-800 rounded mb-8"></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[1,2,3,4,5,6].map(i => <div key={i} className="h-16 bg-zinc-800 rounded-lg"></div>)}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#0d1b2a] text-white font-sans p-6 md:p-12 relative">
+    <div 
+      className="min-h-screen bg-[#0d1b2a] text-white font-sans p-6 md:p-12 relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       
+      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
+      {subindoArquivo && (
+        <div className="fixed inset-0 z-[99999] bg-[#0d1b2a]/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/30 flex flex-col items-center gap-5 shadow-[0_0_50px_rgba(212,175,55,0.15)]">
+            <div className="w-12 h-12 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin"></div>
+            <p className="text-[#d4af37] font-bold tracking-wide animate-pulse text-lg">A processar...</p>
+          </div>
+        </div>
+      )}
+
+      {/* 📂 O OVERLAY DO GOOGLE DRIVE (Drag & Drop) */}
+      {isDragging && (
+        <div className="fixed inset-0 z-[99998] bg-[#d4af37]/10 backdrop-blur-md flex items-center justify-center border-[6px] border-dashed border-[#d4af37] m-4 rounded-3xl pointer-events-none">
+          <div className="bg-[#1b263b] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
+            <span className="text-7xl animate-bounce">📂</span>
+            <h2 className="text-3xl font-black text-[#d4af37]">Solte o ficheiro aqui</h2>
+            <p className="text-zinc-300 font-medium text-lg">
+              Será publicado na pasta: <span className="text-white font-bold">{pastas.find(p => p.id === subpastaAtiva)?.nome || pastaAtiva}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ==========================================
           MODAL DE MOVER ARQUIVO (APENAS ADMIN)
       ========================================== */}

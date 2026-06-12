@@ -104,6 +104,7 @@ export default function AdminPage() {
 
   const [previewCSV, setPreviewCSV] = useState(null);
   const [autenticando, setAutenticando] = useState(true);
+  const [carregandoDados, setCarregandoDados] = useState(true); // <-- NOVA TRAVA INICIAL
   const [operador, setOperador] = useState('Administrador');
   const [subindo, setSubindo] = useState(false);
 
@@ -230,6 +231,8 @@ export default function AdminPage() {
       .from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)')
       .order('criado_em', { ascending: false });
     if (resAlertas.data) setAlertas(resAlertas.data);
+    
+    setCarregandoDados(false); // <-- DESLIGA O SKELETON QUANDO TUDO CHEGAR!
   }
 
   function handleLogout() {
@@ -400,14 +403,18 @@ export default function AdminPage() {
 
   async function deletarAlerta(id) {
     if(!confirm('Deseja excluir esta cobrança permanentemente?')) return;
+    setSubindo(true);
     const { error } = await supabase.from('alertas_clientes').delete().eq('id', id);
-    if (!error) carregarDados();
+    if (!error) await carregarDados();
+    setSubindo(false);
   }
 
   async function atenderPedidoCliente(id) {
     if (!confirm('Deseja marcar esta solicitação do cliente como atendida?')) return;
+    setSubindo(true);
     const { error } = await supabase.from('pedidos_cliente').update({ status: 'atendido' }).eq('id', id);
-    if (!error) carregarDados();
+    if (!error) await carregarDados();
+    setSubindo(false);
   }
 
   async function handleCriarDemanda(e) {
@@ -415,7 +422,6 @@ export default function AdminPage() {
     if (!formDemanda.descricao.trim() || !formDemanda.data_entrega) return;
     setSubindo(true);
     
-    // 1. Salva a demanda no banco de dados
     const { error } = await supabase.from('demandas_equipe').insert([{
       criado_por: operador, 
       atribuido_para: formDemanda.atribuido_para, 
@@ -425,16 +431,14 @@ export default function AdminPage() {
       status: 'pendente'
     }]);
     
-    // 2. Se salvou certinho, limpa o formulário e dispara o alerta premium!
     if (!error) { 
       const emailDestino = OBTER_EMAIL_FUNCIONARIO[formDemanda.atribuido_para];
       
       if (emailDestino) {
-        // Dispara o servidor de e-mail em background sem travar a tela
         enviarEmailDemanda({
           to: emailDestino,
           nomeDestinatario: formDemanda.atribuido_para,
-          nomeRemetente: operador, // Puxa seu nome logado automaticamente
+          nomeRemetente: operador, 
           tituloDemanda: `Nova Tarefa - Prioridade ${formDemanda.prioridade}`,
           descricao: formDemanda.descricao.trim(),
           prazo: new Date(formDemanda.data_entrega).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
@@ -442,20 +446,24 @@ export default function AdminPage() {
       }
 
       setFormDemanda({ descricao: '', atribuido_para: 'Victor (Admin)', data_entrega: '', prioridade: 'Média' }); 
-      carregarDados(); 
+      await carregarDados(); 
     }
     setSubindo(false);
   }
 
   async function concluirDemanda(id) {
+    setSubindo(true);
     const { error } = await supabase.from('demandas_equipe').update({ status: 'concluído' }).eq('id', id);
-    if (!error) carregarDados();
+    if (!error) await carregarDados();
+    setSubindo(false);
   }
 
   async function deletarDemanda(id) {
     if (!confirm('Deseja excluir?')) return;
+    setSubindo(true);
     const { error } = await supabase.from('demandas_equipe').delete().eq('id', id);
-    if (!error) carregarDados();
+    if (!error) await carregarDados();
+    setSubindo(false);
   }
 
   function calcularPrazo(dataString) {
@@ -477,15 +485,19 @@ export default function AdminPage() {
 
   async function aceitarEMoverParaHistorico(doc) {
     if (!confirm('Mover para o histórico?')) return;
+    setSubindo(true);
     const { error } = await supabase.from('envios_cliente').update({ status: 'historico' }).eq('id', doc.id);
-    if (!error) carregarDados(); 
+    if (!error) await carregarDados(); 
+    setSubindo(false);
   }
 
   async function rejeitarEDeletar(doc) {
     if (!confirm('Apagar permanentemente?')) return;
+    setSubindo(true);
     await supabase.storage.from('documentos').remove([doc.caminho_storage]);
     await supabase.from('envios_cliente').delete().eq('id', doc.id);
-    carregarDados();
+    await carregarDados();
+    setSubindo(false);
   }
 
   function baixarDocumento(caminho) {
@@ -514,11 +526,15 @@ export default function AdminPage() {
 
   async function salvarClientesCSV() {
     if (!previewCSV) return;
+    setSubindo(true);
     for (const cli of previewCSV) { await supabase.from('clientes').insert([cli]); }
-    setPreviewCSV(null); carregarDados();
+    setPreviewCSV(null); 
+    await carregarDados();
+    setSubindo(false);
   }
 
   async function aprovarCliente(solicitacao) {
+    setSubindo(true);
     const senhaGerada = solicitacao.cnpj.replace(/\D/g, '').substring(0, 6);
     const { error } = await supabase.from('clientes').insert([{ 
       nome_empresa: solicitacao.nome_empresa, 
@@ -527,7 +543,7 @@ export default function AdminPage() {
       email: solicitacao.email, 
       celular: solicitacao.celular, 
       regime_tributario: solicitacao.regime_tributario, 
-      senha: encriptarSenha(senhaGerada), // Salva criptografada no banco
+      senha: encriptarSenha(senhaGerada), 
       senha_alterada: false 
     }]);
     if (!error) { 
@@ -538,18 +554,26 @@ export default function AdminPage() {
         detalhe: `Aprovou o acesso da empresa ${solicitacao.nome_empresa} (CNPJ: ${solicitacao.cnpj})`
       }]);
       await supabase.from('solicitacoes_cadastro').delete().eq('id', solicitacao.id); 
-      carregarDados(); 
+      await carregarDados(); 
     }
+    setSubindo(false);
   }
 
   async function rejeitarSolicitacao(id) {
     if (!confirm('Deseja realmente recusar e apagar esta solicitação de cadastro?')) return;
+    setSubindo(true);
     const { error } = await supabase.from('solicitacoes_cadastro').delete().eq('id', id);
-    if (!error) carregarDados();
+    if (!error) await carregarDados();
+    setSubindo(false);
   }
 
   async function deletarCliente(id) {
-    if (confirm('Tem certeza?')) { await supabase.from('clientes').delete().eq('id', id); carregarDados(); }
+    if (confirm('Tem certeza? Essa ação é IRREVERSÍVEL.')) { 
+      setSubindo(true);
+      await supabase.from('clientes').delete().eq('id', id); 
+      await carregarDados(); 
+      setSubindo(false);
+    }
   }
 
   const eGestor = operador === 'Victor (Admin)' || operador === 'Lucas (Financeiro)';
@@ -627,12 +651,51 @@ export default function AdminPage() {
     return <div className="divide-y divide-zinc-800">{lista.map(alerta => renderCard(alerta))}</div>;
   };
 
-  if (autenticando) {
-    return <div className="min-h-screen bg-[#0d1b2a] flex items-center justify-center text-zinc-400 font-sans">Verificando credenciais...</div>;
+  if (autenticando || carregandoDados) {
+    return (
+      <div className="min-h-screen bg-[#0d1b2a] flex flex-col pointer-events-none animate-in fade-in duration-500 relative overflow-hidden">
+        
+        {/* Header Falso com a Logomarca (Para não parecer que a tela quebrou) */}
+        <div className="p-6 md:p-12 pb-0 z-10">
+          <div className="flex justify-between items-center bg-[#1b263b]/20 p-4 rounded-xl border border-zinc-800/40 shadow-sm">
+            <img src="/logo.png" alt="Logo" className="w-32 h-auto opacity-40 animate-pulse" />
+            <div className="hidden sm:flex gap-4">
+              <div className="w-24 h-8 bg-zinc-800/50 rounded-lg animate-pulse"></div>
+              <div className="w-16 h-8 bg-red-500/10 rounded-lg animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Centro da Tela: Loader claro e elegante */}
+        <div className="flex-1 flex flex-col items-center justify-center pb-20 z-10">
+          <div className="w-14 h-14 border-4 border-zinc-800 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mb-6"></div>
+          <p className="text-[#d4af37] font-bold tracking-widest uppercase text-sm animate-pulse drop-shadow-md">Sincronizando dados...</p>
+          <p className="text-zinc-500 text-xs mt-2 font-medium">Preparando o painel de controlo</p>
+        </div>
+
+        {/* Skeleton Fantasma na Base (Apenas para dar volume à tela) */}
+        <div className="px-6 md:px-12 pb-6 w-full absolute bottom-0 opacity-20">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 animate-pulse">
+            {[1,2,3,4,5,6].map(i => <div key={i} className="h-32 bg-[#1b263b] rounded-t-xl border-t border-zinc-700"></div>)}
+          </div>
+        </div>
+        
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative">
+      
+      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
+      {subindo && (
+        <div className="fixed inset-0 z-[99999] bg-[#0d1b2a]/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/30 flex flex-col items-center gap-5 shadow-[0_0_50px_rgba(212,175,55,0.15)]">
+            <div className="w-12 h-12 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin"></div>
+            <p className="text-[#d4af37] font-bold tracking-wide animate-pulse text-lg">A processar operação...</p>
+          </div>
+        </div>
+      )}
       
       {/* =======================================================
           MODAL DE EDIÇÃO DA LISTA DE CLIENTES SELECIONADOS
@@ -1299,9 +1362,11 @@ export default function AdminPage() {
 
                         const deletarRegraCompleta = async () => {
                            if(!confirm(`Deseja excluir esta automação para TODOS os ${itens.length} clientes vinculados?`)) return;
+                           setSubindo(true);
                            const ids = itens.map(i => i.id);
                            await supabase.from('alertas_clientes').delete().in('id', ids);
-                           carregarDados();
+                           await carregarDados();
+                           setSubindo(false);
                         };
 
                         return (
