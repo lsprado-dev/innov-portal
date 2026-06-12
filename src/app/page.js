@@ -670,7 +670,7 @@ export default function AdminPage() {
         <div className="flex-1 flex flex-col items-center justify-center pb-20 z-10">
           <div className="w-14 h-14 border-4 border-zinc-800 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mb-6"></div>
           <p className="text-[#d4af37] font-bold tracking-widest uppercase text-sm animate-pulse drop-shadow-md">Sincronizando dados...</p>
-          <p className="text-zinc-500 text-xs mt-2 font-medium">Preparando o painel de controlo</p>
+          <p className="text-zinc-500 text-xs mt-2 font-medium">Preparando o painel de controle</p>
         </div>
 
         {/* Skeleton Fantasma na Base (Apenas para dar volume à tela) */}
@@ -942,12 +942,14 @@ export default function AdminPage() {
                   <div key={cli.id} className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl flex flex-col justify-between hover:border-zinc-700 transition">
                     <div>
                       {/* NOVO: EXIBIÇÃO DO SELO AZUL SE ELE TIVER LOGADO (ULTIMO_LOGIN DIFERENTE DE NULL) */}
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-xl font-bold text-white truncate max-w-[150px] flex items-center" title={cli.nome_empresa}>
+                      <div className="flex justify-between items-start mb-4 gap-3">
+                        <h3 className="text-lg font-bold text-white leading-tight break-words" title={cli.nome_empresa}>
                           {cli.nome_empresa}
                           {cli.ultimo_login && <IconVerified />}
                         </h3>
-                        <span className="text-[10px] font-bold text-[#d4af37] border border-[#d4af37]/30 bg-[#0d1b2a] px-2 py-0.5 rounded whitespace-nowrap">{cli.regime_tributario}</span>
+                        <div className="flex-shrink-0 pt-0.5">
+                          <span className="text-[10px] font-bold text-[#d4af37] border border-[#d4af37]/30 bg-[#0d1b2a] px-2 py-0.5 rounded whitespace-nowrap">{cli.regime_tributario}</span>
+                        </div>
                       </div>
                       <p className="text-xs text-zinc-400 mb-1">CNPJ: <span className="text-zinc-300">{cli.cnpj}</span></p>
                       <p className="text-xs text-zinc-400 mb-1">E-mail: <span className="text-zinc-300 truncate inline-block max-w-[200px] align-bottom">{cli.email || 'Não informado'}</span></p>
