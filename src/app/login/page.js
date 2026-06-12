@@ -85,9 +85,15 @@ export default function LoginPage() {
   const [senha, setSenha] = useState('');
   
   // Estados de Feedback
-  const [erro, setErro] = useState('');
-  const [sucesso, setSucesso] = useState('');
+  const [toasts, setToasts] = useState([]);
   const [carregando, setCarregando] = useState(false);
+
+  // FUNÇÃO MÁGICA DOS TOASTS
+  function mostrarToast(mensagem, tipo = 'sucesso') {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, mensagem, tipo }]);
+    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
+  }
   
   // Estados do Cadastro
   const [formCadastro, setFormCadastro] = useState({
@@ -103,21 +109,19 @@ export default function LoginPage() {
 
   async function handleLogin(e) {
     e.preventDefault();
-    setErro('');
-    setSucesso('');
     setCarregando(true);
 
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailLogin, password: senha }) // Envia a senha limpa para a API
+        body: JSON.stringify({ email: emailLogin, password: senha }) 
       });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setErro(data.error || 'Erro ao realizar login.');
+        mostrarToast(data.error || 'Erro ao realizar login.', 'erro');
         setCarregando(false);
         return;
       }
@@ -131,7 +135,6 @@ export default function LoginPage() {
       if (data.tipo === 'interno') {
         router.push('/');
       } else {
-        // RADAR DE LOCALIZAÇÃO (Invisível para o cliente)
         let cidadeFormatada = null;
         try {
           const geoRes = await fetch('https://ipapi.co/json/');
@@ -143,7 +146,6 @@ export default function LoginPage() {
           console.log('Não foi possível rastrear a cidade.');
         }
 
-        // GATILHO MÁGICO: Grava data, hora e cidade no Supabase
         await supabase.from('clientes').update({ 
           ultimo_login: new Date().toISOString(),
           ultima_cidade: cidadeFormatada
@@ -152,7 +154,7 @@ export default function LoginPage() {
         router.push(`/cliente/${data.id}`);
       }
     } catch (err) {
-      setErro('Erro de conexão com o servidor.');
+      mostrarToast('Erro de conexão com o servidor.', 'erro');
     } finally {
       setCarregando(false);
     }
@@ -160,36 +162,32 @@ export default function LoginPage() {
 
   async function handleSolicitarConta(e) {
     e.preventDefault();
-    setErro('');
-    setSucesso('');
     setCarregando(true);
 
-    // VALIDAÇÕES RIGOROSAS (UX Avançada)
     if (!validarCNPJ(formCadastro.cnpj)) {
-      setErro('O CNPJ introduzido é inválido ou não existe. Por favor, verifique.');
+      mostrarToast('O CNPJ introduzido é inválido ou não existe.', 'erro');
       setCarregando(false);
       return;
     }
 
     if (!validarEmail(formCadastro.email)) {
-      setErro('Por favor, insira um e-mail profissional válido.');
+      mostrarToast('Por favor, insira um e-mail profissional válido.', 'erro');
       setCarregando(false);
       return;
     }
 
     if (formCadastro.celular.length < 14) {
-      setErro('O número de celular está incompleto.');
+      mostrarToast('O número de celular está incompleto.', 'erro');
       setCarregando(false);
       return;
     }
 
     if (!formCadastro.regime_tributario) {
-      setErro('Por favor, selecione um Regime Tributário.');
+      mostrarToast('Por favor, selecione um Regime Tributário.', 'erro');
       setCarregando(false);
       return;
     }
 
-    // Processo de envio para a BD se estiver tudo perfeito
     const { error } = await supabase.from('solicitacoes_cadastro').insert([{
       nome_empresa: formCadastro.nome_empresa,
       cnpj: formCadastro.cnpj,
@@ -200,9 +198,9 @@ export default function LoginPage() {
     }]);
 
     if (error) {
-      setErro('Erro ao enviar solicitação: ' + error.message);
+      mostrarToast('Erro ao enviar solicitação: ' + error.message, 'erro');
     } else {
-      setSucesso('Pedido enviado com sucesso! A contabilidade irá analisar e liberar o seu acesso em breve.');
+      mostrarToast('Pedido enviado! A contabilidade liberará o acesso em breve.', 'sucesso');
       setModo('login');
       setFormCadastro({ nome_empresa: '', cnpj: '', nome_contato: '', email: '', celular: '', regime_tributario: '' });
     }
@@ -215,27 +213,27 @@ export default function LoginPage() {
         
         <div className="text-center mb-8 flex flex-col items-center">
           <img src="/logo.png" alt="Logo Innovative" className="w-36 h-auto mb-4 object-contain drop-shadow-lg" />
-          <p className="text-zinc-400 text-sm font-medium tracking-wide uppercase">Portal Digital da Contabilidade</p>
+          <p className="text-zinc-400 text-sm font-medium tracking-wide uppercase">
+            Portal do Cliente 
+            <span className="block mt-1 text-[#d4af37] font-bold">Innovative</span>
+          </p>
         </div>
-
-        {erro && <div className="mb-6 p-4 bg-red-500/10 border-l-4 border-red-500 text-red-400 text-sm rounded font-medium shadow-sm animate-in fade-in zoom-in">{erro}</div>}
-        {sucesso && <div className="mb-6 p-4 bg-emerald-500/10 border-l-4 border-emerald-500 text-emerald-400 text-sm rounded font-medium shadow-sm animate-in fade-in zoom-in">{sucesso}</div>}
 
         {modo === 'login' ? (
           <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Utilizador / E-mail</label>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">E-mail de acesso</label>
               <input type="text" required placeholder="Ex: lucas@innovbusiness.com" value={emailLogin} onChange={(e) => setEmailLogin(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Senha Segura</label>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Senha</label>
               <input type="password" required placeholder="••••••••" value={senha} onChange={(e) => setSenha(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
             </div>
             <button type="submit" disabled={carregando} className="w-full bg-[#d4af37] text-[#0d1b2a] font-extrabold py-3.5 rounded-lg hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.3)] mt-2">
               {carregando ? 'A Autenticar...' : 'Acessar o Portal'}
             </button>
             <div className="text-center mt-6 pt-4 border-t border-zinc-800/60">
-              <button type="button" onClick={() => { setModo('cadastro'); setErro(''); setSucesso(''); }} className="text-sm text-zinc-400 hover:text-[#d4af37] transition font-medium">
+              <button type="button" onClick={() => setModo('cadastro')} className="text-sm text-zinc-400 hover:text-[#d4af37] transition font-medium">
                 É cliente e ainda não tem acesso? <span className="text-[#d4af37] font-bold underline">Solicite Aqui</span>
               </button>
             </div>
@@ -307,15 +305,29 @@ export default function LoginPage() {
             </div>
 
             <div className="pt-6 mt-4 border-t border-zinc-800 flex gap-3">
-              <button type="button" onClick={() => { setModo('login'); setErro(''); setSucesso(''); }} className="w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 rounded-lg text-sm transition">Cancelar</button>
+              <button type="button" onClick={() => setModo('login')} className="w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 rounded-lg text-sm transition">Cancelar</button>
               <button type="submit" disabled={carregando} className="w-2/3 bg-[#d4af37] text-[#0d1b2a] font-extrabold py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg">
                 {carregando ? 'A Processar...' : 'Enviar Solicitação Oficial'}
               </button>
             </div>
           </form>
         )}
-
       </div>
+
+      {/* SISTEMA DE TOASTS PREMIUM */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border pointer-events-auto transition-all backdrop-blur-md min-w-[280px] max-w-sm transform translate-y-0 opacity-100 ${
+            toast.tipo === 'erro' ? 'bg-red-500/10 border-red-500/30 text-red-100' :
+            toast.tipo === 'aviso' ? 'bg-orange-500/10 border-orange-500/30 text-orange-100' :
+            'bg-emerald-500/10 border-emerald-500/30 text-emerald-100'
+          }`}>
+            <span className="text-xl drop-shadow-md">{toast.tipo === 'erro' ? '❌' : toast.tipo === 'aviso' ? '⚠️' : '✅'}</span>
+            <span className="text-sm font-bold leading-snug">{toast.mensagem}</span>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }

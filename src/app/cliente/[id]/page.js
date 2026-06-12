@@ -119,8 +119,18 @@ export default function ClientePage({ params: paramsPromise }) {
   const [boletosSolicitados, setBoletosSolicitados] = useState([]); // Memória anti-spam
   const [mensalidadesPagas, setMensalidadesPagas] = useState([]); // Memória do checkbox
 
+  const [toasts, setToasts] = useState([]); // Memória dos Toasts
   const [carregando, setCarregando] = useState(true);
   const [subindoArquivo, setSubindoArquivo] = useState(false);
+
+  // FUNÇÃO MÁGICA DOS TOASTS (Remove sozinho após 4 segundos)
+  function mostrarToast(mensagem, tipo = 'sucesso') {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, mensagem, tipo }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  }
   const [operador, setOperador] = useState('Desconhecido');
   const [isInterno, setIsInterno] = useState(false);
   
@@ -272,7 +282,8 @@ export default function ClientePage({ params: paramsPromise }) {
     const { error } = await supabase.from('pastas_portal').insert([{
       cliente_id: id,
       setor: pastaAtiva,
-      nome: nomePasta.trim()
+      nome: nomePasta.trim(),
+      parent_id: subpastaAtiva || null // MAGIA: Se ele estiver dentro de uma pasta, salva como filha dela!
     }]);
 
     if (!error) {
@@ -298,40 +309,28 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   // ===============================================
-  // GESTÃO DE ARQUIVOS (MOVER, RENOMEAR, EXCLUIR)
+  // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
   // ===============================================
   async function handleUpload(e) {
     const file = e.target.files[0];
     if (!file || !pastaAtiva) return;
 
-    // TRAVA DE TAMANHO (15MB)
-    if (file.size > 15 * 1024 * 1024) {
-      alert('O ficheiro excede o tamanho máximo permitido de 15MB.');
-      return;
-    }
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede o tamanho máximo de 15MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
     const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
-
     const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
 
     if (storageError) {
-      alert('Erro no Storage: ' + storageError.message);
+      mostrarToast('Erro no Storage: ' + storageError.message, 'erro');
       setSubindoArquivo(false);
       return;
     }
 
-    await supabase.from('arquivos_portal').insert([{
-      cliente_id: id, 
-      setor: pastaAtiva, 
-      subpasta_id: subpastaAtiva, 
-      nome_original: file.name, 
-      caminho_storage: caminhoArquivo, 
-      enviado_por: operador
-    }]);
+    await supabase.from('arquivos_portal').insert([{ cliente_id: id, setor: pastaAtiva, subpasta_id: subpastaAtiva, nome_original: file.name, caminho_storage: caminhoArquivo, enviado_por: operador }]);
 
-    alert('Documento publicado com sucesso!');
+    mostrarToast('Documento publicado com sucesso!', 'sucesso');
     await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" na pasta ${pastaAtiva}.`);
     carregarDadosDaAba();
     setSubindoArquivo(false);
@@ -340,33 +339,24 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleUploadFinanceiro(e, mesRef) {
     const file = e.target.files[0];
     if (!file) return;
-
-    if (file.size > 15 * 1024 * 1024) return alert('O ficheiro excede 15MB.');
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede 15MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
     const caminhoArquivo = `${id}/financeiro/${mesRef}_${timestamp}_${file.name}`;
-
     const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
-    if (storageError) { alert('Erro no Storage'); setSubindoArquivo(false); return; }
+    
+    if (storageError) { mostrarToast('Erro no Storage', 'erro'); setSubindoArquivo(false); return; }
 
-    // Envia com subpasta nula para não quebrar o banco, o sistema vai ler pelo caminhoArquivo
-    const { error: dbError } = await supabase.from('arquivos_portal').insert([{
-      cliente_id: id, 
-      setor: 'financeiro', 
-      subpasta_id: null, 
-      nome_original: file.name, 
-      caminho_storage: caminhoArquivo, 
-      enviado_por: operador
-    }]);
+    const { error: dbError } = await supabase.from('arquivos_portal').insert([{ cliente_id: id, setor: 'financeiro', subpasta_id: null, nome_original: file.name, caminho_storage: caminhoArquivo, enviado_por: operador }]);
 
     if (dbError) {
-      alert('Erro ao registrar no banco de dados: ' + dbError.message);
+      mostrarToast('Erro ao registrar no banco de dados: ' + dbError.message, 'erro');
       setSubindoArquivo(false);
       return;
     }
 
-    alert(`Comprovante de ${mesRef} anexado com sucesso!`);
+    mostrarToast(`Comprovante de ${mesRef} anexado com sucesso!`, 'sucesso');
     await registrarAuditoria('COMPROVANTE_ENVIADO', `Enviou o comprovante referente a ${mesRef}.`);
     carregarDadosDaAba();
     setSubindoArquivo(false);
@@ -376,42 +366,22 @@ export default function ClientePage({ params: paramsPromise }) {
     if (!confirm(`Deseja solicitar à equipe o reenvio do boleto referente a ${mesRef}?`)) return;
     
     setSubindoArquivo(true);
-    
-    // Define a prioridade para o dia seguinte
     const dataAmanha = new Date();
     dataAmanha.setDate(dataAmanha.getDate() + 1);
     const dataAmanhaStr = dataAmanha.toISOString().split('T')[0];
 
-    // 1. Cria a demanda direto no seu painel
-    const { error } = await supabase.from('demandas_equipe').insert([{
-      criado_por: cliente.nome_empresa, 
-      atribuido_para: 'Lucas (Financeiro)', 
-      descricao: `Solicitação de Boleto - Ref: ${mesRef}`, 
-      data_entrega: dataAmanhaStr, 
-      prioridade: 'Alta', 
-      status: 'pendente'
-    }]);
+    const { error } = await supabase.from('demandas_equipe').insert([{ criado_por: cliente.nome_empresa, atribuido_para: 'Lucas (Financeiro)', descricao: `Solicitação de Boleto - Ref: ${mesRef}`, data_entrega: dataAmanhaStr, prioridade: 'Alta', status: 'pendente' }]);
 
     if (!error) {
-      // 2. Dispara o e-mail mágico
       try {
-        await enviarEmailDemanda({
-          to: OBTER_EMAIL_FUNCIONARIO['Lucas (Financeiro)'],
-          nomeDestinatario: 'Lucas (Financeiro)',
-          nomeRemetente: cliente.nome_empresa,
-          tituloDemanda: `Nova Solicitação de Boleto - Ref: ${mesRef}`,
-          descricao: `O cliente ${cliente.nome_empresa} (CNPJ: ${cliente.cnpj}) está solicitando o envio do boleto da competência ${mesRef} pelo portal.`,
-          prazo: new Date(dataAmanhaStr).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
-        });
-      } catch (err) {
-        console.error("Falha ao notificar por e-mail:", err);
-      }
+        await enviarEmailDemanda({ to: OBTER_EMAIL_FUNCIONARIO['Lucas (Financeiro)'], nomeDestinatario: 'Lucas (Financeiro)', nomeRemetente: cliente.nome_empresa, tituloDemanda: `Nova Solicitação de Boleto - Ref: ${mesRef}`, descricao: `O cliente ${cliente.nome_empresa} está solicitando o boleto da competência ${mesRef}.`, prazo: new Date(dataAmanhaStr).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) });
+      } catch (err) { console.error("Falha ao notificar por e-mail:", err); }
       
-      alert('Solicitação enviada com sucesso! O Financeiro já foi notificado e enviará o boleto em breve.');
+      mostrarToast('Solicitação enviada com sucesso! O Financeiro foi notificado.', 'sucesso');
       await registrarAuditoria('BOLETO_SOLICITADO', `Solicitou a 2ª via do boleto de ${mesRef}.`);
-      setBoletosSolicitados(prev => [...prev, mesRef]); // Bloqueia o botão para este mês!
+      setBoletosSolicitados(prev => [...prev, mesRef]); 
     } else {
-      alert('Erro ao enviar solicitação: ' + error.message);
+      mostrarToast('Erro ao enviar solicitação: ' + error.message, 'erro');
     }
     setSubindoArquivo(false);
   }
@@ -422,58 +392,50 @@ export default function ClientePage({ params: paramsPromise }) {
     
     setSubindoArquivo(true);
     const destino = destinoPastaMover === '' ? null : destinoPastaMover;
-    
     const { error } = await supabase.from('arquivos_portal').update({ subpasta_id: destino }).eq('id', arquivoMovendo.id);
     
     if (!error) {
+      mostrarToast('Arquivo movido com sucesso!', 'sucesso');
       setArquivoMovendo(null);
       setDestinoPastaMover('');
       carregarDadosDaAba();
     } else {
-      alert('Erro ao mover arquivo: ' + error.message);
+      mostrarToast('Erro ao mover arquivo: ' + error.message, 'erro');
     }
     setSubindoArquivo(false);
   }
 
   async function handleMoverParaLixeira(arq, origem) {
-    if (!confirm('Deseja mover este arquivo para a Lixeira? Ele ficará protegido por 30 dias antes de ser apagado permanentemente.')) return;
-
+    if (!confirm('Deseja mover este arquivo para a Lixeira? Ele ficará salvo por 30 dias.')) return;
     const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
-    
-    if (!error) {
-      await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo "${arq.nome_original || arq.nome_documento}" para a lixeira.`);
-      carregarDadosDaAba();
-    }
+    if (!error) { mostrarToast('Movido para a lixeira.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); carregarDadosDaAba(); }
   }
 
   async function handleRestaurarDaLixeira(arq) {
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: null }).eq('id', arq.id);
-    if (!error) carregarDadosDaAba();
+    if (!error) { mostrarToast('Arquivo restaurado!', 'sucesso'); carregarDadosDaAba(); }
   }
 
   async function handleDeletarPermanente(arq) {
-    if (!confirm('PERIGO: Este arquivo será apagado permanentemente dos servidores e não poderá ser recuperado. Deseja continuar?')) return;
-
+    if (!confirm('PERIGO: Este arquivo será apagado permanentemente. Deseja continuar?')) return;
     await supabase.storage.from('documentos').remove([arq.caminho_storage]);
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     await supabase.from(tabela).delete().eq('id', arq.id);
-    
+    mostrarToast('Arquivo deletado permanentemente.', 'aviso');
     carregarDadosDaAba();
   }
 
   async function handleEsvaziarLixeira() {
-    if (!confirm('Esvaziar a lixeira agora? TODOS os arquivos aqui presentes serão DELETADOS PERMANENTEMENTE.')) return;
-    
+    if (!confirm('Esvaziar a lixeira agora? TODOS os arquivos aqui serão DELETADOS PERMANENTEMENTE.')) return;
     setSubindoArquivo(true);
     for (const arq of itensLixeira) {
       await supabase.storage.from('documentos').remove([arq.caminho_storage]);
       const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       await supabase.from(tabela).delete().eq('id', arq.id);
     }
-    
-    alert('Lixeira esvaziada com sucesso.');
+    mostrarToast('Lixeira esvaziada com sucesso.', 'sucesso');
     carregarDadosDaAba();
     setSubindoArquivo(false);
   }
@@ -481,9 +443,8 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleRenomear(arquivoId, nomeAtual) {
     const novoNome = prompt('Digite o novo nome para o ficheiro:', nomeAtual);
     if (!novoNome || novoNome.trim() === '' || novoNome === nomeAtual) return;
-
     const { error } = await supabase.from('arquivos_portal').update({ nome_original: novoNome.trim() }).eq('id', arquivoId);
-    if (!error) carregarDadosDaAba();
+    if (!error) { mostrarToast('Arquivo renomeado.', 'sucesso'); carregarDadosDaAba(); }
   }
 
   function baixarDocumento(caminhoStorage) {
@@ -491,56 +452,41 @@ export default function ClientePage({ params: paramsPromise }) {
     window.open(data.publicUrl, '_blank');
   }
 
-  // ===============================================
-  // FUNÇÕES RESTANTES (Envios, Senha, Pedidos, Alertas)
-  // ===============================================
   async function handleAlterarSenha(e) {
     e.preventDefault();
-    if (novaSenha.trim().length < 6) return alert('A nova senha deve possuir no mínimo 6 caracteres.');
+    if (novaSenha.trim().length < 6) return mostrarToast('A nova senha deve possuir no mínimo 6 caracteres.', 'erro');
     setSalvandoSenha(true);
-
-    const { error } = await supabase.from('clientes').update({ 
-      senha: encriptarSenha(novaSenha.trim()), // Criptografa a nova senha antes de salvar
-      senha_alterada: true 
-    }).eq('id', id);
-
+    const { error } = await supabase.from('clientes').update({ senha: encriptarSenha(novaSenha.trim()), senha_alterada: true }).eq('id', id);
     if (!error) {
-      alert('Senha atualizada com sucesso! Use a nova senha no seu próximo acesso.');
+      mostrarToast('Senha atualizada com sucesso!', 'sucesso');
       setNovaSenha('');
       setMostrarModalPerfil(false);
     } else {
-      alert('Erro ao atualizar a senha: ' + error.message);
+      mostrarToast('Erro ao atualizar a senha: ' + error.message, 'erro');
     }
     setSalvandoSenha(false);
   }
 
   function handleLogout() {
-    localStorage.removeItem('usuario_nome');
-    localStorage.removeItem('usuario_tipo');
-    localStorage.removeItem('usuario_id');
+    localStorage.removeItem('usuario_nome'); localStorage.removeItem('usuario_tipo'); localStorage.removeItem('usuario_id');
     router.push('/login');
   }
 
   async function handleResponderAlerta(e, alerta) {
     const file = e.target.files[0];
     if (!file) return;
-
-    if (file.size > 15 * 1024 * 1024) {
-      alert('O ficheiro excede o tamanho máximo permitido de 15MB.');
-      return;
-    }
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('O ficheiro excede 15MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
     const caminhoArquivo = `${id}/respostas/${timestamp}_${file.name}`;
-
     const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
-    if (storageError) { alert('Erro no upload: ' + storageError.message); setSubindoArquivo(false); return; }
+    
+    if (storageError) { mostrarToast('Erro no upload: ' + storageError.message, 'erro'); setSubindoArquivo(false); return; }
 
     const { error: dbError } = await supabase.from('alertas_clientes').update({ status: 'respondido', caminho_arquivo: caminhoArquivo }).eq('id', alerta.id);
-
     if (!dbError) {
-      alert('Documento enviado com sucesso! A contabilidade já foi notificada.');
+      mostrarToast('Documento enviado! A Innovative foi notificada.', 'sucesso');
       carregarDadosDaAba();
       atualizarBadgeGlobal(id);
     }
@@ -548,11 +494,11 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   async function handleConcluirDemanda0Arquivo(alerta) {
-    if (!confirm('Pretende marcar esta demanda como concluída sem anexar ficheiros?')) return;
+    if (!confirm('Pretende marcar esta demanda como concluída sem anexar arquivos?')) return;
     setSubindoArquivo(true);
     const { error } = await supabase.from('alertas_clientes').update({ status: 'respondido' }).eq('id', alerta.id);
     if (!error) {
-      alert('Demanda concluída com sucesso!');
+      mostrarToast('Demanda concluída com sucesso!', 'sucesso');
       carregarDadosDaAba();
       atualizarBadgeGlobal(id);
     }
@@ -567,27 +513,21 @@ export default function ClientePage({ params: paramsPromise }) {
   async function handleEnviarParaContabilidade(e) {
     e.preventDefault();
     const validos = enviosPre.filter(item => item.arquivo && item.descricao.trim());
-    if (validos.length === 0) return alert('Preencha a descrição e selecione pelo menos um ficheiro válido.');
+    if (validos.length === 0) return mostrarToast('Preencha a descrição e selecione um ficheiro.', 'erro');
 
-    // Verifica o tamanho de todos os arquivos antes de começar a enviar
     for (const item of validos) {
-      if (item.arquivo.size > 15 * 1024 * 1024) {
-        return alert(`O ficheiro "${item.arquivo.name}" excede o tamanho máximo de 15MB.`);
-      }
+      if (item.arquivo.size > 15 * 1024 * 1024) return mostrarToast(`O ficheiro "${item.arquivo.name}" excede 15MB.`, 'erro');
     }
 
     setSubindoArquivo(true);
     for (const item of validos) {
       const timestamp = Date.now();
       const caminhoArquivo = `${id}/recebidos/${timestamp}_${item.arquivo.name}`;
-
       await supabase.storage.from('documentos').upload(caminhoArquivo, item.arquivo);
-      await supabase.from('envios_cliente').insert([{
-        cliente_id: id, nome_documento: item.descricao.trim(), nome_original: item.arquivo.name, caminho_storage: caminhoArquivo, status: 'pendente'
-      }]);
+      await supabase.from('envios_cliente').insert([{ cliente_id: id, nome_documento: item.descricao.trim(), nome_original: item.arquivo.name, caminho_storage: caminhoArquivo, status: 'pendente' }]);
     }
 
-    alert('Documentos enviados com sucesso!');
+    mostrarToast('Documentos enviados com sucesso!', 'sucesso');
     setEnviosPre([{ id: 1, descricao: '', arquivo: null }]);
     carregarDadosDaAba();
     setSubindoArquivo(false);
@@ -600,7 +540,7 @@ export default function ClientePage({ params: paramsPromise }) {
     setSubindoArquivo(true);
     await supabase.from('pedidos_cliente').insert([{ cliente_id: id, descricao: novoPedido.trim(), status: 'pendente' }]);
 
-    alert('A sua solicitação foi enviada para a nossa equipa!');
+    mostrarToast('A sua solicitação foi enviada para a Innovative!', 'sucesso');
     setNovoPedido('');
     carregarDadosDaAba();
     setSubindoArquivo(false);
@@ -617,6 +557,21 @@ export default function ClientePage({ params: paramsPromise }) {
     }
     return matchBusca;
   });
+
+  // Lógica de "Google Drive" - Constrói o caminho de navegação
+  function obterCaminhoPastas(pastaId) {
+    const caminho = [];
+    let atual = pastas.find(p => p.id === pastaId);
+    while (atual) {
+      caminho.unshift(atual);
+      atual = pastas.find(p => p.id === atual.parent_id); // Puxa o pai do pai infinitamente
+    }
+    return caminho;
+  }
+  const caminhoPastas = subpastaAtiva ? obterCaminhoPastas(subpastaAtiva) : [];
+  
+  // Filtra as pastas para mostrar apenas as que estão no nível atual
+  const pastasAtuais = pastas.filter(p => (p.parent_id || null) === (subpastaAtiva || null));
 
   if (carregando) return <div className="min-h-screen bg-[#0d1b2a] text-white flex items-center justify-center">A carregar portal...</div>;
 
@@ -905,17 +860,22 @@ export default function ClientePage({ params: paramsPromise }) {
             ) : pastaAtiva && (
               <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
-                  {/* BREADCRUMBS INTELIGENTES */}
+                  {/* BREADCRUMBS INTELIGENTES TIPO GOOGLE DRIVE */}
                   <h3 className="text-xl font-bold text-[#d4af37] capitalize flex items-center gap-2 flex-wrap">
                     <span className={`transition ${subpastaAtiva ? 'cursor-pointer hover:underline text-zinc-400 hover:text-white' : 'text-[#d4af37]'}`} onClick={() => setSubpastaAtiva(null)}>
                       Setor {pastaAtiva}
                     </span>
-                    {subpastaAtiva && (
-                      <>
+                    {caminhoPastas.map((p, index) => (
+                      <span key={p.id} className="flex items-center gap-2">
                         <span className="text-zinc-600">/</span>
-                        <span className="text-[#d4af37] flex items-center gap-2"><IconFolderSolid /> {pastas.find(p => p.id === subpastaAtiva)?.nome}</span>
-                      </>
-                    )}
+                        <span 
+                          className={`transition ${index === caminhoPastas.length - 1 ? 'text-[#d4af37]' : 'cursor-pointer hover:underline text-zinc-400 hover:text-white'}`}
+                          onClick={() => setSubpastaAtiva(p.id)}
+                        >
+                          {index === caminhoPastas.length - 1 && <IconFolderSolid />} {p.nome}
+                        </span>
+                      </span>
+                    ))}
                   </h3>
                   
                   <div className="flex flex-col sm:flex-row w-full sm:w-auto items-stretch sm:items-center gap-3">
@@ -934,24 +894,22 @@ export default function ClientePage({ params: paramsPromise }) {
 
                     {isInterno && (
                       <div className="flex gap-2">
-                        {!subpastaAtiva && (
-                          <button onClick={handleCriarPasta} className="bg-zinc-800 text-zinc-300 px-4 py-2.5 rounded-lg font-bold border border-zinc-700 hover:bg-zinc-700 hover:text-white transition shadow-lg text-sm whitespace-nowrap">
-                            + Criar Pasta
-                          </button>
-                        )}
+                        <button onClick={handleCriarPasta} className="bg-zinc-800 text-zinc-300 px-4 py-2.5 rounded-lg font-bold border border-zinc-700 hover:bg-zinc-700 hover:text-white transition shadow-lg text-sm whitespace-nowrap">
+                          + Nova Pasta
+                        </button>
                         <label className="bg-[#d4af37] text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-sm text-center whitespace-nowrap">
-                          {subindoArquivo ? 'A Enviar...' : 'Enviar PDF'}
-                          <input type="file" accept="application/pdf" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
+                          {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivo'}
+                          <input type="file" accept="application/pdf,image/*" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
                         </label>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* EXIBIÇÃO DE SUBPASTAS (APENAS NA RAIZ DO SETOR) */}
-                {!subpastaAtiva && pastas.length > 0 && (
+                {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS */}
+                {pastasAtuais.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                    {pastas.map(pasta => (
+                    {pastasAtuais.map(pasta => (
                       <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md">
                         <div className="flex items-center gap-3 flex-1 overflow-hidden" onClick={() => setSubpastaAtiva(pasta.id)}>
                           <IconFolderSolid /> <span className="font-bold text-zinc-200 truncate">{pasta.nome}</span>
@@ -1274,6 +1232,21 @@ export default function ClientePage({ params: paramsPromise }) {
         )}
 
       </div>
+
+      {/* SISTEMA DE TOASTS PREMIUM */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border pointer-events-auto transition-all backdrop-blur-md min-w-[280px] max-w-sm transform translate-y-0 opacity-100 ${
+            toast.tipo === 'erro' ? 'bg-red-500/10 border-red-500/30 text-red-100' :
+            toast.tipo === 'aviso' ? 'bg-orange-500/10 border-orange-500/30 text-orange-100' :
+            'bg-emerald-500/10 border-emerald-500/30 text-emerald-100'
+          }`}>
+            <span className="text-xl drop-shadow-md">{toast.tipo === 'erro' ? '❌' : toast.tipo === 'aviso' ? '⚠️' : '✅'}</span>
+            <span className="text-sm font-bold leading-snug">{toast.mensagem}</span>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }

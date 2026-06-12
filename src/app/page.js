@@ -142,6 +142,14 @@ export default function AdminPage() {
   // ESTADO DOS LOGS DE AUDITORIA
   const [logs, setLogs] = useState([]);
 
+  // SISTEMA DE TOASTS PREMIUM
+  const [toasts, setToasts] = useState([]);
+  function mostrarToast(mensagem, tipo = 'sucesso') {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, mensagem, tipo }]);
+    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
+  }
+
   useEffect(() => {
     const tipoUsuario = localStorage.getItem('usuario_tipo');
     const nomeUsuario = localStorage.getItem('usuario_nome');
@@ -288,18 +296,18 @@ export default function AdminPage() {
 
   async function handleCriarAlerta(e) {
     e.preventDefault();
-    if (!formAlerta.titulo) return alert('O Título é obrigatório.'); 
+    if (!formAlerta.titulo) return mostrarToast('O Título é obrigatório.', 'erro'); 
 
-    if (!formAlerta.repetir_mensalmente && !formAlerta.prazo) return alert('O Prazo p/ Confirmação é obrigatório para cobranças pontuais.'); 
+    if (!formAlerta.repetir_mensalmente && !formAlerta.prazo) return mostrarToast('O Prazo p/ Confirmação é obrigatório para cobranças pontuais.', 'erro'); 
 
-    if (formAlerta.repetir_mensalmente && !formAlerta.dia_recorrencia) return alert('Por favor, informe em que DIA DO MÊS a automação deve enviar o alerta.');
+    if (formAlerta.repetir_mensalmente && !formAlerta.dia_recorrencia) return mostrarToast('Por favor, informe em que DIA DO MÊS a automação deve enviar o alerta.', 'erro');
     
     if (formAlerta.enviar_email && !formAlerta.repetir_mensalmente && !formAlerta.enviar_agora && !formAlerta.data_envio_programado) {
-      return alert('Se optou por não enviar agora, informe a data em que o e-mail deve ser disparado.');
+      return mostrarToast('Se optou por não enviar agora, informe a data em que o e-mail deve ser disparado.', 'erro');
     }
 
     const clientesAlvo = formAlerta.clientesSelecionados;
-    if (clientesAlvo.length === 0) return alert('Nenhum cliente selecionado para o disparo.');
+    if (clientesAlvo.length === 0) return mostrarToast('Nenhum cliente selecionado para o disparo.', 'erro');
 
     setSubindo(true);
     
@@ -373,19 +381,19 @@ export default function AdminPage() {
             }
           }
         }
-        alert(`Sucesso! Criado no portal e E-mails disparados HOJE para ${clientesAlvo.length} empresa(s).`);
+        mostrarToast(`Criado! E-mails disparados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
       } else if (isAgendadoFuturo) {
-        alert(`Sucesso! A cobrança foi agendada para disparo futuro na data ${new Date(formAlerta.data_envio_programado).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}.`);
+        mostrarToast(`Agendada para disparo futuro!`, 'sucesso');
       } else if (isRecorrente) {
-        alert(`Automação Mensal Salva! A regra aparecerá na aba 'Automações'.`);
+        mostrarToast(`Automação Mensal Salva!`, 'sucesso');
       } else {
-        alert(`Cobrança publicada APENAS no portal (Notificação por E-mail desligada).`);
+        mostrarToast(`Cobrança publicada APENAS no portal (Sem e-mail).`, 'aviso');
       }
 
       setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true });
       carregarDados();
     } else {
-      alert('Erro ao criar cobrança no sistema: ' + error.message);
+      mostrarToast('Erro ao criar cobrança no sistema: ' + error.message, 'erro');
     }
     setSubindo(false);
   }
@@ -1476,6 +1484,21 @@ export default function AdminPage() {
         )}
 
       </div>
+
+      {/* SISTEMA DE TOASTS PREMIUM */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border pointer-events-auto transition-all backdrop-blur-md min-w-[280px] max-w-sm transform translate-y-0 opacity-100 ${
+            toast.tipo === 'erro' ? 'bg-red-500/10 border-red-500/30 text-red-100' :
+            toast.tipo === 'aviso' ? 'bg-orange-500/10 border-orange-500/30 text-orange-100' :
+            'bg-emerald-500/10 border-emerald-500/30 text-emerald-100'
+          }`}>
+            <span className="text-xl drop-shadow-md">{toast.tipo === 'erro' ? '❌' : toast.tipo === 'aviso' ? '⚠️' : '✅'}</span>
+            <span className="text-sm font-bold leading-snug">{toast.mensagem}</span>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }
