@@ -1091,14 +1091,14 @@ export default function AdminPage() {
               {eGestor && (
                 <div className="grid grid-cols-1 gap-3">
                   <a href="https://supabase.com/dashboard/projects" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-emerald-500/20 hover:border-emerald-500 shadow-md flex items-center gap-3 transition-all group">
-                    <span className="text-emerald-400 text-2xl group-hover:scale-110 transition-transform">🗄️</span>
+                    <span className="text-emerald-400 text-2xl group-hover:scale-110 transition-transform"></span>
                     <div>
                       <p className="text-[11px] font-bold text-emerald-400 uppercase">Banco de Dados</p>
                       <p className="text-[10px] text-zinc-500">Painel Supabase</p>
                     </div>
                   </a>
                   <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-blue-500/20 hover:border-blue-500 shadow-md flex items-center gap-3 transition-all group">
-                    <span className="text-blue-400 text-2xl group-hover:scale-110 transition-transform">⚡</span>
+                    <span className="text-blue-400 text-2xl group-hover:scale-110 transition-transform"></span>
                     <div>
                       <p className="text-[11px] font-bold text-blue-400 uppercase">Servidor (Banda)</p>
                       <p className="text-[10px] text-zinc-500">Painel Vercel</p>
