@@ -766,20 +766,22 @@ export default function AdminPage() {
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-[#1b263b] border border-zinc-800 p-6 rounded-xl w-full max-w-3xl max-h-[80vh] overflow-y-auto">
               <h2 className="text-xl font-bold text-[#d4af37] mb-2">Confirmar Importação de Clientes</h2>
-              <table className="w-full text-left text-xs mb-6 border-collapse">
-                <thead>
-                  <tr className="border-b border-zinc-800 text-zinc-400 uppercase">
-                    <th className="pb-2">Empresa</th><th className="pb-2">CNPJ</th><th className="pb-2">E-mail</th><th className="pb-2">Regime</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {previewCSV.map((c, i) => (
-                    <tr key={i} className="border-b border-zinc-800/50 text-zinc-200">
-                      <td className="py-2 font-medium">{c.nome_empresa}</td><td className="py-2">{c.cnpj}</td><td className="py-2">{c.email}</td><td className="py-2 text-[#d4af37]">{c.regime_tributario}</td>
+              <div className="overflow-x-auto w-full mb-6">
+                <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-400 uppercase">
+                      <th className="pb-2">Empresa</th><th className="pb-2">CNPJ</th><th className="pb-2">E-mail</th><th className="pb-2">Regime</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {previewCSV.map((c, i) => (
+                      <tr key={i} className="border-b border-zinc-800/50 text-zinc-200">
+                        <td className="py-2 font-medium">{c.nome_empresa}</td><td className="py-2">{c.cnpj}</td><td className="py-2">{c.email}</td><td className="py-2 text-[#d4af37]">{c.regime_tributario}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <div className="flex justify-end gap-3">
                 <button onClick={() => setPreviewCSV(null)} className="px-4 py-2 bg-zinc-800 rounded font-bold text-sm">Cancelar</button>
                 <button onClick={() => salvarClientesCSV()} className="px-5 py-2 bg-[#d4af37] text-[#0d1b2a] rounded font-bold text-sm hover:bg-yellow-500">Salvar Tudo ({previewCSV.length} empresas)</button>
@@ -1246,23 +1248,23 @@ export default function AdminPage() {
             {/* ÁREA DE HISTÓRICO DIVIDIDA EM 4 ABAS LÓGICAS */}
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 shadow-2xl">
               
-              <div className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col md:flex-row justify-between items-center gap-4 rounded-t-xl">
-                <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full md:w-auto overflow-x-auto hide-scrollbar">
-                  <button onClick={() => setSubAbaAlerta('historico_geral')} className={`flex items-center gap-1 flex-1 md:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_geral' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico de Envios</button>
-                  <button onClick={() => setSubAbaAlerta('agendados')} className={`flex items-center gap-1 flex-1 md:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
-                  <button onClick={() => setSubAbaAlerta('recorrentes')} className={`flex items-center gap-1 flex-1 md:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
-                  <button onClick={() => setSubAbaAlerta('atrasados')} className={`flex items-center gap-1 flex-1 md:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
+              <div id="area-lista-alertas" className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col xl:flex-row justify-between items-center gap-4 rounded-t-xl">
+                <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full xl:w-auto overflow-x-auto hide-scrollbar">
+                  <button onClick={() => { setSubAbaAlerta('historico_geral'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_geral' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico</button>
+                  <button onClick={() => { setSubAbaAlerta('agendados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
+                  <button onClick={() => { setSubAbaAlerta('recorrentes'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
+                  <button onClick={() => { setSubAbaAlerta('atrasados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
                 </div>
                 
-                <div className="flex items-center gap-4 w-full md:w-auto flex-col sm:flex-row">
+                <div className="flex items-center gap-3 w-full xl:w-auto flex-col sm:flex-row">
                   {subAbaAlerta !== 'recorrentes' && (
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-3 py-2 rounded-lg border border-zinc-700">
+                    <label className="flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-4 py-2.5 sm:py-2 rounded-lg border border-zinc-700 w-full sm:w-auto">
                       <input type="checkbox" checked={agruparPorEmpresa} onChange={e => { setAgruparPorEmpresa(e.target.checked); setEmpresaExpandida(null); }} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
                       <IconCompany /> Agrupar por Empresa
                     </label>
                   )}
-                  <div className="relative w-full md:w-64">
-                    <input type="text" placeholder="Procurar cobrança..." value={buscaAlerta} onChange={(e) => setBuscaAlerta(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                  <div className="relative w-full sm:w-64">
+                    <input type="text" placeholder="Procurar cobrança..." value={buscaAlerta} onChange={(e) => setBuscaAlerta(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                   </div>
                 </div>
               </div>
@@ -1434,11 +1436,11 @@ export default function AdminPage() {
         {/* 6. ABA DEMANDAS INTERNAS */}
         {abaAtiva === 'demandas' && (
           <div className="space-y-6">
-            <div className="flex gap-2 mb-4">
-              <button onClick={() => setSubAbaDemanda('pendentes')} className={`px-4 py-2 rounded-lg text-sm font-bold transition ${subAbaDemanda === 'pendentes' ? 'bg-[#d4af37] text-[#0d1b2a]' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Tarefas Pendentes</button>
-              <button onClick={() => setSubAbaDemanda('concluidas')} className={`px-4 py-2 rounded-lg text-sm font-bold transition ${subAbaDemanda === 'concluidas' ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Concluídas</button>
+            <div className="flex flex-wrap sm:flex-nowrap gap-2 mb-4">
+              <button onClick={() => { setSubAbaDemanda('pendentes'); rolarPara('area-lista-demandas'); }} className={`flex-1 sm:flex-none justify-center px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition ${subAbaDemanda === 'pendentes' ? 'bg-[#d4af37] text-[#0d1b2a]' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Tarefas Pendentes</button>
+              <button onClick={() => { setSubAbaDemanda('concluidas'); rolarPara('area-lista-demandas'); }} className={`flex-1 sm:flex-none justify-center px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition ${subAbaDemanda === 'concluidas' ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>Concluídas</button>
               {eGestor && (
-                <button onClick={() => setSubAbaDemanda('analise')} className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center ${subAbaDemanda === 'analise' ? 'bg-rose-500 text-white' : 'bg-[#1b263b] border border-zinc-700 text-zinc-300 hover:bg-zinc-700'}`}><IconChartMini /> Análise de Equipe</button>
+                <button onClick={() => { setSubAbaDemanda('analise'); rolarPara('area-lista-demandas'); }} className={`w-full sm:w-auto justify-center px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition flex items-center ${subAbaDemanda === 'analise' ? 'bg-rose-500 text-white' : 'bg-[#1b263b] border border-zinc-700 text-zinc-300 hover:bg-zinc-700'}`}><IconChartMini /> Análise de Equipe</button>
               )}
             </div>
 
@@ -1448,22 +1450,22 @@ export default function AdminPage() {
                 <form onSubmit={handleCriarDemanda} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                   <div className="md:col-span-2">
                     <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">O que precisa ser feito?</label>
-                    <input type="text" required placeholder="Ex: Revisar balancete..." value={formDemanda.descricao} onChange={e => setFormDemanda({...formDemanda, descricao: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                    <input type="text" required placeholder="Ex: Revisar balancete..." value={formDemanda.descricao} onChange={e => setFormDemanda({...formDemanda, descricao: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Para quem?</label>
-                    <select value={formDemanda.atribuido_para} onChange={e => setFormDemanda({...formDemanda, atribuido_para: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]">
+                    <select value={formDemanda.atribuido_para} onChange={e => setFormDemanda({...formDemanda, atribuido_para: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-3 py-3 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]">
                       {LISTA_COLABORADORES.map((colab, i) => <option key={i} value={colab}>{colab}</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Prazo Final</label>
-                      <input type="date" required value={formDemanda.data_entrega} onChange={e => setFormDemanda({...formDemanda, data_entrega: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                      <input type="date" required value={formDemanda.data_entrega} onChange={e => setFormDemanda({...formDemanda, data_entrega: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-2 py-2.5 sm:py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Nível</label>
-                      <select value={formDemanda.prioridade} onChange={e => setFormDemanda({...formDemanda, prioridade: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]">
+                      <select value={formDemanda.prioridade} onChange={e => setFormDemanda({...formDemanda, prioridade: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-2 py-3 sm:py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]">
                         <option value="Alta">Alta</option>
                         <option value="Média">Média</option>
                         <option value="Baixa">Baixa</option>
@@ -1471,11 +1473,13 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="md:col-span-4 flex justify-end mt-2">
-                    <button type="submit" disabled={subindo} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-6 py-2.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg">{subindo ? 'A processar...' : 'Publicar Tarefa'}</button>
+                    <button type="submit" disabled={subindo} className="w-full md:w-auto bg-[#d4af37] text-[#0d1b2a] font-extrabold px-6 py-3.5 sm:py-2.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg">{subindo ? 'A processar...' : 'Publicar Tarefa'}</button>
                   </div>
                 </form>
               </div>
             )}
+
+            <div id="area-lista-demandas"></div> {/* Âncora Invisível para Rolagem */}
 
             {subAbaDemanda === 'pendentes' && (
               <div className="space-y-6">
