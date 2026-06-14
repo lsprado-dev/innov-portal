@@ -99,6 +99,9 @@ export default function AdminPage() {
   // ESTADO DE SELEÇÃO DE DOCS RECEBIDOS
   const [selecionadosRecebidos, setSelecionadosRecebidos] = useState([]);
 
+  // ESTADO DE SAÚDE DO SISTEMA
+  const [totalArquivosSistema, setTotalArquivosSistema] = useState(0);
+
   // ESTADOS DE AGRUPAMENTO E MODAIS
   const [agruparPorEmpresa, setAgruparPorEmpresa] = useState(false);
   const [empresaExpandida, setEmpresaExpandida] = useState(null);
@@ -251,6 +254,11 @@ export default function AdminPage() {
       .from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)')
       .order('criado_em', { ascending: false });
     if (resAlertas.data) setAlertas(resAlertas.data);
+
+    // CONTAGEM DE SAÚDE DO SISTEMA (Total de Arquivos)
+    const { count: countPortal } = await supabase.from('arquivos_portal').select('*', { count: 'exact', head: true });
+    const { count: countEnvios } = await supabase.from('envios_cliente').select('*', { count: 'exact', head: true });
+    setTotalArquivosSistema((countPortal || 0) + (countEnvios || 0));
     
     setCarregandoDados(false); // <-- DESLIGA O SKELETON QUANDO TUDO CHEGAR!
   }
@@ -779,6 +787,29 @@ export default function AdminPage() {
     return <div className="divide-y divide-zinc-800">{lista.map(alerta => renderCard(alerta))}</div>;
   };
 
+  // ======================================================================
+  // CÁLCULO DE SAÚDE DE ARMAZENAMENTO (Estimativa Profissional)
+  // Baseado na cota básica de segurança (2GB = 2048MB)
+  // Assumindo média de 1.5MB por arquivo (Imagens, PDFs, Docs)
+  // ======================================================================
+  const LIMITE_ARMAZENAMENTO_MB = 2048; 
+  const MEDIA_TAMANHO_ARQUIVO_MB = 1.5; 
+  const usoArmazenamentoMB = totalArquivosSistema * MEDIA_TAMANHO_ARQUIVO_MB;
+  const porcentagemUso = Math.min((usoArmazenamentoMB / LIMITE_ARMAZENAMENTO_MB) * 100, 100);
+  const circunferencia = 2 * Math.PI * 36;
+  const offsetDash = circunferencia - (porcentagemUso / 100) * circunferencia;
+  
+  let corGradienteInicio = "#10b981"; // Verde Seguro (Início do Degradê)
+  let corGradienteFim = "#059669";    // Verde Seguro (Fim do Degradê)
+  
+  if (porcentagemUso >= 90) {
+    corGradienteInicio = "#ef4444"; // Vermelho Alerta Máximo
+    corGradienteFim = "#b91c1c";    
+  } else if (porcentagemUso >= 70) {
+    corGradienteInicio = "#f59e0b"; // Amarelo/Laranja Atenção
+    corGradienteFim = "#d97706";    
+  }
+
   if (autenticando || carregandoDados) {
     return (
       <div className="min-h-screen bg-[#0d1b2a] flex flex-col pointer-events-none animate-in fade-in duration-500 relative overflow-hidden">
@@ -1006,15 +1037,84 @@ export default function AdminPage() {
         )}
 
         {/* ==========================================
-            ABA NOVA: VISUALIZADOR DE LOGS DE AUDITORIA
+            ABA NOVA: VISUALIZADOR DE LOGS E SAÚDE DO SISTEMA
         ========================================== */}
         {abaAtiva === 'auditoria' && (
-          <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl mb-6">
-            <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800">
-              <h2 className="text-lg font-bold text-[#d4af37]">Logs de Auditoria do Sistema</h2>
-              <p className="text-xs text-zinc-400">Linha do tempo em tempo real com todas as ações realizadas por funcionários e clientes.</p>
+          <div className="space-y-6">
+            
+            {/* DASHBOARD DE SAÚDE DO SISTEMA E SERVIDORES */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              
+              {/* CARD 1: CLIENTES */}
+              <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl flex flex-col justify-between">
+                <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Total de Clientes</p>
+                <div className="flex items-end gap-3 mt-auto">
+                  <p className="text-5xl font-black text-white">{clientes.length}</p>
+                  <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded mb-1">Ativos</span>
+                </div>
+              </div>
+
+              {/* CARD 2: ESPAÇO E MEMÓRIA (O GRÁFICO CIRCULAR PREMIUM) */}
+              <div className="bg-[#1b263b] p-5 rounded-xl border border-zinc-800 shadow-xl flex flex-col sm:flex-row items-center gap-5 md:col-span-2 relative overflow-hidden">
+                {/* Gráfico Circular SVG */}
+                <div className="relative w-24 h-24 flex-shrink-0 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90 drop-shadow-lg">
+                    <defs>
+                      <linearGradient id="gradienteUso" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor={corGradienteInicio} />
+                        <stop offset="100%" stopColor={corGradienteFim} />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="48" cy="48" r="36" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-zinc-800/80" />
+                    <circle cx="48" cy="48" r="36" stroke="url(#gradienteUso)" strokeWidth="8" fill="transparent" strokeDasharray={circunferencia} strokeDashoffset={offsetDash} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-lg font-black text-white">{Math.round(porcentagemUso)}%</span>
+                  </div>
+                </div>
+                
+                {/* Textos do Espaço */}
+                <div className="flex-1 text-center sm:text-left w-full">
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">Armazenamento Usado (Estimativa)</p>
+                  <p className="text-2xl font-black text-white mb-1">
+                    {usoArmazenamentoMB < 1024 ? usoArmazenamentoMB.toFixed(0) + ' MB' : (usoArmazenamentoMB / 1024).toFixed(2) + ' GB'}
+                    <span className="text-xs text-zinc-500 font-normal ml-1">/ 2 GB (Cota de Segurança)</span>
+                  </p>
+                  <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-2">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: corGradienteInicio, color: corGradienteInicio }}></span>
+                    <p className="text-xs font-medium text-zinc-300">{totalArquivosSistema} arquivos no banco de dados</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* CARD 3: ATALHOS PARA OS SERVIDORES */}
+              {eGestor && (
+                <div className="grid grid-cols-1 gap-3">
+                  <a href="https://supabase.com/dashboard/projects" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-emerald-500/20 hover:border-emerald-500 shadow-md flex items-center gap-3 transition-all group">
+                    <span className="text-emerald-400 text-2xl group-hover:scale-110 transition-transform">🗄️</span>
+                    <div>
+                      <p className="text-[11px] font-bold text-emerald-400 uppercase">Banco de Dados</p>
+                      <p className="text-[10px] text-zinc-500">Painel Supabase</p>
+                    </div>
+                  </a>
+                  <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-blue-500/20 hover:border-blue-500 shadow-md flex items-center gap-3 transition-all group">
+                    <span className="text-blue-400 text-2xl group-hover:scale-110 transition-transform">⚡</span>
+                    <div>
+                      <p className="text-[11px] font-bold text-blue-400 uppercase">Servidor (Banda)</p>
+                      <p className="text-[10px] text-zinc-500">Painel Vercel</p>
+                    </div>
+                  </a>
+                </div>
+              )}
             </div>
-            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-3 hide-scrollbar">
+
+            {/* TABELA DE LOGS */}
+            <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl mb-6">
+              <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800">
+                <h2 className="text-lg font-bold text-[#d4af37]">Logs de Auditoria do Sistema</h2>
+                <p className="text-xs text-zinc-400">Linha do tempo em tempo real com todas as ações realizadas por funcionários e clientes.</p>
+              </div>
+              <div className="p-4 overflow-y-auto max-h-[60vh] space-y-3 hide-scrollbar">
               {logs.length === 0 ? (
                 <p className="text-zinc-500 text-center py-6">Nenhum evento registado no sistema.</p>
               ) : (
@@ -1036,6 +1136,7 @@ export default function AdminPage() {
                 ))
               )}
             </div>
+          </div>
           </div>
         )}
 
