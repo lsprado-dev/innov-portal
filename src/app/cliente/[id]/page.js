@@ -117,6 +117,7 @@ export default function ClientePage({ params: paramsPromise }) {
   const [alertas, setAlertas] = useState([]);
   const [itensLixeira, setItensLixeira] = useState([]);
   const [novoPedido, setNovoPedido] = useState('');
+  const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
 
   const [alertasGlobaisPendentes, setAlertasGlobaisPendentes] = useState(0);
   const [alertasGlobaisAtrasados, setAlertasGlobaisAtrasados] = useState(0); // NOVO: Conta quem perdeu o prazo
@@ -838,13 +839,19 @@ export default function ClientePage({ params: paramsPromise }) {
 
   async function handleEnviarPedido(e) {
     e.preventDefault();
-    if (!novoPedido.trim()) return;
+    if (!novoPedido.trim() || !departamentoPedido) return;
     
     setSubindoArquivo(true);
-    await supabase.from('pedidos_cliente').insert([{ cliente_id: id, descricao: novoPedido.trim(), status: 'pendente' }]);
+    await supabase.from('pedidos_cliente').insert([{ 
+      cliente_id: id, 
+      descricao: novoPedido.trim(), 
+      status: 'pendente',
+      departamento: departamentoPedido 
+    }]);
 
-    mostrarToast('A sua solicitação foi enviada para a Innovative!', 'sucesso');
+    mostrarToast(`A sua solicitação foi enviada para o departamento ${departamentoPedido}!`, 'sucesso');
     setNovoPedido('');
+    setDepartamentoPedido('Contábil'); // Reseta para o padrão
     carregarDadosDaAba();
     setSubindoArquivo(false);
   }
@@ -1477,11 +1484,25 @@ export default function ClientePage({ params: paramsPromise }) {
               <p className="text-xs text-zinc-400 mt-1">Envie pedidos ou recados diretos para a nossa equipa.</p>
             </div>
             {!isInterno && (
-              <form onSubmit={handleEnviarPedido} className="mb-8 bg-[#0d1b2a] p-5 rounded-lg border border-zinc-800/60">
-                <label className="block text-xs font-bold text-zinc-300 uppercase mb-3">O que precisa hoje?</label>
-                <textarea required rows="3" placeholder="Ex: Gostaria da minha guia DAS do mês de Janeiro..." value={novoPedido} onChange={(e) => setNovoPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none mb-3"></textarea>
-                <div className="flex justify-end">
-                  <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-6 py-2.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg disabled:opacity-50">
+              <form onSubmit={handleEnviarPedido} className="mb-8 bg-[#0d1b2a] p-6 rounded-xl border border-zinc-800/60 space-y-5 shadow-lg">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">O que precisa hoje?</label>
+                  <textarea required rows="3" placeholder="Ex: Gostaria da minha guia DAS do mês de Janeiro..." value={novoPedido} onChange={(e) => setNovoPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none transition-colors"></textarea>
+                </div>
+                <div className="w-full md:w-1/2 lg:w-1/3">
+                  <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">Para qual departamento?</label>
+                  <select value={departamentoPedido} onChange={(e) => setDepartamentoPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] cursor-pointer transition-colors">
+                    <option value="Contábil">Contábil</option>
+                    <option value="Fiscal">Fiscal</option>
+                    <option value="DP / RH">DP / RH</option>
+                    <option value="Financeiro">Financeiro</option>
+                    <option value="Societário">Societário</option>
+                    <option value="Legalização">Legalização</option>
+                    <option value="Outros">Outros / Dúvida Geral</option>
+                  </select>
+                </div>
+                <div className="flex justify-end border-t border-zinc-800/60 pt-5 mt-2">
+                  <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-8 py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.2)] disabled:opacity-50 w-full sm:w-auto">
                     {subindoArquivo ? 'A Enviar...' : 'Enviar Solicitação para Equipa'}
                   </button>
                 </div>
@@ -1495,15 +1516,18 @@ export default function ClientePage({ params: paramsPromise }) {
                 pedidos.map(pedido => (
                   <div key={pedido.id} className="p-4 bg-[#0d1b2a] rounded-lg border border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex-1 pr-4">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <IconChatList />
+                        <span className="text-[10px] font-bold bg-[#1b263b] text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded uppercase tracking-wider">
+                          {pedido.departamento || 'Geral'}
+                        </span>
                         <span className="text-[11px] text-zinc-500">{new Date(pedido.criado_em).toLocaleString('pt-BR')}</span>
                       </div>
                       <p className="text-sm text-zinc-200 font-medium leading-relaxed">"{pedido.descricao}"</p>
                     </div>
-                    <div className="mt-2 md:mt-0">
+                    <div className="mt-2 md:mt-0 flex-shrink-0">
                       <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded border uppercase whitespace-nowrap ${pedido.status === 'pendente' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'}`}>
-                        {pedido.status === 'pendente' ? <><IconMiniClock />Enviado para a Equipe</> : <><IconCheck /> Atendido</>}
+                        {pedido.status === 'pendente' ? <><IconMiniClock />Enviado para Equipe</> : <><IconCheck /> Atendido</>}
                       </span>
                     </div>
                   </div>

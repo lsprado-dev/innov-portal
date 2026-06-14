@@ -447,6 +447,19 @@ export default function AdminPage() {
     }, 'sucesso');
   }
 
+  // NOVO: Função para o colaborador corrigir/mover a área do pedido
+  async function alterarDepartamentoPedido(id, novoDepartamento) {
+    setSubindo(true);
+    const { error } = await supabase.from('pedidos_cliente').update({ departamento: novoDepartamento }).eq('id', id);
+    if (!error) {
+      mostrarToast(`Solicitação movida para a equipa: ${novoDepartamento}`, 'sucesso');
+      await carregarDados();
+    } else {
+      mostrarToast('Erro ao mover a solicitação.', 'erro');
+    }
+    setSubindo(false);
+  }
+
   async function handleCriarDemanda(e) {
     e.preventDefault();
     if (!formDemanda.descricao.trim() || !formDemanda.data_entrega) return;
@@ -713,6 +726,23 @@ export default function AdminPage() {
   }
 
   const eGestor = operador === 'Victor (Admin)' || operador === 'Lucas (Financeiro)';
+  
+  // =======================================================
+  // LÓGICA DE TRIAGEM DE SOLICITAÇÕES POR DEPARTAMENTO
+  // =======================================================
+  let departamentosVisiveis = [];
+  if (operador.includes('Contábil')) departamentosVisiveis.push('Contábil');
+  if (operador.includes('Fiscal')) departamentosVisiveis.push('Fiscal');
+  if (operador.includes('RH')) departamentosVisiveis.push('DP / RH');
+  if (operador.includes('Societário')) departamentosVisiveis.push('Societário', 'Legalização');
+  if (operador.includes('Suporte')) departamentosVisiveis.push('Outros', 'Outros / Dúvida Geral', null, ''); 
+  // Nota: "null" garante que pedidos antigos (sem área) caiam para o suporte.
+
+  // Filtra as solicitações com base em quem está logado
+  const pedidosVisiveis = eGestor 
+    ? pedidosCliente 
+    : pedidosCliente.filter(p => departamentosVisiveis.includes(p.departamento));
+
   const demandasVisiveis = demandas.filter(d => eGestor || d.atribuido_para === operador || d.criado_por === operador);
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
   const alertasPendentes = alertas.filter(a => a.status === 'pendente').length;
@@ -957,7 +987,7 @@ export default function AdminPage() {
           <button onClick={() => { setAbaAtiva('solicitacoes'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'solicitacoes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconChat />
-              <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${pedidosCliente.length > 0 ? 'bg-[#d4af37] text-[#0d1b2a] shadow-[0_0_12px_rgba(212,175,55,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{pedidosCliente.length}</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${pedidosVisiveis.length > 0 ? 'bg-[#d4af37] text-[#0d1b2a] shadow-[0_0_12px_rgba(212,175,55,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{pedidosVisiveis.length}</span>
             </div>
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Solicitações</h3></div>
           </button>
@@ -1288,18 +1318,37 @@ export default function AdminPage() {
 
         {abaAtiva === 'solicitacoes' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
-            {pedidosCliente.length === 0 ? (
-              <p className="text-zinc-400 text-center py-12">Nenhuma solicitação de cliente pendente.</p>
+            {pedidosVisiveis.length === 0 ? (
+              <p className="text-zinc-400 text-center py-12">Nenhuma solicitação pendente para a sua equipa.</p>
             ) : (
               <div className="divide-y divide-zinc-800">
-                {pedidosCliente.map((pedido) => (
+                {pedidosVisiveis.map((pedido) => (
                   <div key={pedido.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition">
                     <div className="flex-1 pr-4">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <IconChat />
                         <span className="text-xs bg-[#0d1b2a] text-[#d4af37] px-2 py-0.5 rounded border border-[#d4af37]/30 font-bold uppercase">
                           {pedido.clientes?.nome_empresa || 'Empresa Removida'}
                         </span>
+
+                        {/* NOVO: SELECT PREMIUM DE TRIAGEM DE DEPARTAMENTO */}
+                        <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2">
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
+                          <select 
+                            value={pedido.departamento || 'Outros'} 
+                            onChange={(e) => alterarDepartamentoPedido(pedido.id, e.target.value)}
+                            className="bg-transparent text-[#d4af37] text-[11px] font-bold py-1 focus:outline-none cursor-pointer tracking-wider uppercase"
+                          >
+                            <option value="Contábil" className="bg-[#0d1b2a]">Contábil</option>
+                            <option value="Fiscal" className="bg-[#0d1b2a]">Fiscal</option>
+                            <option value="DP / RH" className="bg-[#0d1b2a]">DP / RH</option>
+                            <option value="Financeiro" className="bg-[#0d1b2a]">Financeiro</option>
+                            <option value="Societário" className="bg-[#0d1b2a]">Societário</option>
+                            <option value="Legalização" className="bg-[#0d1b2a]">Legalização</option>
+                            <option value="Outros" className="bg-[#0d1b2a]">Outros / Suporte</option>
+                          </select>
+                        </div>
+
                         <span className="text-[11px] text-zinc-500">{new Date(pedido.criado_em).toLocaleString('pt-BR')}</span>
                       </div>
                      <p className="text-sm text-zinc-200 font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
