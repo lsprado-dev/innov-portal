@@ -151,6 +151,17 @@ export default function AdminPage() {
     setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
   }
 
+  // FUNÇÃO DE ROLAGEM SUAVE (Scroll Inteligente)
+  function rolarPara(idElemento) {
+    setTimeout(() => {
+      const el = document.getElementById(idElemento);
+      if (el) {
+        const y = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 100);
+  }
+
   // SISTEMA DE CONFIRMAÇÃO PREMIUM (Adeus confirm nativo)
   const [dialogo, setDialogo] = useState({ aberto: false, titulo: '', mensagem: '', acao: null, tipo: 'perigo' });
   function confirmarAcao(titulo, mensagem, acao, tipo = 'perigo') {
@@ -696,20 +707,7 @@ export default function AdminPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative">
-      
-      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
-      {subindo && (
-        <div className="fixed inset-0 z-[99999] bg-[#0d1b2a]/70 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/30 flex flex-col items-center gap-5 shadow-[0_0_50px_rgba(212,175,55,0.15)]">
-            <div className="w-12 h-12 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin"></div>
-            <p className="text-[#d4af37] font-bold tracking-wide animate-pulse text-lg">A processar operação...</p>
-          </div>
-        </div>
-      )}
-      
-      {/* =======================================================
+   
           MODAL DE EDIÇÃO DA LISTA DE CLIENTES SELECIONADOS
       ======================================================= */}
       {mostrarModalClientes && (
@@ -753,13 +751,13 @@ export default function AdminPage() {
           <div className="flex items-center gap-4">
             <img src="/logo.png" alt="Logo" className="w-32 h-auto object-contain drop-shadow-md" />
           </div>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setAbaAtiva('senhas')} className={`text-xs px-4 py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Gestão de Senhas</button>
-            <button onClick={() => setAbaAtiva('auditoria')} className={`text-xs px-4 py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>
-            <span className="text-sm text-zinc-400 hidden sm:inline">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto justify-end">
+            <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Senhas</button>
+            <button onClick={() => { setAbaAtiva('auditoria'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>
+            <span className="text-sm text-zinc-400 hidden lg:inline">
               Conectado como: <strong className="text-[#d4af37] font-semibold">{operador}</strong>
             </span>
-            <button onClick={handleLogout} className="text-xs bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-4 py-2 rounded-lg transition-all font-bold">Sair</button>
+            <button onClick={handleLogout} className="flex-1 sm:flex-none justify-center text-xs bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold">Sair</button>
           </div>
         </div>
 
@@ -792,7 +790,7 @@ export default function AdminPage() {
 
         {/* GRADE DE CARDS DO DASHBOARD */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-10">
-          <button onClick={() => setAbaAtiva('ativos')} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'ativos' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('ativos'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'ativos' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconUsers />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold ${abaAtiva === 'ativos' ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[#0d1b2a] text-zinc-400'}`}>{clientes.length}</span>
@@ -800,7 +798,7 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Clientes Ativos</h3></div>
           </button>
 
-          <button onClick={() => setAbaAtiva('pendentes')} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'pendentes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('pendentes'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'pendentes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconClock />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${pendentes.length > 0 ? 'bg-zinc-500 text-white shadow-[0_0_12px_rgba(113,113,122,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{pendentes.length}</span>
@@ -808,7 +806,7 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Cadastros Pendentes</h3></div>
           </button>
 
-          <button onClick={() => setAbaAtiva('recebidos')} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'recebidos' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('recebidos'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'recebidos' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconInbox />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${recebidos.length > 0 ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(59,130,246,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{recebidos.length}</span>
@@ -816,7 +814,7 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Docs Recebidos</h3></div>
           </button>
 
-          <button onClick={() => setAbaAtiva('solicitacoes')} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'solicitacoes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('solicitacoes'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'solicitacoes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconChat />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${pedidosCliente.length > 0 ? 'bg-[#d4af37] text-[#0d1b2a] shadow-[0_0_12px_rgba(212,175,55,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{pedidosCliente.length}</span>
@@ -824,7 +822,7 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Solicitações</h3></div>
           </button>
           
-          <button onClick={() => setAbaAtiva('alertas')} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'alertas' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('alertas'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'alertas' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconBell />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${alertasPendentes > 0 ? 'bg-orange-500 text-white shadow-[0_0_12px_rgba(249,115,22,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{alertasPendentes}</span>
@@ -832,7 +830,7 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Cobranças</h3></div>
           </button>
 
-          <button onClick={() => setAbaAtiva('demandas')} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'demandas' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('demandas'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'demandas' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconLightning />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${demandasMinhasPendentes > 0 ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{demandasMinhasPendentes}</span>
@@ -840,6 +838,8 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Demandas</h3></div>
           </button>
         </div>
+
+        <div id="conteudo-admin"></div> {/* Âncora Invisível para Rolagem */}
         {abaAtiva === 'senhas' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
             <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
@@ -1591,8 +1591,18 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
+      {subindo && (
+        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
+            <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
+            <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+          </div>
+        </div>
+      )}
+
       {/* SISTEMA DE TOASTS PREMIUM */}
-      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[9999999] flex flex-col gap-3 pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border pointer-events-auto transition-all backdrop-blur-md min-w-[280px] max-w-sm transform translate-y-0 opacity-100 ${
             toast.tipo === 'erro' ? 'bg-red-500/10 border-red-500/30 text-red-100' :
