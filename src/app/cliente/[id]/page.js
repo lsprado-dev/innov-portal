@@ -154,6 +154,19 @@ export default function ClientePage({ params: paramsPromise }) {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
   }
+
+  // FUNÇÃO DE ROLAGEM SUAVE (Scroll Inteligente)
+  function rolarPara(idElemento) {
+    setTimeout(() => {
+      const el = document.getElementById(idElemento);
+      if (el) {
+        // Desce até o elemento deixando 80px de margem respirável no topo
+        const y = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 100); // Aguarda o React renderizar a aba antes de descer
+  }
+
   const [operador, setOperador] = useState('Desconhecido');
   const [isInterno, setIsInterno] = useState(false);
   
@@ -865,16 +878,16 @@ export default function ClientePage({ params: paramsPromise }) {
 
         {/* NAVEGAÇÃO PRINCIPAL INTELIGENTE */}
         <div className="flex flex-wrap gap-4 mb-8 border-b border-zinc-800 pb-px">
-          <button onClick={() => setAbaPrincipal('pastas')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'pastas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
+          <button onClick={() => { setAbaPrincipal('pastas'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'pastas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconFolderTab /> Pastas de Arquivos
           </button>
-          <button onClick={() => setAbaPrincipal('envios')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'envios' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
+          <button onClick={() => { setAbaPrincipal('envios'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'envios' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconUploadTab /> {isInterno ? 'Histórico de Envios' : 'Enviar Documentos'}
           </button>
-          <button onClick={() => setAbaPrincipal('solicitacoes')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'solicitacoes' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
+          <button onClick={() => { setAbaPrincipal('solicitacoes'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'solicitacoes' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconChatTab /> {isInterno ? 'Histórico de Solicitações' : 'Solicitações'}
           </button>
-          <button onClick={() => setAbaPrincipal('alertas')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'alertas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
+          <button onClick={() => { setAbaPrincipal('alertas'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'alertas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconBellTab /> {isInterno ? 'Documentos Solicitados' : 'Alertas / Cobranças'}
             {alertasGlobaisPendentes > 0 && (
               <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-red-500 text-white font-black shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse border border-red-400">
@@ -883,11 +896,13 @@ export default function ClientePage({ params: paramsPromise }) {
             )}
           </button>
           {isInterno && (
-            <button onClick={() => setAbaPrincipal('lixeira')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'lixeira' ? 'border-red-500 text-red-400' : 'border-transparent text-zinc-500 hover:text-red-400'}`}>
+            <button onClick={() => { setAbaPrincipal('lixeira'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'lixeira' ? 'border-red-500 text-red-400' : 'border-transparent text-zinc-500 hover:text-red-400'}`}>
               <IconTrashTab /> Lixeira
             </button>
           )}
         </div>
+
+        <div id="conteudo-abas"></div> {/* Âncora Invisível */}
 
         {/* ==========================================
             ABA 1: PASTAS PERMANENTES DE ARQUIVOS
@@ -895,32 +910,34 @@ export default function ClientePage({ params: paramsPromise }) {
         {abaPrincipal === 'pastas' && (
           <>
             <div className="flex flex-col md:flex-row w-full gap-4 mb-10">
-              <button onClick={() => setPastaAtiva('contabil')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contabil' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => { setPastaAtiva('contabil'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contabil' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconFolderLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Contábil</h3>
                 <p className="text-[10px] text-zinc-400">Balanços e DREs</p>
               </button>
-              <button onClick={() => setPastaAtiva('fiscal')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'fiscal' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => { setPastaAtiva('fiscal'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'fiscal' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconChartLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Fiscal</h3>
                 <p className="text-[10px] text-zinc-400">Guias e Impostos</p>
               </button>
-              <button onClick={() => setPastaAtiva('rh')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'rh' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => { setPastaAtiva('rh'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'rh' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconUsersLarge />
                 <h3 className="text-sm font-bold text-white mb-1">DP / RH</h3>
                 <p className="text-[10px] text-zinc-400">Folhas e Recibos</p>
               </button>
-              <button onClick={() => setPastaAtiva('contrato')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contrato' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+              <button onClick={() => { setPastaAtiva('contrato'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contrato' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                 <IconDocLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Contratos</h3>
                 <p className="text-[10px] text-zinc-400">Atos e Alterações</p>
               </button>
-              <button onClick={() => setPastaAtiva('financeiro')} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'financeiro' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-[#d4af37]/50'}`}>
+              <button onClick={() => { setPastaAtiva('financeiro'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'financeiro' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-[#d4af37]/50'}`}>
                 <IconFinanceiroLarge />
                 <h3 className="text-sm font-bold text-white mb-1">Financeiro</h3>
                 <p className="text-[10px] text-zinc-400">Controle de mensalidades</p>
               </button>
             </div>
+
+            <div id="conteudo-pastas"></div> {/* Âncora Invisível */}
 
             {pastaAtiva === 'financeiro' ? (
               <div className="bg-[#1b263b] p-8 rounded-xl border border-[#d4af37]/30 shadow-xl mb-10">
@@ -1301,7 +1318,7 @@ export default function ClientePage({ params: paramsPromise }) {
         {abaPrincipal === 'solicitacoes' && (
           <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
             <div className="border-b border-zinc-800 pb-4 mb-6">
-              <h3 className="text-xl font-bold text-[#d4af37] capitalize whitespace-nowrap">Central de Atendimento e Solicitações</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-[#d4af37] capitalize">Central de Atendimento e Solicitações</h3>
               <p className="text-xs text-zinc-400 mt-1">Envie pedidos ou recados diretos para a nossa equipa.</p>
             </div>
             {!isInterno && (
