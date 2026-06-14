@@ -96,6 +96,9 @@ export default function AdminPage() {
   const [subAbaDemanda, setSubAbaDemanda] = useState('pendentes'); 
   const [subAbaAlerta, setSubAbaAlerta] = useState('historico_geral'); 
   
+  // ESTADO DE SELEÇÃO DE DOCS RECEBIDOS
+  const [selecionadosRecebidos, setSelecionadosRecebidos] = useState([]);
+
   // ESTADOS DE AGRUPAMENTO E MODAIS
   const [agruparPorEmpresa, setAgruparPorEmpresa] = useState(false);
   const [empresaExpandida, setEmpresaExpandida] = useState(null);
@@ -522,9 +525,37 @@ export default function AdminPage() {
     });
   }
 
-  function baixarDocumento(caminho) {
+  // Função para apenas abrir numa nova aba sem forçar download
+  function visualizarDocumento(caminho) {
     const { data } = supabase.storage.from('documentos').getPublicUrl(caminho);
     window.open(data.publicUrl, '_blank');
+  }
+
+  // Função para forçar o download real
+  async function baixarDocumento(caminho, nomeOriginal) {
+    setSubindo(true); // Trava a tela para ficheiros grandes
+    
+    // 1. Faz o download do arquivo bruto (Blob) em vez de apenas pegar o link
+    const { data, error } = await supabase.storage.from('documentos').download(caminho);
+    
+    if (error) {
+      mostrarToast('Erro ao baixar o arquivo: ' + error.message, 'erro');
+      setSubindo(false);
+      return;
+    }
+
+    // 2. Cria um link fantasma e força o clique de download real
+    const nomeFinal = nomeOriginal || caminho.split('/').pop();
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeFinal; // Este atributo 'download' é o que obriga a baixar
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url); // Limpa a memória do navegador
+    
+    setSubindo(false);
   }
 
   function handleUploadCSV(e) {
@@ -597,6 +628,80 @@ export default function AdminPage() {
       await carregarDados(); 
       setSubindo(false);
     });
+  }
+
+  // ===============================================
+  // AÇÕES EM LOTE PARA DOCS RECEBIDOS
+  // ===============================================
+  function toggleSelecionarTodosRecebidos(e) {
+    if (e.target.checked) setSelecionadosRecebidos(recebidos.map(d => d.id));
+    else setSelecionadosRecebidos([]);
+  }
+
+  function toggleSelecionarRecebido(id) {
+    if (selecionadosRecebidos.includes(id)) {
+      setSelecionadosRecebidos(selecionadosRecebidos.filter(docId => docId !== id));
+    } else {
+      setSelecionadosRecebidos([...selecionadosRecebidos, id]);
+    }
+  }
+
+  function handleAceitarEmLote() {
+    confirmarAcao('Mover Documentos', `Deseja mover ${selecionadosRecebidos.length} documento(s) para o histórico?`, async () => {
+      setSubindo(true);
+      const { error } = await supabase.from('envios_cliente').update({ status: 'historico' }).in('id', selecionadosRecebidos);
+      if (!error) {
+        setSelecionadosRecebidos([]);
+        await carregarDados();
+        mostrarToast(`${selecionadosRecebidos.length} documento(s) arquivado(s).`, 'sucesso');
+      }
+      setSubindo(false);
+    }, 'sucesso');
+  }
+
+  function handleExcluirEmLote() {
+    confirmarAcao('Apagar Documentos', `Tem certeza que deseja apagar permanentemente ${selecionadosRecebidos.length} documento(s)?`, async () => {
+      setSubindo(true);
+      const docsParaExcluir = recebidos.filter(d => selecionadosRecebidos.includes(d.id));
+      const caminhos = docsParaExcluir.map(d => d.caminho_storage);
+
+      if (caminhos.length > 0) await supabase.storage.from('documentos').remove(caminhos);
+      await supabase.from('envios_cliente').delete().in('id', selecionadosRecebidos);
+
+      setSelecionadosRecebidos([]);
+      await carregarDados();
+      mostrarToast(`Documentos excluídos.`, 'sucesso');
+      setSubindo(false);
+    });
+  }
+
+  async function handleBaixarEmLote() {
+    const docsParaBaixar = recebidos.filter(d => selecionadosRecebidos.includes(d.id));
+    if (docsParaBaixar.length === 0) return;
+    
+    setSubindo(true); // Trava a tela enquanto baixa os lotes
+    mostrarToast(`A preparar ${docsParaBaixar.length} ficheiro(s) para download real...`, 'aviso');
+    
+    for (const doc of docsParaBaixar) {
+      // Baixa o Blob de cada arquivo silenciosamente
+      const { data } = await supabase.storage.from('documentos').download(doc.caminho_storage);
+      
+      if (data) {
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = doc.nome_original || doc.caminho_storage.split('/').pop();
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+      // Pequeno intervalo para o PC do funcionário não travar com 30 downloads simultâneos
+      await new Promise(r => setTimeout(r, 600)); 
+    }
+    
+    setSubindo(false);
+    mostrarToast('Transferências concluídas com sucesso!', 'sucesso');
   }
 
   const eGestor = operador === 'Victor (Admin)' || operador === 'Lucas (Financeiro)';
@@ -1020,34 +1125,63 @@ export default function AdminPage() {
         )}
 
         {abaAtiva === 'recebidos' && (
-          <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
-            {recebidos.length === 0 ? (
-              <p className="text-zinc-400 text-center py-12">Nenhum documento recebido dos clientes para análise.</p>
-            ) : (
-              <div className="divide-y divide-zinc-800">
-                {recebidos.map((doc) => (
-                  <div key={doc.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition w-full min-w-0">
-                    <div className="min-w-0 flex-1 w-full">
-                      <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h4 className="text-lg font-bold text-[#d4af37] truncate max-w-md">{doc.nome_documento}</h4>
-                        <span className="text-xs bg-[#0d1b2a] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 font-semibold uppercase whitespace-nowrap">
-                          {doc.clientes?.nome_empresa || 'Empresa Removida'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-400 truncate max-w-full">
-                        Arquivo original: <span className="text-zinc-300 font-mono break-all">{doc.nome_original}</span>
-                      </p>
-                      <p className="text-[11px] text-zinc-500 mt-0.5"><IconMiniClock /> Enviado em: {new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
-                    </div>
-                    <div className="flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto">
-                      <button onClick={() => baixarDocumento(doc.caminho_storage)} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-3 py-2.5 rounded text-xs font-bold transition">Visualizar</button>
-                      <button onClick={() => aceitarEMoverParaHistorico(doc)} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-3 py-2.5 rounded text-xs hover:bg-emerald-400 transition">Mover para Histórico</button>
-                      <button onClick={() => rejeitarEDeletar(doc)} className="flex-1 md:flex-none px-3 py-2.5 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded text-xs transition">Excluir</button>
-                    </div>
+          <div className="space-y-4">
+            {/* PAINEL DE AÇÕES EM LOTE NO TOPO */}
+            {recebidos.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-4 rounded-xl shadow-lg gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
+                  <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={recebidos.length > 0 && selecionadosRecebidos.length === recebidos.length} onChange={toggleSelecionarTodosRecebidos} />
+                  Selecionar Todos ({recebidos.length})
+                </label>
+                
+                {selecionadosRecebidos.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end border-t sm:border-t-0 border-zinc-700 pt-4 sm:pt-0">
+                    <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionadosRecebidos.length} selecionado(s)</span>
+                    <button onClick={handleAceitarEmLote} className="flex-1 sm:flex-none text-xs bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/30 px-4 py-2.5 sm:py-2 rounded text-emerald-400 font-extrabold transition text-center shadow-sm">Mover para Histórico</button>
+                    <button onClick={handleBaixarEmLote} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-4 py-2.5 sm:py-2 rounded text-blue-400 font-extrabold transition text-center shadow-sm">Baixar Tudo</button>
+                    <button onClick={handleExcluirEmLote} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-4 py-2.5 sm:py-2 rounded text-red-400 font-extrabold transition text-center shadow-sm">Excluir</button>
                   </div>
-                ))}
+                )}
               </div>
             )}
+
+            <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
+              {recebidos.length === 0 ? (
+                <p className="text-zinc-400 text-center py-12">Nenhum documento recebido dos clientes para análise.</p>
+              ) : (
+                <div className="divide-y divide-zinc-800">
+                  {recebidos.map((doc) => (
+                    <label key={doc.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition w-full min-w-0 cursor-pointer ${selecionadosRecebidos.includes(doc.id) ? 'bg-[#d4af37]/10' : 'bg-[#1b263b] hover:bg-zinc-800/40'}`}>
+                      <div className="flex items-start gap-4 min-w-0 flex-1 w-full">
+                        <div className="pt-1">
+                          <input type="checkbox" checked={selecionadosRecebidos.includes(doc.id)} onChange={() => toggleSelecionarRecebido(doc.id)} className="accent-[#d4af37] w-5 h-5 cursor-pointer shadow-sm" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-3 mb-1 flex-wrap">
+                            <h4 className={`text-lg font-bold truncate max-w-md transition-colors ${selecionadosRecebidos.includes(doc.id) ? 'text-[#d4af37]' : 'text-zinc-200'}`}>{doc.nome_documento}</h4>
+                            <span className="text-xs bg-[#0d1b2a] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 font-semibold uppercase whitespace-nowrap">
+                              {doc.clientes?.nome_empresa || 'Empresa Removida'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-400 truncate max-w-full">
+                            Arquivo original: <span className="text-zinc-300 font-mono break-all">{doc.nome_original}</span>
+                          </p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5"><IconMiniClock /> Enviado em: {new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Oculta os botões individuais se tiver lotes marcados (Para focar no topo) */}
+                      <div className={`flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto mt-3 md:mt-0 transition-opacity ${selecionadosRecebidos.length > 0 && !selecionadosRecebidos.includes(doc.id) ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); visualizarDocumento(doc.caminho_storage); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-3 py-2.5 rounded text-xs font-bold transition text-white">Visualizar</button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); baixarDocumento(doc.caminho_storage, doc.nome_original); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-3 py-2.5 rounded text-xs font-bold transition-all shadow-sm">Baixar</button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); aceitarEMoverParaHistorico(doc); }} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-3 py-2.5 rounded text-xs hover:bg-emerald-400 transition shadow-sm">Mover para Histórico</button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); rejeitarEDeletar(doc); }} className="flex-1 md:flex-none px-3 py-2.5 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded text-xs transition">Excluir</button>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

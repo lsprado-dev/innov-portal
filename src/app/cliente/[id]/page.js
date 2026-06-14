@@ -57,6 +57,11 @@ const IconChatList = () => <svg className="w-6 h-6 text-[#d4af37]" fill="none" s
 const IconEye = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" /></svg>;
 const IconRestore = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>;
 
+// NOVOS ÍCONES PARA LINKS ÚTEIS
+const IconLinkTab = () => <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>;
+const IconCopy = () => <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>;
+const IconExternal = () => <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>;
+
 function formatarPrazoSemAno(dataString) {
   if (!dataString) return '';
   const partes = dataString.split('-');
@@ -114,6 +119,7 @@ export default function ClientePage({ params: paramsPromise }) {
   const [novoPedido, setNovoPedido] = useState('');
 
   const [alertasGlobaisPendentes, setAlertasGlobaisPendentes] = useState(0);
+  const [alertasGlobaisAtrasados, setAlertasGlobaisAtrasados] = useState(0); // NOVO: Conta quem perdeu o prazo
 
   // ESTADOS DO MODAL DE PERFIL E SENHA
   const [mostrarModalPerfil, setMostrarModalPerfil] = useState(false);
@@ -124,6 +130,10 @@ export default function ClientePage({ params: paramsPromise }) {
   const [contaSelecionadaSenha, setContaSelecionadaSenha] = useState('principal');
   const [mostrarFormSocio, setMostrarFormSocio] = useState(false);
   const [formSocio, setFormSocio] = useState({ nome: '', email: '', celular: '' });
+  
+  // ESTADOS DOS LINKS ÚTEIS
+  const [mostrarFormLink, setMostrarFormLink] = useState(false);
+  const [formLink, setFormLink] = useState({ titulo: '', url: '', descricao: '' });
 
   const [alertasSemArquivo, setAlertasSemArquivo] = useState({});
   const [boletosSolicitados, setBoletosSolicitados] = useState([]); // Memória anti-spam
@@ -235,8 +245,16 @@ export default function ClientePage({ params: paramsPromise }) {
 
   async function atualizarBadgeGlobal(clienteId) {
     if (!clienteId) return;
-    const { data } = await supabase.from('alertas_clientes').select('id').eq('cliente_id', clienteId).eq('status', 'pendente');
-    setAlertasGlobaisPendentes(data ? data.length : 0);
+    const { data } = await supabase.from('alertas_clientes').select('id, prazo').eq('cliente_id', clienteId).eq('status', 'pendente');
+    if (data) {
+      const hoje = new Date().toISOString().split('T')[0]; // Pega a data de hoje no formato YYYY-MM-DD
+      const atrasados = data.filter(a => a.prazo && a.prazo < hoje).length;
+      setAlertasGlobaisAtrasados(atrasados);
+      setAlertasGlobaisPendentes(data.length - atrasados); // Os pendentes normais são o total menos os atrasados
+    } else {
+      setAlertasGlobaisPendentes(0);
+      setAlertasGlobaisAtrasados(0);
+    }
   }
 
   async function carregarDadosDaAba() {
@@ -493,14 +511,31 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   async function handleBaixarSelecionados() {
+    if (selecionados.length === 0) return;
+    
+    setSubindoArquivo(true);
+    mostrarToast(`A preparar o download de ${selecionados.length} ficheiro(s)...`, 'aviso');
+    
     for (const id of selecionados) {
       const arq = arquivosFiltradosDaBusca.find(a => a.id === id);
       if (arq) {
-        baixarDocumento(arq.caminho_storage);
-        await new Promise(resolve => setTimeout(resolve, 300)); 
+        const { data } = await supabase.storage.from('documentos').download(arq.caminho_storage);
+        if (data) {
+          const url = URL.createObjectURL(data);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = arq.nome_original || arq.caminho_storage.split('/').pop();
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }
+        await new Promise(resolve => setTimeout(resolve, 600)); 
       }
     }
     setSelecionados([]);
+    setSubindoArquivo(false);
+    mostrarToast('Transferências concluídas com sucesso!', 'sucesso');
   }
 
   async function confirmarMovimentacao(e) {
@@ -579,9 +614,32 @@ export default function ClientePage({ params: paramsPromise }) {
     });
   }
 
-  function baixarDocumento(caminhoStorage) {
+  function visualizarDocumento(caminhoStorage) {
     const { data } = supabase.storage.from('documentos').getPublicUrl(caminhoStorage);
     window.open(data.publicUrl, '_blank');
+  }
+
+  async function baixarDocumento(caminhoStorage, nomeOriginal) {
+    setSubindoArquivo(true);
+    const { data, error } = await supabase.storage.from('documentos').download(caminhoStorage);
+    
+    if (error) {
+      mostrarToast('Erro ao baixar o arquivo: ' + error.message, 'erro');
+      setSubindoArquivo(false);
+      return;
+    }
+
+    const nomeFinal = nomeOriginal || caminhoStorage.split('/').pop();
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeFinal; 
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url); 
+    
+    setSubindoArquivo(false);
   }
 
   async function handleAdicionarSocio(e) {
@@ -658,6 +716,49 @@ export default function ClientePage({ params: paramsPromise }) {
     setSalvandoSenha(false);
   }
 
+  // ===============================================
+  // GESTÃO DE LINKS ÚTEIS
+  // ===============================================
+  async function handleAdicionarLink(e) {
+    e.preventDefault();
+    // A interrogação (?.) previne erros caso o campo esteja vazio
+    if (!formLink.titulo?.trim() || !formLink.url?.trim()) return;
+
+    setSubindoArquivo(true);
+    // Salva com segurança mesmo se a descrição for vazia
+    const novoLink = { id: Date.now().toString(), titulo: formLink.titulo.trim(), url: formLink.url.trim(), descricao: formLink.descricao?.trim() || '' };
+    const linksAtuais = cliente.links || [];
+    const novaLista = [...linksAtuais, novoLink];
+
+    const { error } = await supabase.from('clientes').update({ links: novaLista }).eq('id', id);
+
+    if (!error) {
+      mostrarToast('Link adicionado com sucesso!', 'sucesso');
+      setCliente({ ...cliente, links: novaLista });
+      setFormLink({ titulo: '', url: '', descricao: '' });
+      setMostrarFormLink(false);
+    } else { 
+      // AGORA ELE VAI TE CONTAR O MOTIVO EXATO DO ERRO!
+      mostrarToast('Erro ao adicionar link: ' + error.message, 'erro'); 
+    }
+    setSubindoArquivo(false);
+  }
+
+  function handleRemoverLink(linkId) {
+    confirmarAcao('Excluir Link', 'Tem certeza que deseja remover este acesso rápido?', async () => {
+      setSubindoArquivo(true);
+      const novaLista = (cliente.links || []).filter(l => l.id !== linkId);
+      const { error } = await supabase.from('clientes').update({ links: novaLista }).eq('id', id);
+      if (!error) { mostrarToast('Link removido.', 'sucesso'); setCliente({ ...cliente, links: novaLista }); }
+      setSubindoArquivo(false);
+    });
+  }
+
+  function copiarParaTransferencia(texto) {
+    navigator.clipboard.writeText(texto);
+    mostrarToast('Copiado para a área de transferência!', 'sucesso');
+  }
+
   function handleLogout() {
     localStorage.removeItem('usuario_nome'); localStorage.removeItem('usuario_tipo'); localStorage.removeItem('usuario_id');
     router.push('/login');
@@ -677,6 +778,16 @@ export default function ClientePage({ params: paramsPromise }) {
 
     const { error: dbError } = await supabase.from('alertas_clientes').update({ status: 'respondido', caminho_arquivo: caminhoArquivo }).eq('id', alerta.id);
     if (!dbError) {
+      
+      // INJEÇÃO DUPLA: Cria o espelho nos Docs Recebidos do Admin
+      await supabase.from('envios_cliente').insert([{
+        cliente_id: id,
+        nome_documento: `[RESPOSTA] ${alerta.titulo}`,
+        nome_original: file.name,
+        caminho_storage: caminhoArquivo,
+        status: 'pendente'
+      }]);
+
       mostrarToast('Documento enviado! A Innovative foi notificada.', 'sucesso');
       await carregarDadosDaAba();
       atualizarBadgeGlobal(id);
@@ -876,6 +987,37 @@ export default function ClientePage({ params: paramsPromise }) {
           </header>
         )}
 
+        {/* BANNERS INTELIGENTES DE PENDÊNCIAS E ATRASOS */}
+        {!isInterno && alertasGlobaisAtrasados > 0 && (
+          <div className="mb-4 bg-red-500/10 border border-red-500/40 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(239,68,68,0.15)] animate-in fade-in slide-in-from-top-4 duration-500">
+             <div className="flex items-center gap-3 w-full sm:w-auto">
+                <span className="text-2xl animate-pulse">🚨</span>
+                <div>
+                   <h3 className="text-red-400 font-bold text-sm">Você possui {alertasGlobaisAtrasados} pendência(s) em ATRASO!</h3>
+                   <p className="text-xs text-red-200/70">O prazo expirou. Por favor, verificar pendência(s).</p>
+                </div>
+             </div>
+             <button onClick={() => { setAbaPrincipal('alertas'); rolarPara('conteudo-abas'); }} className="w-full sm:w-auto bg-red-500 text-white font-bold px-6 py-2.5 rounded-lg text-xs hover:bg-red-600 transition shadow-md whitespace-nowrap">
+                Verificar Agora
+             </button>
+          </div>
+        )}
+
+        {!isInterno && alertasGlobaisPendentes > 0 && (
+          <div className="mb-8 bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(249,115,22,0.1)] animate-in fade-in slide-in-from-top-4 duration-500">
+             <div className="flex items-center gap-3 w-full sm:w-auto">
+                <span className="text-2xl animate-bounce">⚠️</span>
+                <div>
+                   <h3 className="text-orange-400 font-bold text-sm">Você possui {alertasGlobaisPendentes} pendência(s) no prazo</h3>
+                   <p className="text-xs text-orange-200/70">Acesse a aba para enviar os documentos solicitados ou marcar como realizado.</p>
+                </div>
+             </div>
+             <button onClick={() => { setAbaPrincipal('alertas'); rolarPara('conteudo-abas'); }} className="w-full sm:w-auto bg-orange-500 text-white font-bold px-6 py-2.5 rounded-lg text-xs hover:bg-orange-600 transition shadow-md whitespace-nowrap">
+                Ir para Pendências
+             </button>
+          </div>
+        )}
+
         {/* NAVEGAÇÃO PRINCIPAL INTELIGENTE */}
         <div className="flex flex-wrap gap-4 mb-8 border-b border-zinc-800 pb-px">
           <button onClick={() => { setAbaPrincipal('pastas'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'pastas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
@@ -895,6 +1037,14 @@ export default function ClientePage({ params: paramsPromise }) {
               </span>
             )}
           </button>
+          
+          {/* SÓ MOSTRA SE FOR ADMIN OU SE O CLIENTE TIVER ALGUM LINK CONFIGURADO */}
+          {(isInterno || (cliente?.links && cliente.links.length > 0)) && (
+            <button onClick={() => { setAbaPrincipal('links'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'links' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
+              <IconLinkTab /> Links Úteis
+            </button>
+          )}
+
           {isInterno && (
             <button onClick={() => { setAbaPrincipal('lixeira'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'lixeira' ? 'border-red-500 text-red-400' : 'border-transparent text-zinc-500 hover:text-red-400'}`}>
               <IconTrashTab /> Lixeira
@@ -1011,10 +1161,13 @@ export default function ClientePage({ params: paramsPromise }) {
                         <div className="mt-2">
                           {comprovanteEnviado ? (
                             <div className="flex flex-col gap-2 mt-1">
-                              <div className="flex gap-2">
-                                <button onClick={() => baixarDocumento(comprovanteEnviado.caminho_storage)} className="flex-1 text-[11px] border border-emerald-500/50 text-emerald-400 py-1.5 rounded font-bold shadow-sm hover:bg-emerald-500 hover:text-black transition pointer-events-auto">Ver Comprovante</button>
+                              <div className="flex gap-1.5">
+                                <button onClick={() => visualizarDocumento(comprovanteEnviado.caminho_storage)} className="flex-1 text-[11px] border border-emerald-500/50 text-emerald-400 py-1.5 rounded font-bold shadow-sm hover:bg-emerald-500 hover:text-black transition pointer-events-auto">Visualizar</button>
                                 {isInterno && (
-                                  <button onClick={() => handleMoverParaLixeira(comprovanteEnviado, 'portal')} className="px-2 bg-red-500/10 text-red-500 rounded border border-red-500/20 hover:bg-red-500 hover:text-white transition pointer-events-auto" title="Excluir"><IconTrashTab /></button>
+                                  <>
+                                    <button onClick={() => baixarDocumento(comprovanteEnviado.caminho_storage, comprovanteEnviado.nome_original)} className="px-3 text-[11px] border border-[#d4af37]/50 text-[#d4af37] py-1.5 rounded font-bold shadow-sm hover:bg-[#d4af37] hover:text-[#0d1b2a] transition pointer-events-auto" title="Baixar Original">Baixar</button>
+                                    <button onClick={() => handleMoverParaLixeira(comprovanteEnviado, 'portal')} className="px-2 bg-red-500/10 text-red-500 rounded border border-red-500/20 hover:bg-red-500 hover:text-white transition pointer-events-auto" title="Excluir"><IconTrashTab /></button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -1160,7 +1313,8 @@ export default function ClientePage({ params: paramsPromise }) {
                                 <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
                               </>
                             )}
-                            <button onClick={() => baixarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
+                            <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
+                            <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
                           </div>
                         </div>
                       ))}
@@ -1241,14 +1395,15 @@ export default function ClientePage({ params: paramsPromise }) {
                         </div>
                       </div>
                       <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto">
-                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border whitespace-nowrap ${arq.status === 'pendente' ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'}`}>
-                          {arq.status === 'pendente' ? 'Pendente' : 'Salvo no Histórico'}
+                        <span className={`flex items-center gap-1 text-[10px] font-extrabold px-3 py-1.5 rounded border whitespace-nowrap transition-all ${arq.status === 'pendente' ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' : 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)]'}`}>
+                          {arq.status === 'pendente' ? <><IconMiniClock /> Pendente (Em Análise)</> : <><IconCheck /> Recebido e Verificado</>}
                         </span>
                         <div className="flex gap-2 w-full sm:w-auto">
                           {isInterno && (
                             <button onClick={() => handleMoverParaLixeira(arq, 'envios')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2.5 rounded-lg text-red-400 font-medium transition">Excluir</button>
                           )}
-                          <button onClick={() => baixarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm">Baixar</button>
+                          <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm">Visualizar</button>
+                          <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm">Baixar</button>
                         </div>
                       </div>
                     </div>
@@ -1436,6 +1591,86 @@ export default function ClientePage({ params: paramsPromise }) {
                             Concluído sem arquivos
                           </span>
                         )
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            ABA 5: LINKS ÚTEIS E ACESSOS
+        ========================================== */}
+        {abaPrincipal === 'links' && (
+          <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-[#d4af37] capitalize">Links Úteis e Acessos</h3>
+                <p className="text-xs text-zinc-400 mt-1">Acessos rápidos a sistemas, portais de faturação ou formulários externos.</p>
+              </div>
+              {isInterno && !mostrarFormLink && (
+                <button onClick={() => setMostrarFormLink(true)} className="bg-zinc-800 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-zinc-700 transition shadow-md whitespace-nowrap">
+                  + Adicionar Link
+                </button>
+              )}
+            </div>
+
+            {isInterno && mostrarFormLink && (
+              <form onSubmit={handleAdicionarLink} className="mb-8 bg-[#0d1b2a] p-6 rounded-xl border border-[#d4af37]/30 shadow-lg animate-in fade-in">
+                <h4 className="text-sm font-bold text-[#d4af37] mb-4">Cadastrar Novo Link</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">Título do Sistema</label>
+                    <input type="text" required placeholder="Ex: Portal de Faturação..." value={formLink.titulo} onChange={e => setFormLink({...formLink, titulo: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">URL (Endereço Web)</label>
+                    <input type="url" required placeholder="https://..." value={formLink.url} onChange={e => setFormLink({...formLink, url: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">Descrição (Opcional)</label>
+                    <input type="text" placeholder="Ex: Utilize este portal para emitir os seus recibos..." value={formLink.descricao} onChange={e => setFormLink({...formLink, descricao: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+                  <button type="button" onClick={() => setMostrarFormLink(false)} className="px-5 py-2.5 bg-zinc-800 text-zinc-300 text-sm font-bold rounded-lg hover:bg-zinc-700 transition">Cancelar</button>
+                  <button type="submit" disabled={subindoArquivo} className="px-6 py-2.5 bg-[#d4af37] text-[#0d1b2a] text-sm font-extrabold rounded-lg hover:bg-yellow-500 shadow-lg transition">
+                    {subindoArquivo ? 'A processar...' : 'Guardar Link'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {(!cliente?.links || cliente.links.length === 0) ? (
+                <div className="col-span-1 lg:col-span-2 py-10 text-center">
+                  <span className="text-4xl block mb-2 opacity-30">🔗</span>
+                  <p className="text-zinc-500 text-sm font-medium">Nenhum link útil foi configurado para o seu perfil.</p>
+                </div>
+              ) : (
+                cliente.links.map(link => (
+                  <div key={link.id} className="bg-[#0d1b2a] border border-zinc-800 p-6 rounded-xl flex flex-col justify-between group hover:border-[#d4af37]/50 transition-all shadow-md">
+                    <div className="mb-6">
+                      <h4 className="text-white font-bold text-lg mb-1">{link.titulo}</h4>
+                      {link.descricao && <p className="text-xs text-zinc-400 leading-relaxed mb-3">{link.descricao}</p>}
+                      <div className="bg-[#1b263b] px-3 py-2 rounded border border-zinc-800/80 cursor-pointer hover:bg-zinc-800 transition" onClick={() => copiarParaTransferencia(link.url)} title="Clique para copiar">
+                        <p className="text-[11px] text-[#d4af37] font-mono truncate select-none">{link.url}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2 w-full mt-auto pt-5 border-t border-zinc-800/60">
+                      <button onClick={() => copiarParaTransferencia(link.url)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-sm">
+                        <IconCopy /> Copiar
+                      </button>
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center text-center">
+                        <IconExternal /> Acessar
+                      </a>
+                      {isInterno && (
+                        <button onClick={() => handleRemoverLink(link.id)} className="px-4 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg text-xs font-bold transition">
+                          Excluir
+                        </button>
                       )}
                     </div>
                   </div>
