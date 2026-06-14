@@ -1,7 +1,7 @@
 {
   "name": "Innovative Business",
-  "short_name": "Innov Portal",
-  "description": "Portal Digital da Contabilidade",
+  "short_name": "Innovative Portal",
+  "description": "Portal de Contabilidade e Gestão",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d1b2a",

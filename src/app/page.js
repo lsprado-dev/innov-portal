@@ -230,29 +230,34 @@ export default function AdminPage() {
     const resPendentes = await supabase.from('solicitacoes_cadastro').select('*').order('criado_em');
     if (resPendentes.data) setPendentes(resPendentes.data);
 
+    // Limite de 500 para evitar sobrecarga de memória no navegador
     const resRecebidos = await supabase
       .from('envios_cliente')
       .select('*, clientes(nome_empresa)')
       .eq('status', 'pendente')
-      .order('criado_em', { ascending: false });
+      .order('criado_em', { ascending: false })
+      .limit(500);
     if (resRecebidos.data) setRecebidos(resRecebidos.data);
 
     const resPedidos = await supabase
       .from('pedidos_cliente')
       .select('*, clientes(nome_empresa)')
       .eq('status', 'pendente')
-      .order('criado_em', { ascending: false });
+      .order('criado_em', { ascending: false })
+      .limit(300);
     if (resPedidos.data) setPedidosCliente(resPedidos.data);
 
     const resDemandas = await supabase
       .from('demandas_equipe')
       .select('*')
-      .order('criado_em', { ascending: false });
+      .order('criado_em', { ascending: false })
+      .limit(300);
     if (resDemandas.data) setDemandas(resDemandas.data);
 
     const resAlertas = await supabase
       .from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)')
-      .order('criado_em', { ascending: false });
+      .order('criado_em', { ascending: false })
+      .limit(500);
     if (resAlertas.data) setAlertas(resAlertas.data);
 
     // CONTAGEM DE SAÚDE DO SISTEMA (Total de Arquivos)
@@ -601,7 +606,18 @@ export default function AdminPage() {
   async function salvarClientesCSV() {
     if (!previewCSV) return;
     setSubindo(true);
-    for (const cli of previewCSV) { await supabase.from('clientes').insert([cli]); }
+    for (const cli of previewCSV) { 
+      // Extrai os 6 primeiros dígitos do CNPJ para a senha padrão
+      const senhaGerada = cli.cnpj ? cli.cnpj.replace(/\D/g, '').substring(0, 6) : '123456';
+      
+      const clienteComSenha = {
+        ...cli,
+        senha: encriptarSenha(senhaGerada),
+        senha_alterada: false
+      };
+      
+      await supabase.from('clientes').insert([clienteComSenha]); 
+    }
     setPreviewCSV(null); 
     await carregarDados();
     setSubindo(false);
