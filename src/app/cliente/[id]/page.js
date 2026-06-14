@@ -847,16 +847,16 @@ export default function ClientePage({ params: paramsPromise }) {
 
         {/* CABEÇALHO DO CLIENTE COM LOGO */}
         {cliente && (
-          <header className="mb-10 bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-5">
-                <img src="/logo.png" alt="Logo Innovative" className="w-20 h-20 object-contain drop-shadow-lg" />
+          <header className="mb-10 bg-[#1b263b] p-6 sm:p-8 rounded-xl border border-zinc-800 shadow-xl">
+            <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start gap-6 sm:gap-0">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 text-center sm:text-left">
+                <img src="/logo.png" alt="Logo Innovative" className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-lg" />
                 <div>
-                  <h1 className="text-3xl font-bold text-white mb-1">{cliente.nome_empresa}</h1>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">{cliente.nome_empresa}</h1>
                   <p className="text-zinc-400 text-sm">CNPJ: {cliente.cnpj}</p>
                 </div>
               </div>
-              <span className="bg-[#0d1b2a] text-[#d4af37] px-4 py-2 rounded-lg text-sm font-bold border border-[#d4af37]/30">
+              <span className="bg-[#0d1b2a] text-[#d4af37] px-4 py-2 rounded-lg text-xs sm:text-sm font-bold border border-[#d4af37]/30 w-full sm:w-auto text-center">
                 {cliente.regime_tributario}
               </span>
             </div>
@@ -1031,33 +1031,33 @@ export default function ClientePage({ params: paramsPromise }) {
                 </div>
               </div>
             ) : pastaAtiva && (
-              <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
+              <div className="bg-[#1b263b] p-5 sm:p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
                   {/* BREADCRUMBS INTELIGENTES TIPO GOOGLE DRIVE */}
-                  <h3 className="text-xl font-bold text-[#d4af37] capitalize flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg sm:text-xl font-bold text-[#d4af37] capitalize flex items-center gap-1.5 sm:gap-2 flex-wrap w-full lg:w-auto leading-relaxed">
                     <span className={`transition ${subpastaAtiva ? 'cursor-pointer hover:underline text-zinc-400 hover:text-white' : 'text-[#d4af37]'}`} onClick={() => setSubpastaAtiva(null)}>
                       Setor {pastaAtiva}
                     </span>
                     {caminhoPastas.map((p, index) => (
-                      <span key={p.id} className="flex items-center gap-2">
+                      <span key={p.id} className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
                         <span className="text-zinc-600">/</span>
                         <span 
-                          className={`transition ${index === caminhoPastas.length - 1 ? 'text-[#d4af37]' : 'cursor-pointer hover:underline text-zinc-400 hover:text-white'}`}
+                          className={`transition flex items-center gap-1 ${index === caminhoPastas.length - 1 ? 'text-[#d4af37]' : 'cursor-pointer hover:underline text-zinc-400 hover:text-white'}`}
                           onClick={() => setSubpastaAtiva(p.id)}
                         >
-                          {index === caminhoPastas.length - 1 && <IconFolderSolid />} {p.nome}
+                          {index === caminhoPastas.length - 1 && <span className="hidden sm:inline"><IconFolderSolid /></span>} {p.nome}
                         </span>
                       </span>
                     ))}
                   </h3>
                   
-                  <div className="flex flex-col sm:flex-row w-full sm:w-auto items-stretch sm:items-center gap-3">
-                    <div className="relative w-full sm:w-64">
-                      <input type="text" placeholder="Procurar documento..." value={busca} onChange={(e) => { setBusca(e.target.value); setMostrarAutocomplete(true); }} onFocus={() => setMostrarAutocomplete(true)} onBlur={() => setTimeout(() => setMostrarAutocomplete(false), 200)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                  <div className="flex flex-col sm:flex-row w-full lg:w-auto items-stretch sm:items-center gap-3">
+                    <div className="relative w-full sm:w-64 flex-shrink-0">
+                      <input type="text" placeholder="Procurar documento..." value={busca} onChange={(e) => { setBusca(e.target.value); setMostrarAutocomplete(true); }} onFocus={() => setMostrarAutocomplete(true)} onBlur={() => setTimeout(() => setMostrarAutocomplete(false), 200)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                       {mostrarAutocomplete && busca.length > 0 && arquivosFiltradosDaBusca.length > 0 && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d1b2a] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                           {arquivosFiltradosDaBusca.map((arq) => (
-                            <div key={`auto-${arq.id}`} onClick={() => { setBusca(arq.nome_original); setMostrarAutocomplete(false); }} className="px-4 py-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center">
+                            <div key={`auto-${arq.id}`} onClick={() => { setBusca(arq.nome_original); setMostrarAutocomplete(false); }} className="px-4 py-3 sm:py-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center">
                               <IconSearch /> {arq.nome_original}
                             </div>
                           ))}
@@ -1066,11 +1066,11 @@ export default function ClientePage({ params: paramsPromise }) {
                     </div>
 
                     {isInterno && (
-                      <div className="flex gap-2">
-                        <button onClick={handleCriarPasta} className="bg-zinc-800 text-zinc-300 px-4 py-2.5 rounded-lg font-bold border border-zinc-700 hover:bg-zinc-700 hover:text-white transition shadow-lg text-sm whitespace-nowrap">
-                          + Nova Pasta
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button onClick={handleCriarPasta} className="flex-1 sm:flex-none bg-zinc-800 text-zinc-300 px-3 sm:px-4 py-2.5 rounded-lg font-bold border border-zinc-700 hover:bg-zinc-700 hover:text-white transition shadow-lg text-xs sm:text-sm whitespace-nowrap text-center">
+                          + Pasta
                         </button>
-                        <label className="bg-[#d4af37] text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-sm text-center whitespace-nowrap">
+                        <label className="flex-1 sm:flex-none bg-[#d4af37] text-[#0d1b2a] px-3 sm:px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-xs sm:text-sm text-center whitespace-nowrap">
                           {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivos'}
                           <input type="file" multiple accept="application/pdf,image/*" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
                         </label>
@@ -1104,22 +1104,22 @@ export default function ClientePage({ params: paramsPromise }) {
                 ) : (
                   <>
                     {/* BARRA DE AÇÕES EM LOTE */}
-                    <div className="flex items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-3 rounded-lg mb-4">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-3 rounded-lg mb-4 gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
                         <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0} onChange={toggleSelecionarTodos} />
                         Selecionar Todos
                       </label>
                       
                       {selecionados.length > 0 && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-[#d4af37] mr-2">{selecionados.length} selecionado(s)</span>
+                        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+                          <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionados.length} selecionado(s)</span>
                           {isInterno && (
                             <>
-                              <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-1.5 rounded text-blue-400 font-bold transition">Mover</button>
-                              <button onClick={handleExcluirSelecionados} className="text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-1.5 rounded text-red-400 font-bold transition">Excluir</button>
+                              <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="flex-1 sm:flex-none text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded text-blue-400 font-bold transition text-center">Mover</button>
+                              <button onClick={handleExcluirSelecionados} className="flex-1 sm:flex-none text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 font-bold transition text-center">Excluir</button>
                             </>
                           )}
-                          <button onClick={handleBaixarSelecionados} className="text-[10px] bg-[#d4af37] text-black px-3 py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-sm">Baixar</button>
+                          <button onClick={handleBaixarSelecionados} className="flex-1 sm:flex-none text-[10px] bg-[#d4af37] text-black px-3 py-2 rounded font-bold hover:bg-yellow-500 transition shadow-sm text-center">Baixar</button>
                         </div>
                       )}
                     </div>

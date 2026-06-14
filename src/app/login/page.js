@@ -270,13 +270,8 @@ export default function LoginPage() {
                 <input type="text" required placeholder="Ex: João Silva" value={formCadastro.nome_contato} onChange={e => setFormCadastro({...formCadastro, nome_contato: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] focus:outline-none" />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">E-mail Profissional</label>
-                <input type="email" required placeholder="contato@empresa.com.br" value={formCadastro.email} onChange={e => setFormCadastro({...formCadastro, email: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] focus:outline-none" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div className="sm:col-span-1">
                   <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Celular / WhatsApp</label>
                   <input 
                     type="tel" 
@@ -284,16 +279,20 @@ export default function LoginPage() {
                     placeholder="(00) 00000-0000" 
                     value={formCadastro.celular} 
                     onChange={e => setFormCadastro({...formCadastro, celular: maskCelular(e.target.value)})} 
-                    className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#d4af37] focus:outline-none" 
+                    className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] focus:outline-none" 
                   />
                 </div>
-                <div>
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">E-mail Profissional</label>
+                  <input type="email" required placeholder="contato@empresa.com.br" value={formCadastro.email} onChange={e => setFormCadastro({...formCadastro, email: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] focus:outline-none" />
+                </div>
+                <div className="sm:col-span-1">
                   <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Regime Tributário</label>
                   <select 
                     required
                     value={formCadastro.regime_tributario} 
                     onChange={e => setFormCadastro({...formCadastro, regime_tributario: e.target.value})} 
-                    className={`w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:border-[#d4af37] focus:outline-none cursor-pointer appearance-none ${formCadastro.regime_tributario === '' ? 'text-zinc-500' : 'text-white'}`}
+                    className={`w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:border-[#d4af37] focus:outline-none cursor-pointer appearance-none ${formCadastro.regime_tributario === '' ? 'text-zinc-500' : 'text-white'}`}
                   >
                     <option value="" disabled hidden>Selecione...</option>
                     <option value="Simples Nacional" className="text-white">Simples Nacional</option>
@@ -304,9 +303,9 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="pt-6 mt-4 border-t border-zinc-800 flex gap-3">
-              <button type="button" onClick={() => setModo('login')} className="w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 rounded-lg text-sm transition">Cancelar</button>
-              <button type="submit" disabled={carregando} className="w-2/3 bg-[#d4af37] text-[#0d1b2a] font-extrabold py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg">
+            <div className="pt-6 mt-4 border-t border-zinc-800 flex flex-col sm:flex-row gap-3">
+              <button type="button" onClick={() => setModo('login')} className="w-full sm:w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 rounded-lg text-sm transition">Cancelar</button>
+              <button type="submit" disabled={carregando} className="w-full sm:w-2/3 bg-[#d4af37] text-[#0d1b2a] font-extrabold py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg">
                 {carregando ? 'A Processar...' : 'Enviar Solicitação Oficial'}
               </button>
             </div>
@@ -314,8 +313,18 @@ export default function LoginPage() {
         )}
       </div>
 
+      {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
+      {carregando && (
+        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
+            <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
+            <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+          </div>
+        </div>
+      )}
+
       {/* SISTEMA DE TOASTS PREMIUM */}
-      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[9999999] flex flex-col gap-3 pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border pointer-events-auto transition-all backdrop-blur-md min-w-[280px] max-w-sm transform translate-y-0 opacity-100 ${
             toast.tipo === 'erro' ? 'bg-red-500/10 border-red-500/30 text-red-100' :
