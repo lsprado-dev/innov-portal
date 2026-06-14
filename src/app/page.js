@@ -707,7 +707,9 @@ export default function AdminPage() {
     );
   }
 
-   
+  return (
+    <div className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative">
+      {/* =======================================================
           MODAL DE EDIÇÃO DA LISTA DE CLIENTES SELECIONADOS
       ======================================================= */}
       {mostrarModalClientes && (
