@@ -185,7 +185,7 @@ export default function ClientePage({ params: paramsPromise }) {
   const [mostrarAutocomplete, setMostrarAutocomplete] = useState(false);
 
   const [enviosPre, setEnviosPre] = useState([
-    { id: 1, descricao: '', arquivo: null }
+    { id: 1, descricao: '', arquivo: null, departamento: 'Contábil' }
   ]);
 
   // FUNÇÃO AUXILIAR DE LOGS DE AUDITORIA
@@ -809,10 +809,11 @@ export default function ClientePage({ params: paramsPromise }) {
     }, 'sucesso');
   }
 
-  function adicionarMaisUm() { setEnviosPre([...enviosPre, { id: Date.now(), descricao: '', arquivo: null }]); }
+  function adicionarMaisUm() { setEnviosPre([...enviosPre, { id: Date.now(), descricao: '', arquivo: null, departamento: 'Contábil' }]); }
   function removerLineEnvio(linhaId) { if (enviosPre.length === 1) return; setEnviosPre(enviosPre.filter(item => item.id !== linhaId)); }
   function alterarDescricao(linhaId, texto) { setEnviosPre(enviosPre.map(item => item.id === linhaId ? { ...item, descricao: texto } : item)); }
   function alterarArquivo(linhaId, arquivoSelecionado) { setEnviosPre(enviosPre.map(item => item.id === linhaId ? { ...item, arquivo: arquivoSelecionado } : item)); }
+  function alterarDepartamentoEnvio(linhaId, valor) { setEnviosPre(enviosPre.map(item => item.id === linhaId ? { ...item, departamento: valor } : item)); } // NOVO
 
   async function handleEnviarParaContabilidade(e) {
     e.preventDefault();
@@ -828,11 +829,12 @@ export default function ClientePage({ params: paramsPromise }) {
       const timestamp = Date.now();
       const caminhoArquivo = `${id}/recebidos/${timestamp}_${item.arquivo.name}`;
       await supabase.storage.from('documentos').upload(caminhoArquivo, item.arquivo);
-      await supabase.from('envios_cliente').insert([{ cliente_id: id, nome_documento: item.descricao.trim(), nome_original: item.arquivo.name, caminho_storage: caminhoArquivo, status: 'pendente' }]);
+      // NOVO: Adicionado departamento ao banco
+      await supabase.from('envios_cliente').insert([{ cliente_id: id, nome_documento: item.descricao.trim(), nome_original: item.arquivo.name, caminho_storage: caminhoArquivo, status: 'pendente', departamento: item.departamento }]);
     }
 
     mostrarToast('Documentos enviados com sucesso!', 'sucesso');
-    setEnviosPre([{ id: 1, descricao: '', arquivo: null }]);
+    setEnviosPre([{ id: 1, descricao: '', arquivo: null, departamento: 'Contábil' }]);
     carregarDadosDaAba();
     setSubindoArquivo(false);
   }
@@ -1346,17 +1348,31 @@ export default function ClientePage({ params: paramsPromise }) {
                 </header>
                 <form onSubmit={handleEnviarParaContabilidade} className="space-y-4">
                   {enviosPre.map((item) => (
-                    <div key={item.id} className="p-4 bg-[#0d1b2a] rounded-lg border border-zinc-800/60 flex flex-col md:flex-row items-end md:items-center gap-4">
-                      <div className="flex-1 w-full">
+                    <div key={item.id} className="p-4 bg-[#0d1b2a] rounded-lg border border-zinc-800/60 grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+                      <div className="lg:col-span-5">
                         <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Qual é o assunto/documento?</label>
-                        <input type="text" required placeholder="Ex: Extrato Bancário de Maio..." value={item.descricao} onChange={(e) => alterarDescricao(item.id, e.target.value)} className="w-full bg-[#1b263b] border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                        <input type="text" required placeholder="Ex: Extrato Bancário..." value={item.descricao} onChange={(e) => alterarDescricao(item.id, e.target.value)} className="w-full bg-[#1b263b] border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                       </div>
-                      <div className="w-full md:w-auto">
+                      <div className="lg:col-span-3">
+                        <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Para qual setor?</label>
+                        <select value={item.departamento} onChange={(e) => alterarDepartamentoEnvio(item.id, e.target.value)} className="w-full bg-[#1b263b] border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]">
+                          <option value="Contábil">Contábil</option>
+                          <option value="Fiscal">Fiscal</option>
+                          <option value="DP / RH">DP / RH</option>
+                          <option value="Financeiro">Financeiro</option>
+                          <option value="Societário">Societário</option>
+                          <option value="Legalização">Legalização</option>
+                          <option value="Outros">Outros / Suporte</option>
+                        </select>
+                      </div>
+                      <div className="lg:col-span-3">
                         <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
                         <input type="file" required accept="application/pdf,image/*" onChange={(e) => alterarArquivo(item.id, e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                       </div>
                       {enviosPre.length > 1 && (
-                        <button type="button" onClick={() => removerLineEnvio(item.id)} className="text-xs text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white px-3 py-2.5 rounded-lg border border-red-500/20 transition">Remover</button>
+                        <div className="lg:col-span-1 flex justify-end">
+                          <button type="button" onClick={() => removerLineEnvio(item.id)} className="w-full lg:w-auto text-xs text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white px-3 py-2.5 rounded-lg border border-red-500/20 transition">Remover</button>
+                        </div>
                       )}
                     </div>
                   ))}

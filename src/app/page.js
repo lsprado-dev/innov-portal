@@ -453,6 +453,7 @@ export default function AdminPage() {
   }
 
   // NOVO: Função para o colaborador corrigir/mover a área do pedido
+  // NOVO: Função para o colaborador corrigir/mover a área do pedido
   async function alterarDepartamentoPedido(id, novoDepartamento) {
     setSubindo(true);
     const { error } = await supabase.from('pedidos_cliente').update({ departamento: novoDepartamento }).eq('id', id);
@@ -461,6 +462,19 @@ export default function AdminPage() {
       await carregarDados();
     } else {
       mostrarToast('Erro ao mover a solicitação.', 'erro');
+    }
+    setSubindo(false);
+  }
+
+  // NOVO: Função para corrigir/mover a área do DOC RECEBIDO
+  async function alterarDepartamentoEnvio(id, novoDepartamento) {
+    setSubindo(true);
+    const { error } = await supabase.from('envios_cliente').update({ departamento: novoDepartamento }).eq('id', id);
+    if (!error) {
+      mostrarToast(`Documento movido para o setor: ${novoDepartamento}`, 'sucesso');
+      await carregarDados();
+    } else {
+      mostrarToast('Erro ao mover o documento.', 'erro');
     }
     setSubindo(false);
   }
@@ -759,6 +773,11 @@ export default function AdminPage() {
     ? pedidosCliente 
     : pedidosCliente.filter(p => departamentosVisiveis.includes(p.departamento));
 
+  // Filtra os arquivos recebidos com base em quem está logado
+  const recebidosVisiveis = eGestor 
+    ? recebidos 
+    : recebidos.filter(r => departamentosVisiveis.includes(r.departamento));
+
   const demandasVisiveis = demandas.filter(d => eGestor || d.atribuido_para === operador || d.criado_por === operador);
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
   const alertasPendentes = alertas.filter(a => a.status === 'pendente').length;
@@ -995,7 +1014,7 @@ export default function AdminPage() {
           <button onClick={() => { setAbaAtiva('recebidos'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'recebidos' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconInbox />
-              <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${recebidos.length > 0 ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(59,130,246,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{recebidos.length}</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${recebidosVisiveis.length > 0 ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(59,130,246,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{recebidosVisiveis.length}</span>
             </div>
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Docs Recebidos</h3></div>
           </button>
@@ -1274,11 +1293,11 @@ export default function AdminPage() {
         {abaAtiva === 'recebidos' && (
           <div className="space-y-4">
             {/* PAINEL DE AÇÕES EM LOTE NO TOPO */}
-            {recebidos.length > 0 && (
+            {recebidosVisiveis.length > 0 && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-4 rounded-xl shadow-lg gap-4">
                 <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
-                  <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={recebidos.length > 0 && selecionadosRecebidos.length === recebidos.length} onChange={toggleSelecionarTodosRecebidos} />
-                  Selecionar Todos ({recebidos.length})
+                  <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={recebidosVisiveis.length > 0 && selecionadosRecebidos.length === recebidosVisiveis.length} onChange={toggleSelecionarTodosRecebidos} />
+                  Selecionar Todos ({recebidosVisiveis.length})
                 </label>
                 
                 {selecionadosRecebidos.length > 0 && (
@@ -1293,11 +1312,11 @@ export default function AdminPage() {
             )}
 
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
-              {recebidos.length === 0 ? (
-                <p className="text-zinc-400 text-center py-12">Nenhum documento recebido dos clientes para análise.</p>
+              {recebidosVisiveis.length === 0 ? (
+                <p className="text-zinc-400 text-center py-12">Nenhum documento na sua área para análise.</p>
               ) : (
                 <div className="divide-y divide-zinc-800">
-                  {recebidos.map((doc) => (
+                  {recebidosVisiveis.map((doc) => (
                     <label key={doc.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition w-full min-w-0 cursor-pointer ${selecionadosRecebidos.includes(doc.id) ? 'bg-[#d4af37]/10' : 'bg-[#1b263b] hover:bg-zinc-800/40'}`}>
                       <div className="flex items-start gap-4 min-w-0 flex-1 w-full">
                         <div className="pt-1">
@@ -1309,9 +1328,27 @@ export default function AdminPage() {
                             <span className="text-xs bg-[#0d1b2a] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 font-semibold uppercase whitespace-nowrap">
                               {doc.clientes?.nome_empresa || 'Empresa Removida'}
                             </span>
+                            
+                            {/* NOVO: SELECT DE SETOR NO DOCUMENTO RECEBIDO */}
+                            <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2" onClick={(e) => e.preventDefault()}>
+                              <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
+                              <select 
+                                value={doc.departamento || 'Outros'} 
+                                onChange={(e) => alterarDepartamentoEnvio(doc.id, e.target.value)}
+                                className="bg-transparent text-blue-400 text-[11px] font-bold py-1 focus:outline-none cursor-pointer tracking-wider uppercase"
+                              >
+                                <option value="Contábil" className="bg-[#0d1b2a]">Contábil</option>
+                                <option value="Fiscal" className="bg-[#0d1b2a]">Fiscal</option>
+                                <option value="DP / RH" className="bg-[#0d1b2a]">DP / RH</option>
+                                <option value="Financeiro" className="bg-[#0d1b2a]">Financeiro</option>
+                                <option value="Societário" className="bg-[#0d1b2a]">Societário</option>
+                                <option value="Legalização" className="bg-[#0d1b2a]">Legalização</option>
+                                <option value="Outros" className="bg-[#0d1b2a]">Outros / Suporte</option>
+                              </select>
+                            </div>
                           </div>
-                          <p className="text-xs text-zinc-400 truncate max-w-full">
-                            Arquivo original: <span className="text-zinc-300 font-mono break-all">{doc.nome_original}</span>
+                          <p className="text-xs text-zinc-400 truncate max-w-full mt-2">
+                            Arquivo: <span className="text-zinc-300 font-mono break-all">{doc.nome_original}</span>
                           </p>
                           <p className="text-[11px] text-zinc-500 mt-0.5"><IconMiniClock /> Enviado em: {new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
                         </div>
