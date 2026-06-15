@@ -1,4 +1,5 @@
 import './globals.css';
+import PwaRegistrador from './pwa'; // <-- 1. ADICIONEI ESTA LINHA
 
 export const metadata = {
   title: 'Innovative Business',
@@ -18,6 +19,8 @@ export default function RootLayout({ children }) {
     <html lang="pt-BR">
       <body className="bg-[#0d1b2a] text-white min-h-screen flex flex-col">
         
+        <PwaRegistrador /> {/* <-- 2. ADICIONEI ESTA LINHA AQUI */}
+
         <main className="flex-grow flex flex-col">
           {children}
         </main>
