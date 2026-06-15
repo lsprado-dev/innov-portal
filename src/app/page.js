@@ -123,6 +123,7 @@ export default function AdminPage() {
   
   const [formAlerta, setFormAlerta] = useState({
     clientesSelecionados: [],
+    responsavel: '', // NOVO: Definido ao carregar
     tipo_documento: 'Extratos Bancários',
     titulo: '',
     mensagem: '',
@@ -191,7 +192,10 @@ export default function AdminPage() {
       localStorage.clear();
       router.push('/login');
     } else {
-      if (nomeUsuario) setOperador(nomeUsuario);
+      if (nomeUsuario) {
+        setOperador(nomeUsuario);
+        setFormAlerta(prev => ({ ...prev, responsavel: nomeUsuario }));
+      }
       setAutenticando(false);
       carregarDados();
     }
@@ -313,6 +317,7 @@ export default function AdminPage() {
         nome_empresa: alerta.clientes.nome_empresa,
         regime_tributario: alerta.clientes.regime_tributario
       }] : [],
+      responsavel: alerta.responsavel || operador,
       tipo_documento: alerta.tipo_documento || 'Outros',
       titulo: alerta.titulo,
       mensagem: alerta.mensagem || '',
@@ -338,8 +343,8 @@ export default function AdminPage() {
 
     if (formAlerta.repetir_mensalmente && !formAlerta.dia_recorrencia) return mostrarToast('Por favor, informe em que DIA DO MÊS a automação deve enviar o alerta.', 'erro');
     
-    if (formAlerta.enviar_email && !formAlerta.repetir_mensalmente && !formAlerta.enviar_agora && !formAlerta.data_envio_programado) {
-      return mostrarToast('Se optou por não enviar agora, informe a data em que o e-mail deve ser disparado.', 'erro');
+    if (!formAlerta.repetir_mensalmente && !formAlerta.enviar_agora && !formAlerta.data_envio_programado) {
+      return mostrarToast('Se optou por agendar, informe a data em que a publicação deve ocorrer.', 'erro');
     }
 
     const clientesAlvo = formAlerta.clientesSelecionados;
@@ -348,11 +353,12 @@ export default function AdminPage() {
     setSubindo(true);
     
     const isRecorrente = formAlerta.repetir_mensalmente;
-    const isAgendadoFuturo = !isRecorrente && formAlerta.enviar_email && !formAlerta.enviar_agora;
+    const isAgendadoFuturo = !isRecorrente && !formAlerta.enviar_agora; // Desvinculado do E-mail!
     const novoStatus = isRecorrente ? 'recorrente' : (isAgendadoFuturo ? 'programado' : 'pendente');
 
     const disparos = clientesAlvo.map(c => ({
       cliente_id: c.id,
+      responsavel: formAlerta.responsavel || operador, // NOVO: Salva quem vai cuidar desta cobrança
       tipo_documento: formAlerta.tipo_documento,
       titulo: formAlerta.titulo,
       mensagem: formAlerta.mensagem,
@@ -780,7 +786,9 @@ export default function AdminPage() {
 
   const demandasVisiveis = demandas.filter(d => eGestor || d.atribuido_para === operador || d.criado_por === operador);
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
-  const alertasPendentes = alertas.filter(a => a.status === 'pendente').length;
+  // NOVO: Filtrar alertas para não poluir a tela. Gestores veem tudo, responsáveis veem os seus.
+  const alertasPermitidos = eGestor ? alertas : alertas.filter(a => a.responsavel === operador || !a.responsavel);
+  const alertasPendentes = alertasPermitidos.filter(a => a.status === 'pendente').length;
   
   const demandasPendentesAgrupadas = LISTA_COLABORADORES.map(colab => {
     return { nome: colab, tarefas: demandasVisiveis.filter(d => d.status === 'pendente' && d.atribuido_para === colab) }
@@ -788,7 +796,7 @@ export default function AdminPage() {
 
   const demandasConcluidas = demandasVisiveis.filter(d => d.status === 'concluído');
 
-  const alertasFiltradosGerais = alertas.filter(a => {
+  const alertasFiltradosGerais = alertasPermitidos.filter(a => {
     const termo = buscaAlerta.toLowerCase();
     const nomeEmpresa = a.clientes?.nome_empresa?.toLowerCase() || '';
     const tituloAlerta = a.titulo?.toLowerCase() || '';
@@ -1479,7 +1487,13 @@ export default function AdminPage() {
                 </div>
                 
                 {/* BLOCO 2: CONTEÚDO DO PEDIDO */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Responsável (Você)</label>
+                    <select value={formAlerta.responsavel} onChange={e => setFormAlerta({...formAlerta, responsavel: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none cursor-pointer">
+                      {LISTA_COLABORADORES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Categoria</label>
                     <select value={formAlerta.tipo_documento} onChange={e => setFormAlerta({...formAlerta, tipo_documento: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none">
@@ -1507,16 +1521,16 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-800 pt-5">
                   <div>
                     <label className="block text-xs font-bold text-zinc-400 uppercase mb-2" title="Até quando o cliente deve enviar ou confirmar">Prazo p/ Confirmação</label>
-                    <input type="date" value={formAlerta.prazo} onChange={e => setFormAlerta({...formAlerta, prazo: e.target.value})} disabled={formAlerta.repetir_mensalmente} required={!formAlerta.repetir_mensalmente} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30" />
+                    <input type="date" value={formAlerta.prazo} onChange={e => setFormAlerta({...formAlerta, prazo: e.target.value})} disabled={formAlerta.repetir_mensalmente} required={!formAlerta.repetir_mensalmente} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30 cursor-pointer" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-zinc-400 uppercase mb-2" title="Caso seja uma cobrança (DAS, Boleto, etc)">Data de Vencimento</label>
-                    <input type="date" value={formAlerta.data_vencimento} onChange={e => setFormAlerta({...formAlerta, data_vencimento: e.target.value})} disabled={formAlerta.repetir_mensalmente} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30" />
+                    <input type="date" value={formAlerta.data_vencimento} onChange={e => setFormAlerta({...formAlerta, data_vencimento: e.target.value})} disabled={formAlerta.repetir_mensalmente} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30 cursor-pointer" />
                   </div>
                   <div>
                     <label className="flex items-center gap-1 text-xs font-bold text-[#d4af37] uppercase mb-2"><IconRepeat /> Automação</label>
                     <label className={`flex items-center gap-3 w-full border rounded-lg px-4 py-3 cursor-pointer transition-colors ${formAlerta.repetir_mensalmente ? 'bg-[#d4af37]/10 border-[#d4af37]' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
-                      <input type="checkbox" checked={formAlerta.repetir_mensalmente} onChange={e => setFormAlerta({...formAlerta, repetir_mensalmente: e.target.checked})} className="accent-[#d4af37] w-4 h-4" />
+                      <input type="checkbox" checked={formAlerta.repetir_mensalmente} onChange={e => setFormAlerta({...formAlerta, repetir_mensalmente: e.target.checked})} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
                       <span className={`text-sm font-bold ${formAlerta.repetir_mensalmente ? 'text-[#d4af37]' : 'text-zinc-400'}`}>Repetir Todo Mês</span>
                     </label>
                     {formAlerta.repetir_mensalmente && (
@@ -1531,55 +1545,65 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* BLOCO 4: CONTROLE DE E-MAIL */}
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800 mt-2">
-                  <div className="w-full md:w-2/3 space-y-4">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <div className="relative">
-                        <input type="checkbox" checked={formAlerta.enviar_email} onChange={e => setFormAlerta({...formAlerta, enviar_email: e.target.checked})} className="sr-only" />
-                        <div className={`block w-10 h-6 rounded-full transition-colors ${formAlerta.enviar_email ? 'bg-emerald-500' : 'bg-zinc-700'}`}></div>
-                        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${formAlerta.enviar_email ? 'transform translate-x-4' : ''}`}></div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-white">Disparar E-mail</p>
-                        <p className="text-[10px] text-zinc-500">Notificar o cliente diretamente na sua caixa de entrada.</p>
-                      </div>
-                    </label>
-
-                    {formAlerta.enviar_email && (
-                      <div className="p-4 bg-[#1b263b] border border-zinc-800 rounded-lg space-y-3">
-                        <div className="flex flex-wrap gap-4 border-b border-zinc-700 pb-3">
-                          <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
-                            <input type="checkbox" checked={formAlerta.exibir_prazo_email} onChange={e => setFormAlerta({...formAlerta, exibir_prazo_email: e.target.checked})} className="accent-[#d4af37] w-3.5 h-3.5" />
-                            Incluir Prazo no E-mail
+                {/* BLOCO 4: OPÇÕES DE PUBLICAÇÃO E E-MAIL */}
+                <div className="bg-[#0d1b2a] p-5 rounded-lg border border-zinc-800 mt-5 space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* COLUNA 1: QUANDO PUBLICAR */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold text-[#d4af37] uppercase mb-1">Quando Publicar?</label>
+                      {!formAlerta.repetir_mensalmente ? (
+                        <>
+                          <label className="flex items-center gap-2 cursor-pointer w-full">
+                            <input type="checkbox" checked={formAlerta.enviar_agora} onChange={e => setFormAlerta({...formAlerta, enviar_agora: e.target.checked})} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
+                            <span className={`text-sm font-bold ${formAlerta.enviar_agora ? 'text-white' : 'text-zinc-400'}`}>Publicar Imediatamente no Portal</span>
                           </label>
-                          <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
-                            <input type="checkbox" checked={formAlerta.exibir_vencimento_email} onChange={e => setFormAlerta({...formAlerta, exibir_vencimento_email: e.target.checked})} className="accent-[#d4af37] w-3.5 h-3.5" />
-                            Incluir Vencimento no E-mail
-                          </label>
-                        </div>
+                          {!formAlerta.enviar_agora && (
+                            <div className="animate-pulse border-l-2 border-[#d4af37] pl-3 ml-2 mt-2">
+                              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Data Agendada para Publicação:</label>
+                              <input type="date" required={!formAlerta.enviar_agora} value={formAlerta.data_envio_programado} onChange={e => setFormAlerta({...formAlerta, data_envio_programado: e.target.value})} className="w-full max-w-[200px] bg-[#1b263b] border border-[#d4af37]/50 rounded px-3 py-1.5 text-xs text-white focus:outline-none cursor-pointer" />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-zinc-500 font-bold bg-[#1b263b] p-2 rounded text-center">Gerenciado pela Automação 🔁</p>
+                      )}
+                    </div>
 
-                        {!formAlerta.repetir_mensalmente && (
-                          <>
-                            <label className="flex items-center gap-2 cursor-pointer w-full">
-                              <input type="checkbox" checked={formAlerta.enviar_agora} onChange={e => setFormAlerta({...formAlerta, enviar_agora: e.target.checked})} className="accent-[#d4af37] w-4 h-4" />
-                              <span className={`text-sm font-bold ${formAlerta.enviar_agora ? 'text-[#d4af37]' : 'text-zinc-400'}`}>Enviar Imediatamente</span>
+                    {/* COLUNA 2: E-MAIL */}
+                    <div className="space-y-3">
+                        <label className="block text-xs font-bold text-[#d4af37] uppercase mb-1">Notificação por E-mail</label>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <div className="relative">
+                            <input type="checkbox" checked={formAlerta.enviar_email} onChange={e => setFormAlerta({...formAlerta, enviar_email: e.target.checked})} className="sr-only cursor-pointer" />
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${formAlerta.enviar_email ? 'bg-emerald-500' : 'bg-zinc-700'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${formAlerta.enviar_email ? 'transform translate-x-4' : ''}`}></div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white">Disparar E-mail ao Cliente</p>
+                          </div>
+                        </label>
+
+                        {formAlerta.enviar_email && (
+                          <div className="flex flex-wrap gap-4 border-l-2 border-emerald-500 pl-3 ml-2 mt-2">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+                              <input type="checkbox" checked={formAlerta.exibir_prazo_email} onChange={e => setFormAlerta({...formAlerta, exibir_prazo_email: e.target.checked})} className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+                              Incluir Prazo
                             </label>
-                            {!formAlerta.enviar_agora && (
-                              <div className="animate-pulse border-t border-zinc-700 pt-2 mt-2">
-                                <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Data Agendada para Envio do E-mail:</label>
-                                <input type="date" required={!formAlerta.enviar_agora} value={formAlerta.data_envio_programado} onChange={e => setFormAlerta({...formAlerta, data_envio_programado: e.target.value})} className="w-full bg-[#0d1b2a] border border-[#d4af37]/50 rounded px-3 py-1.5 text-xs text-white focus:outline-none" />
-                              </div>
-                            )}
-                          </>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+                              <input type="checkbox" checked={formAlerta.exibir_vencimento_email} onChange={e => setFormAlerta({...formAlerta, exibir_vencimento_email: e.target.checked})} className="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+                              Incluir Vencimento
+                            </label>
+                          </div>
                         )}
-                      </div>
-                    )}
+                    </div>
                   </div>
-
-                  <button type="submit" disabled={subindo || formAlerta.clientesSelecionados.length === 0} className="w-full md:w-auto bg-[#d4af37] text-[#0d1b2a] font-extrabold px-8 py-3.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.4)] disabled:opacity-50 disabled:cursor-not-allowed">
-                    {subindo ? 'A processar...' : (formAlerta.repetir_mensalmente ? 'Salvar Automação' : (formAlerta.enviar_email && !formAlerta.enviar_agora ? 'Agendar Disparo' : 'Confirmar e Enviar Agora'))}
-                  </button>
+                  
+                  <div className="flex justify-end pt-5 border-t border-zinc-800">
+                    <button type="submit" disabled={subindo || formAlerta.clientesSelecionados.length === 0} className="w-full md:w-auto bg-[#d4af37] text-[#0d1b2a] font-extrabold px-8 py-3.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.4)] disabled:opacity-50 disabled:cursor-not-allowed">
+                      {subindo ? 'A processar...' : (formAlerta.repetir_mensalmente ? 'Salvar Automação' : (!formAlerta.enviar_agora ? 'Agendar Publicação' : 'Confirmar e Publicar Agora'))}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -1625,6 +1649,7 @@ export default function AdminPage() {
                           )}
                           
                           <span className="text-xs font-bold text-zinc-300 truncate max-w-full">{alerta.clientes?.nome_empresa}</span>
+{alerta.responsavel && <span className="text-[10px] bg-[#1b263b] text-zinc-400 px-2 py-0.5 rounded border border-zinc-700 whitespace-nowrap">Resp: {alerta.responsavel.split(' ')[0]}</span>}
                         </div>
                         <p className="text-sm font-medium text-[#d4af37] mt-2 mb-1 truncate">{alerta.titulo} <span className="text-xs text-zinc-500 ml-1 font-normal">({alerta.tipo_documento})</span></p>
                         <div className="flex gap-3 items-center flex-wrap">
