@@ -105,16 +105,16 @@ export default function LoginPage() {
 
   // 2. Substitua a função handleInstalarApp inteira
   const handleInstalarApp = async (plataforma) => {
-    // Detecta se o dispositivo real do usuário é da Apple (iOS/iPadOS)
+    // Detecta se o dispositivo real do usuário é da Apple (iOS/iPadOS/Mac)
     const isAppleDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 
-    // Se clicou no botão da maçã, abre o modal normalmente
+    // Se clicou no botão da maçã, abre o modal
     if (plataforma === 'ios') {
       setMostrarModalIos(true);
       return;
     }
 
-    // Se o usuário está num iPhone/iPad e tenta clicar em Windows ou Android, bloqueia:
+    // Se o usuário está num Apple e tenta clicar em Windows ou Android, bloqueia:
     if (isAppleDevice && (plataforma === 'windows' || plataforma === 'android')) {
       mostrarToast('Esse formato é incompatível com seu dispositivo Apple.', 'aviso');
       return;
@@ -129,7 +129,8 @@ export default function LoginPage() {
       }
       setDeferredPrompt(null);
     } else {
-      mostrarToast(`Para instalar no ${plataforma === 'windows' ? 'Windows' : 'Android'}, procure o ícone de instalação na barra do seu navegador.`, 'aviso');
+      // Se caiu aqui, é porque o navegador não liberou o prompt (geralmente porque JÁ ESTÁ INSTALADO)
+      mostrarToast(`O app já pode estar instalado! Verifique sua área de trabalho, menu iniciar ou tela inicial.`, 'aviso');
     }
   };
   
