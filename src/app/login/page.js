@@ -100,10 +100,13 @@ export default function LoginPage() {
     setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 5000); // Aumentei para 5s para dar tempo de ler os passos
   }
 
-  // Lógica de clique nos botões de Instalar App
+  // 1. Adicione este estado junto aos outros 'useState' no início do componente
+  const [mostrarModalIos, setMostrarModalIos] = useState(false);
+
+  // 2. Substitua a função handleInstalarApp inteira
   const handleInstalarApp = async (plataforma) => {
     if (plataforma === 'ios') {
-      mostrarToast('No iPhone: Toque no botão Compartilhar (seta para cima) e depois em "Adicionar à Tela de Início".', 'aviso');
+      setMostrarModalIos(true);
       return;
     }
 
@@ -116,8 +119,7 @@ export default function LoginPage() {
       }
       setDeferredPrompt(null);
     } else {
-      // Fallback caso o navegador já tenha instalado ou não suporte
-      mostrarToast(`Para instalar no ${plataforma === 'windows' ? 'Windows' : 'Android'}, procure o ícone de instalação na barra superior ou no menu do seu navegador.`, 'aviso');
+      mostrarToast(`Para instalar no ${plataforma === 'windows' ? 'Windows' : 'Android'}, procure o ícone de instalação na barra do seu navegador.`, 'aviso');
     }
   };
   
@@ -382,6 +384,24 @@ export default function LoginPage() {
           </div>
         ))}
       </div>
+
+      {/* MODAL EXPLICATIVO PARA IOS */}
+      {mostrarModalIos && (
+        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/90 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-zinc-700 max-w-sm w-full shadow-2xl relative">
+            <button onClick={() => setMostrarModalIos(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white">✕</button>
+            <h3 className="text-xl font-bold text-white mb-4 text-center">Instalar no iPhone</h3>
+            <div className="space-y-4 text-zinc-300 text-sm">
+              <p>1. Toque no botão <span className="font-bold text-[#d4af37]">Compartilhar</span> no Safari.</p>
+              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 flex items-center justify-center">
+                <i className="fas fa-share-from-square text-2xl text-[#d4af37]"></i>
+              </div>
+              <p>2. Role para baixo e selecione <span className="font-bold text-[#d4af37]">"Adicionar à Tela de Início"</span>.</p>
+            </div>
+            <button onClick={() => setMostrarModalIos(false)} className="w-full mt-6 bg-[#d4af37] text-[#0d1b2a] font-bold py-3 rounded-lg hover:bg-yellow-500 transition">Entendido</button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
