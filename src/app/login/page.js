@@ -391,14 +391,22 @@ export default function LoginPage() {
           <div className="bg-[#1b263b] p-8 rounded-2xl border border-zinc-700 max-w-sm w-full shadow-2xl relative">
             <button onClick={() => setMostrarModalIos(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white">✕</button>
             <h3 className="text-xl font-bold text-white mb-4 text-center">Instalar no iPhone</h3>
-            <div className="space-y-4 text-zinc-300 text-sm">
-              <p>1. Toque no botão <span className="font-bold text-[#d4af37]">Compartilhar</span> no Safari.</p>
-              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 flex items-center justify-center">
-                <i className="fas fa-share-from-square text-2xl text-[#d4af37]"></i>
-              </div>
-              <p>2. Role para baixo e selecione <span className="font-bold text-[#d4af37]">"Adicionar à Tela de Início"</span>.</p>
+            
+            <div className="space-y-5 text-zinc-300 text-sm leading-relaxed">
+              <p>
+                1. No Safari, toque em <span className="font-bold text-[#d4af37]">Compartilhar</span> <i className="fas fa-arrow-up-from-bracket text-[#d4af37] ml-1"></i>.
+              </p>
+              <p>
+                2. Role as opções e toque em <span className="font-bold text-[#d4af37]">Ver mais</span> <i className="fas fa-ellipsis text-[#d4af37] ml-1"></i> se necessário.
+              </p>
+              <p>
+                3. Escolha <span className="font-bold text-[#d4af37]">Adicionar à Tela de Início</span> <i className="fas fa-square-plus text-[#d4af37] ml-1"></i>.
+              </p>
             </div>
-            <button onClick={() => setMostrarModalIos(false)} className="w-full mt-6 bg-[#d4af37] text-[#0d1b2a] font-bold py-3 rounded-lg hover:bg-yellow-500 transition">Entendido</button>
+
+            <button onClick={() => setMostrarModalIos(false)} className="w-full mt-8 bg-[#d4af37] text-[#0d1b2a] font-bold py-3 rounded-lg hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+              Entendido
+            </button>
           </div>
         </div>
       )}
