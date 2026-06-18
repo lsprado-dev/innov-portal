@@ -106,17 +106,6 @@ export default function LoginPage() {
       mostrarToast('No iPhone: Toque no botão Compartilhar (seta para cima) e depois em "Adicionar à Tela de Início".', 'aviso');
       return;
     }
-    
-    if (plataforma === 'mac') {
-      mostrarToast('No Safari do Mac: Vá em Arquivo > "Adicionar ao Dock". No Chrome: Use o ícone de baixar na barra de endereços.', 'aviso');
-      // Se ele estiver no Chrome do Mac, a instalação nativa pode funcionar:
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        setDeferredPrompt(null);
-      }
-      return;
-    }
 
     // Windows e Android (A Mágica acontece aqui!)
     if (deferredPrompt) {
@@ -281,18 +270,15 @@ export default function LoginPage() {
             {/* BARRA DE INSTALAÇÃO DO APLICATIVO */}
             <div className="mt-8 pt-6 border-t border-zinc-800/60">
               <p className="text-center text-[10px] text-zinc-500 font-bold uppercase mb-4 tracking-widest">Instalar App Oficial</p>
-              <div className="flex justify-center gap-3">
+              <div className="flex justify-center gap-4">
                 <button type="button" onClick={() => handleInstalarApp('windows')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no Windows">
                   <i className="fab fa-windows text-sm"></i>
-                </button>
-                <button type="button" onClick={() => handleInstalarApp('mac')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no Mac">
-                  <i className="fab fa-apple text-sm"></i>
                 </button>
                 <button type="button" onClick={() => handleInstalarApp('android')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no Android">
                   <i className="fab fa-android text-sm"></i>
                 </button>
                 <button type="button" onClick={() => handleInstalarApp('ios')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no iPhone">
-                  <i className="fas fa-mobile-alt text-sm"></i>
+                  <i className="fab fa-apple text-sm"></i>
                 </button>
               </div>
             </div>
