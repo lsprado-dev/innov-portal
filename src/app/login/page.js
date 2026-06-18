@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
 
@@ -7,41 +7,35 @@ import { useRouter } from 'next/navigation';
 // FUNÇÕES DE VALIDAÇÃO E MÁSCARA (UX AVANÇADA)
 // ==========================================
 
-// 0. Função de Criptografia Reversível para proteção no banco de dados
 const encriptarSenha = (text) => {
   if (!text) return '';
   return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
 };
-// 1. Máscara de CNPJ: 00.000.000/0001-00
+
 const maskCNPJ = (value) => {
   return value
-    .replace(/\D/g, '') // Remove tudo o que não é dígito
-    .replace(/^(\d{2})(\d)/, '$1.$2') // Coloca ponto após os dois primeiros dígitos
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3') // Coloca ponto após o quinto dígito
-    .replace(/\.(\d{3})(\d)/, '.$1/$2') // Coloca a barra após o oitavo dígito
-    .replace(/(\d{4})(\d)/, '$1-$2') // Coloca o traço antes dos últimos 2 dígitos
-    .substring(0, 18); // Limita o tamanho máximo a 18 caracteres
+    .replace(/\D/g, '')
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+    .substring(0, 18);
 };
 
-// 2. Máscara de Celular: (00) 00000-0000
 const maskCelular = (value) => {
   return value
-    .replace(/\D/g, '') // Remove tudo o que não é dígito
-    .replace(/^(\d{2})(\d)/g, '($1) $2') // Coloca parênteses em volta dos 2 primeiros dígitos
-    .replace(/(\d)(\d{4})$/, '$1-$2') // Coloca traço entre o 5º e o 4º dígito final
-    .substring(0, 15); // Limita o tamanho máximo a 15 caracteres
+    .replace(/\D/g, '')
+    .replace(/^(\d{2})(\d)/g, '($1) $2')
+    .replace(/(\d)(\d{4})$/, '$1-$2')
+    .substring(0, 15);
 };
 
-// 3. Validador Real de CNPJ (Algoritmo da Receita Federal)
 const validarCNPJ = (cnpj) => {
   cnpj = cnpj.replace(/[^\d]+/g, '');
   if (cnpj == '') return false;
   if (cnpj.length != 14) return false;
-
-  // Elimina CNPJs inválidos conhecidos
   if (/^(\d)\1+$/.test(cnpj)) return false;
 
-  // Valida DVs
   let tamanho = cnpj.length - 2;
   let numeros = cnpj.substring(0, tamanho);
   let digitos = cnpj.substring(tamanho);
@@ -68,7 +62,6 @@ const validarCNPJ = (cnpj) => {
   return true;
 };
 
-// Validador simples de E-mail (Requer @ e ponto)
 const validarEmail = (email) => {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
@@ -88,12 +81,56 @@ export default function LoginPage() {
   const [toasts, setToasts] = useState([]);
   const [carregando, setCarregando] = useState(false);
 
-  // FUNÇÃO MÁGICA DOS TOASTS
+  // Gatilho do PWA (Instalação nativa)
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  // Captura o evento nativo de instalação do navegador assim que a página carrega
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
   function mostrarToast(mensagem, tipo = 'sucesso') {
     const id = Date.now();
     setToasts(prev => [...prev, { id, mensagem, tipo }]);
-    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
+    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 5000); // Aumentei para 5s para dar tempo de ler os passos
   }
+
+  // Lógica de clique nos botões de Instalar App
+  const handleInstalarApp = async (plataforma) => {
+    if (plataforma === 'ios') {
+      mostrarToast('No iPhone: Toque no botão Compartilhar (seta para cima) e depois em "Adicionar à Tela de Início".', 'aviso');
+      return;
+    }
+    
+    if (plataforma === 'mac') {
+      mostrarToast('No Safari do Mac: Vá em Arquivo > "Adicionar ao Dock". No Chrome: Use o ícone de baixar na barra de endereços.', 'aviso');
+      // Se ele estiver no Chrome do Mac, a instalação nativa pode funcionar:
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        setDeferredPrompt(null);
+      }
+      return;
+    }
+
+    // Windows e Android (A Mágica acontece aqui!)
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        mostrarToast('Instalação concluída com sucesso!', 'sucesso');
+      }
+      setDeferredPrompt(null);
+    } else {
+      // Fallback caso o navegador já tenha instalado ou não suporte
+      mostrarToast(`Para instalar no ${plataforma === 'windows' ? 'Windows' : 'Android'}, procure o ícone de instalação na barra superior ou no menu do seu navegador.`, 'aviso');
+    }
+  };
   
   // Estados do Cadastro
   const [formCadastro, setFormCadastro] = useState({
@@ -220,24 +257,47 @@ export default function LoginPage() {
         </div>
 
         {modo === 'login' ? (
-          <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">E-mail de acesso</label>
-              <input type="text" required placeholder="Ex: lucas@innovbusiness.com" value={emailLogin} onChange={(e) => setEmailLogin(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Senha</label>
-              <input type="password" required placeholder="••••••••" value={senha} onChange={(e) => setSenha(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
-            </div>
-            <button type="submit" disabled={carregando} className="w-full bg-[#d4af37] text-[#0d1b2a] font-extrabold py-3.5 rounded-lg hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.3)] mt-2">
-              {carregando ? 'A Autenticar...' : 'Acessar o Portal'}
-            </button>
+          <div className="animate-in fade-in duration-300">
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">E-mail de acesso</label>
+                <input type="text" required placeholder="Ex: lucas@innovbusiness.com" value={emailLogin} onChange={(e) => setEmailLogin(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Senha</label>
+                <input type="password" required placeholder="••••••••" value={senha} onChange={(e) => setSenha(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#d4af37] transition-colors" />
+              </div>
+              <button type="submit" disabled={carregando} className="w-full bg-[#d4af37] text-[#0d1b2a] font-extrabold py-3.5 rounded-lg hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.3)] mt-2">
+                {carregando ? 'A Autenticar...' : 'Acessar o Portal'}
+              </button>
+            </form>
+
             <div className="text-center mt-6 pt-4 border-t border-zinc-800/60">
               <button type="button" onClick={() => setModo('cadastro')} className="text-sm text-zinc-400 hover:text-[#d4af37] transition font-medium">
                 É cliente e ainda não tem acesso? <span className="text-[#d4af37] font-bold underline">Solicite Aqui</span>
               </button>
             </div>
-          </form>
+
+            {/* BARRA DE INSTALAÇÃO DO APLICATIVO */}
+            <div className="mt-8 pt-6 border-t border-zinc-800/60">
+              <p className="text-center text-[10px] text-zinc-500 font-bold uppercase mb-4 tracking-widest">Instalar App Oficial</p>
+              <div className="flex justify-center gap-3">
+                <button type="button" onClick={() => handleInstalarApp('windows')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no Windows">
+                  <i className="fab fa-windows text-sm"></i>
+                </button>
+                <button type="button" onClick={() => handleInstalarApp('mac')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no Mac">
+                  <i className="fab fa-apple text-sm"></i>
+                </button>
+                <button type="button" onClick={() => handleInstalarApp('android')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no Android">
+                  <i className="fab fa-android text-sm"></i>
+                </button>
+                <button type="button" onClick={() => handleInstalarApp('ios')} className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center hover:bg-[#d4af37]/10 hover:border-[#d4af37] hover:text-[#d4af37] transition" aria-label="Instalar no iPhone">
+                  <i className="fas fa-mobile-alt text-sm"></i>
+                </button>
+              </div>
+            </div>
+
+          </div>
         ) : (
           <form onSubmit={handleSolicitarConta} className="space-y-5 animate-in fade-in zoom-in-95 duration-300">
             <div className="mb-6 border-b border-zinc-800 pb-4 flex justify-between items-end">
