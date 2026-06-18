@@ -17,6 +17,12 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR">
+      <head>
+        <link 
+          rel="stylesheet" 
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" 
+        />
+      </head>
       <body className="bg-[#0d1b2a] text-white min-h-screen flex flex-col">
         
         <PwaRegistrador /> {/* <-- 2. ADICIONEI ESTA LINHA AQUI */}
