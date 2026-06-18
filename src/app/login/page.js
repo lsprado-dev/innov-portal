@@ -105,8 +105,18 @@ export default function LoginPage() {
 
   // 2. Substitua a função handleInstalarApp inteira
   const handleInstalarApp = async (plataforma) => {
+    // Detecta se o dispositivo real do usuário é da Apple (iOS/iPadOS)
+    const isAppleDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+
+    // Se clicou no botão da maçã, abre o modal normalmente
     if (plataforma === 'ios') {
       setMostrarModalIos(true);
+      return;
+    }
+
+    // Se o usuário está num iPhone/iPad e tenta clicar em Windows ou Android, bloqueia:
+    if (isAppleDevice && (plataforma === 'windows' || plataforma === 'android')) {
+      mostrarToast('Esse formato é incompatível com seu dispositivo Apple.', 'aviso');
       return;
     }
 
