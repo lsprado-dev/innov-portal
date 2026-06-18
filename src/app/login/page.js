@@ -407,7 +407,7 @@ export default function LoginPage() {
                 1. No Safari, toque em <span className="font-bold text-[#d4af37]">Compartilhar</span> <i className="fas fa-arrow-up-from-bracket text-[#d4af37] ml-1"></i>.
               </p>
               <p>
-                2. Role as opções e toque em <span className="font-bold text-[#d4af37]">Ver mais</span> <i className="fas fa-ellipsis text-[#d4af37] ml-1"></i> se necessário.
+                2. Role as opções e toque em <span className="font-bold text-[#d4af37]">Ver mais</span> <i className="fas fa-ellipsis text-[#d4af37] ml-1"></i>
               </p>
               <p>
                 3. Escolha <span className="font-bold text-[#d4af37]">Adicionar à Tela de Início</span> <i className="fas fa-square-plus text-[#d4af37] ml-1"></i>.
