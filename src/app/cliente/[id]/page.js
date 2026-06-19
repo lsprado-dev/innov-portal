@@ -1574,19 +1574,21 @@ function handleReabrirSolicitacao(pedidoAbaixo) {
                         
                         {/* Se tiver arquivo anexo na resposta */}
                         {pedido.caminho_arquivo_resposta && (
-                          <div className="flex items-center gap-3 pt-3 border-t border-zinc-800/60">
-                            <IconFile />
-                            <span className="text-xs text-zinc-300 truncate max-w-[200px]">{pedido.nome_arquivo_resposta}</span>
-                            <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="text-xs bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-1.5 rounded transition font-bold shadow-sm">
-                              Baixar Anexo
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t border-zinc-800/60 mt-2">
+                            <div className="flex items-center gap-2 overflow-hidden w-full">
+                              <IconClip />
+                              <span className="text-xs text-zinc-300 truncate font-mono">{pedido.nome_arquivo_resposta}</span>
+                            </div>
+                            <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="w-full sm:w-auto text-xs bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-4 py-2 rounded-lg transition font-extrabold shadow-sm whitespace-nowrap">
+                              Baixar Documento
                             </button>
                           </div>
                         )}
 
                         {!isInterno && (
-                          <div className="flex justify-end mt-4 pt-3 border-t border-zinc-800/60">
-                            <button onClick={() => handleReabrirSolicitacao(pedido)} className="text-[11px] text-zinc-400 hover:text-white transition underline font-medium">
-                              Ainda com dúvida? Fazer nova solicitação sobre isso.
+                          <div className="flex justify-end mt-4 pt-4 border-t border-zinc-800/60">
+                            <button onClick={() => handleReabrirSolicitacao(pedido)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-600 px-4 py-2 rounded-lg transition font-bold shadow-sm">
+                              Ainda tem dúvidas? Clique aqui para reabrir o assunto
                             </button>
                           </div>
                         )}

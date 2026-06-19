@@ -243,10 +243,10 @@ export default function AdminPage() {
       .limit(500);
     if (resRecebidos.data) setRecebidos(resRecebidos.data);
 
+    // Removemos o .eq('status', 'pendente') para puxar TODAS as solicitações (histórico completo)
     const resPedidos = await supabase
       .from('pedidos_cliente')
       .select('*, clientes(nome_empresa)')
-      .eq('status', 'pendente')
       .order('criado_em', { ascending: false })
       .limit(300);
     if (resPedidos.data) setPedidosCliente(resPedidos.data);
@@ -1459,16 +1459,39 @@ export default function AdminPage() {
                         </div>
 
                         <span className="text-[11px] text-zinc-500">{new Date(pedido.criado_em).toLocaleString('pt-BR')}</span>
+                        {pedido.status === 'atendido' && (
+                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 ml-2">
+                            ✓ Respondido
+                          </span>
+                        )}
                       </div>
-                     <p className="text-sm text-zinc-200 font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
-  &ldquo;{pedido.descricao}&rdquo;
-</p>
+                      <p className="text-sm text-zinc-200 font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
+                        &ldquo;{pedido.descricao}&rdquo;
+                      </p>
+                      
+                      {/* Mostra a resposta da equipa para o Admin lembrar o que foi dito */}
+                      {pedido.status === 'atendido' && (
+                        <div className="mt-3 pl-4 border-l-2 border-[#d4af37]">
+                           <p className="text-[10px] text-[#d4af37] font-bold uppercase mb-1">Resposta da Equipa:</p>
+                           <p className="text-xs text-zinc-400 italic">{pedido.resposta || 'Respondido e finalizado.'}</p>
+                           {pedido.caminho_arquivo_resposta && (
+                             <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="mt-2 text-[10px] bg-zinc-800 text-white px-3 py-1.5 rounded hover:bg-zinc-700 transition">
+                               📥 Baixar Anexo Enviado
+                             </button>
+                           )}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex gap-2 w-full md:w-auto whitespace-nowrap mt-2 md:mt-0">
-                      <Link href={`/cliente/${pedido.cliente_id}`} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm text-center">
+                    <div className="flex gap-2 w-full md:w-auto whitespace-nowrap mt-2 md:mt-0 flex-col sm:flex-row items-end">
+                      <Link href={`/cliente/${pedido.cliente_id}`} className="flex-1 w-full md:w-auto border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm text-center">
                         Acessar Perfil
                       </Link>
-                      <button onClick={() => setModalRespostaPedido({ aberto: true, pedido, texto: '', arquivo: null })} className="flex-1 md:flex-none bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-2.5 rounded-lg text-xs hover:bg-yellow-500 transition shadow-lg">Responder e Finalizar</button>
+                      {/* Só mostra o botão de responder se ainda estiver pendente */}
+                      {pedido.status === 'pendente' && (
+                        <button onClick={() => setModalRespostaPedido({ aberto: true, pedido, texto: '', arquivo: null })} className="flex-1 w-full md:w-auto bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-2.5 rounded-lg text-xs hover:bg-yellow-500 transition shadow-lg">
+                          Responder e Finalizar
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
