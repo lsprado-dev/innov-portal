@@ -515,12 +515,26 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
-  // NOVO: Função para o colaborador corrigir/mover a área do pedido
-  async function alterarDepartamentoPedido(id, novoDepartamento) {
+  // NOVO: Função para o colaborador corrigir/mover a área do pedido E AVISAR POR EMAIL
+  async function alterarDepartamentoPedido(pedido, novoDepartamento) {
     setSubindo(true);
-    const { error } = await supabase.from('pedidos_cliente').update({ departamento: novoDepartamento }).eq('id', id);
+    const { error } = await supabase.from('pedidos_cliente').update({ departamento: novoDepartamento }).eq('id', pedido.id);
     if (!error) {
       mostrarToast(`Solicitação movida para a equipa: ${novoDepartamento}`, 'sucesso');
+      
+      // Dispara o email automático para a nova área assumir o B.O.
+      const emailDestino = MAPA_DEPARTAMENTO_EMAIL[novoDepartamento];
+      if (emailDestino) {
+         enviarEmailDemanda({
+            to: emailDestino,
+            nomeDestinatario: `Equipa ${novoDepartamento}`,
+            nomeRemetente: operador,
+            tituloDemanda: `Transferência de Ticket - ${pedido.clientes?.nome_empresa || 'Cliente'}`,
+            descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi transferido para o seu departamento. Acesse o painel para responder.`,
+            prazo: 'Aguardando Análise'
+         }).catch(()=>{});
+      }
+
       await carregarDados();
     } else {
       mostrarToast('Erro ao mover a solicitação.', 'erro');
@@ -1513,7 +1527,7 @@ export default function AdminPage() {
                           <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
                           <select 
                             value={pedido.departamento || 'Outros'} 
-                            onChange={(e) => alterarDepartamentoPedido(pedido.id, e.target.value)}
+                            onChange={(e) => alterarDepartamentoPedido(pedido, e.target.value)}
                             className="bg-transparent text-[#d4af37] text-[11px] font-bold py-1 focus:outline-none cursor-pointer tracking-wider uppercase"
                           >
                             <option value="Contábil" className="bg-[#0d1b2a]">Contábil</option>
@@ -1536,12 +1550,14 @@ export default function AdminPage() {
                       <p className={`text-sm font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50 ${pedido.status === 'pendente' ? 'text-zinc-200' : 'text-zinc-400'}`}>
                         &ldquo;{pedido.descricao}&rdquo;
                       </p>
+
                       {/* Anexo enviado pelo cliente */}
                       {pedido.caminho_arquivo && (
                         <div className="mt-2 flex items-center gap-2 border border-zinc-700/50 bg-[#0d1b2a] w-max px-3 py-1.5 rounded-lg">
                           <span className="text-[10px] font-bold text-zinc-500 uppercase">Anexo do Cliente:</span>
                           <span className="text-[11px] text-zinc-400 max-w-[150px] truncate">{pedido.nome_arquivo}</span>
-                          <button onClick={(e) => { e.preventDefault(); baixarDocumento(pedido.caminho_arquivo, pedido.nome_arquivo); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded transition ml-2">Baixar</button>
+                          <button onClick={(e) => { e.preventDefault(); visualizarDocumento(pedido.caminho_arquivo); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded transition ml-2">Visualizar</button>
+                          <button onClick={(e) => { e.preventDefault(); baixarDocumento(pedido.caminho_arquivo, pedido.nome_arquivo); }} className="text-[10px] bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 hover:bg-[#d4af37]/20 px-2 py-1 rounded transition">Baixar</button>
                         </div>
                       )}
                       

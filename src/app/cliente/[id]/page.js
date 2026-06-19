@@ -10,6 +10,33 @@ const OBTER_EMAIL_FUNCIONARIO = {
   'Lucas (Financeiro)': 'lucas@innovbusiness.com.br'
 };
 
+const MAPA_DEPARTAMENTO_EMAIL = {
+  'Contábil': 'contabil@innovbusiness.com.br',
+  'Fiscal': 'fiscal@innovbusiness.com.br',
+  'DP / RH': 'rh@innovbusiness.com.br',
+  'Financeiro': 'lucas@innovbusiness.com.br',
+  'Societário': 'societario@innovbusiness.com.br',
+  'Legalização': 'societario@innovbusiness.com.br',
+  'Outros': 'suporte@innovbusiness.com.br',
+  'Outros / Dúvida Geral': 'suporte@innovbusiness.com.br',
+  'Outros / Suporte': 'suporte@innovbusiness.com.br'
+};
+
+// Função para avisar a equipa automaticamente
+function notificarEquipaDepto(depto, nomeEmpresa, assunto) {
+  const email = MAPA_DEPARTAMENTO_EMAIL[depto];
+  if(email) {
+    enviarEmailDemanda({
+      to: email,
+      nomeDestinatario: `Equipa ${depto}`,
+      nomeRemetente: nomeEmpresa,
+      tituloDemanda: assunto,
+      descricao: `O cliente ${nomeEmpresa} enviou uma nova interação no Portal. Acesse o sistema para verificar.`,
+      prazo: 'Aguardando Análise'
+    }).catch(()=>{}); // Ignora erros para não travar a tela
+  }
+}
+
 // Função de Criptografia Reversível para salvar de forma segura no Supabase
 const encriptarSenha = (text) => {
   if (!text) return '';
@@ -350,9 +377,8 @@ export default function ClientePage({ params: paramsPromise }) {
   useEffect(() => {
     setBusca(''); 
     setMostrarAutocomplete(false);
-    setSelecionados([]); // Limpa a seleção ao trocar de aba
+    setSelecionados([]); 
     
-    // Reset da subpasta ao trocar de aba principal ou setor
     if (abaPrincipal === 'pastas') {
       setSubpastaAtiva(null);
     }
@@ -362,21 +388,21 @@ export default function ClientePage({ params: paramsPromise }) {
 
   // NOVO: ATUALIZAÇÃO OTIMISTA (A bolinha verde some no exato milissegundo em que o cliente abre a pasta)
   useEffect(() => {
-    if (isInterno || abaPrincipal !== 'pastas' || !pastaAtiva || arquivosNaoLidos.length === 0) return;
+    if (isInterno || abaPrincipal !== 'pastas' || !pastaAtiva) return;
     
-    // Procura se tem ficheiros novos exatamente na tela que o cliente está a ver agora
-    const naTela = arquivosNaoLidos.filter(a => a.setor === pastaAtiva && (a.subpasta_id || null) === (subpastaAtiva || null));
-    
-    if (naTela.length > 0) {
-      const ids = naTela.map(a => a.id);
-      // 1. Apaga do ecrã IMEDIATAMENTE (A bolinha some na hora, antes mesmo do servidor responder)
-      setArquivosNaoLidos(prev => prev.filter(a => !ids.includes(a.id)));
-      setArquivos(prev => prev.map(a => ids.includes(a.id) ? { ...a, visualizado_cliente: true } : a));
-      
-      // 2. Avisa o banco de dados em silêncio no fundo
-      supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids).then();
-    }
-  }, [pastaAtiva, subpastaAtiva, arquivosNaoLidos, isInterno, abaPrincipal]);
+    setArquivosNaoLidos(prev => {
+      const naTela = prev.filter(a => a.setor === pastaAtiva && (a.subpasta_id || null) === (subpastaAtiva || null));
+      if (naTela.length > 0) {
+        const ids = naTela.map(a => a.id);
+        // 1. Apaga visualmente no mesmo instante
+        setArquivos(arqPrev => arqPrev.map(a => ids.includes(a.id) ? { ...a, visualizado_cliente: true } : a));
+        // 2. Envia pro banco em background sem travar a tela
+        supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids).then();
+        return prev.filter(a => !ids.includes(a.id));
+      }
+      return prev;
+    });
+  }, [pastaAtiva, subpastaAtiva, isInterno, abaPrincipal]);
 
   async function atualizarBadgeGlobal(clienteId) {
     if (!clienteId) return;
@@ -1037,6 +1063,7 @@ export default function ClientePage({ params: paramsPromise }) {
       nome_arquivo: nomeOriginal
     }]);
 
+    notificarEquipaDepto(departamentoPedido, cliente?.nome_empresa, 'Novo Ticket Aberto');
     mostrarToast(`A sua solicitação foi enviada para o departamento ${departamentoPedido}!`, 'sucesso');
     setNovoPedido('');
     setArquivoPedido(null);
@@ -1044,22 +1071,24 @@ export default function ClientePage({ params: paramsPromise }) {
     carregarDadosDaAba();
     setSubindoArquivo(false);
   }
-async function handleEnviarReplica(pedidoOriginal) {
+
+  async function handleEnviarReplica(pedidoOriginal) {
     if (!textoReplica.trim()) return;
     setSubindoArquivo(true);
 
-    // Cria um novo card pendente para o Admin, mas mantendo a referência visual
+    const depto = pedidoOriginal.departamento || 'Contábil';
     const textoFormatado = `[Continuação do Pedido de ${new Date(pedidoOriginal.criado_em).toLocaleDateString('pt-BR')}]:\n\n${textoReplica.trim()}`;
 
     const { error } = await supabase.from('pedidos_cliente').insert([{ 
       cliente_id: id, 
       descricao: textoFormatado, 
       status: 'pendente',
-      departamento: pedidoOriginal.departamento || 'Contábil' 
+      departamento: depto 
     }]);
 
     if (!error) {
-      mostrarToast('Nova dúvida enviada com sucesso para a equipa!', 'sucesso');
+      notificarEquipaDepto(depto, cliente?.nome_empresa, 'Resposta de Cliente (Ticket)');
+      mostrarToast('Nova mensagem enviada com sucesso para a equipa!', 'sucesso');
       setChamadoReabrindo(null);
       setTextoReplica('');
       carregarDadosDaAba();
@@ -1559,7 +1588,7 @@ async function handleEnviarReplica(pedidoOriginal) {
                               </>
                             )}
                             {!isInterno && (
-                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-zinc-300 font-bold transition-all shadow-sm whitespace-nowrap">❓ Dúvida</button>
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-4 py-2.5 rounded-lg text-[#d4af37] font-bold transition-all shadow-sm whitespace-nowrap">🎧 Suporte</button>
                             )}
                             <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
                             <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
@@ -2334,7 +2363,7 @@ async function handleEnviarReplica(pedidoOriginal) {
         <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
           <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
-              <h3 className="text-lg font-bold text-[#d4af37]">Dúvida sobre Documento</h3>
+              <h3 className="text-lg font-bold text-[#d4af37]">Solicitar Suporte</h3>
               <button type="button" onClick={() => setModalDuvidaArquivo({ aberto: false, arquivo: null, texto: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
             <form onSubmit={handleEnviarDuvidaArquivo} className="p-5 space-y-4">
@@ -2343,12 +2372,12 @@ async function handleEnviarReplica(pedidoOriginal) {
                 <span className="text-xs text-zinc-300 font-mono truncate">{modalDuvidaArquivo.arquivo?.nome_original}</span>
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Escreva sua dúvida:</label>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Em que podemos ajudar com este documento?</label>
                 <textarea 
                   rows="4" 
                   autoFocus
                   required
-                  placeholder="O que você não entendeu sobre este documento?" 
+                  placeholder="Escreva a sua mensagem para a nossa equipa..." 
                   value={modalDuvidaArquivo.texto} 
                   onChange={(e) => setModalDuvidaArquivo({...modalDuvidaArquivo, texto: e.target.value})}
                   className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
@@ -2357,7 +2386,7 @@ async function handleEnviarReplica(pedidoOriginal) {
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setModalDuvidaArquivo({ aberto: false, arquivo: null, texto: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
-                  {subindoArquivo ? 'A enviar...' : 'Enviar Dúvida'}
+                  {subindoArquivo ? 'A enviar...' : 'Enviar para Suporte'}
                 </button>
               </div>
             </form>
