@@ -1466,7 +1466,7 @@ export default function ClientePage({ params: paramsPromise }) {
                    </div>
                    {isInterno && (
                      <button onClick={() => setModalTextoPasta({ aberto: true, setor: pastaAtiva, texto: textosPastas[pastaAtiva] || '' })} className="flex-shrink-0 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded border border-zinc-700 transition font-bold shadow-sm">
-                       ✏️ Editar Texto
+                       Editar Texto
                      </button>
                    )}
                 </div>
@@ -1588,7 +1588,7 @@ export default function ClientePage({ params: paramsPromise }) {
                               </>
                             )}
                             {!isInterno && (
-                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-4 py-2.5 rounded-lg text-[#d4af37] font-bold transition-all shadow-sm whitespace-nowrap">🎧 Suporte</button>
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-4 py-2.5 rounded-lg text-[#d4af37] font-bold transition-all shadow-sm whitespace-nowrap">Suporte</button>
                             )}
                             <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
                             <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
