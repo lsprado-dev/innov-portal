@@ -116,6 +116,10 @@ function calcularDiasLixeira(dataISO) {
   return restantes < 0 ? 0 : restantes;
 }
 
+const maskCNPJ = (value) => value.replace(/\D/g, '').replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2').substring(0, 18);
+const maskCelular = (value) => value.replace(/\D/g, '').replace(/^(\d{2})(\d)/g, '($1) $2').replace(/(\d)(\d{4})$/, '$1-$2').substring(0, 15);
+const validarCNPJ = (cnpj) => cnpj.replace(/[^\d]+/g, '').length === 14;
+
 export default function ClientePage({ params: paramsPromise }) {
   const router = useRouter();
   const params = use(paramsPromise);
@@ -252,6 +256,13 @@ export default function ClientePage({ params: paramsPromise }) {
   const [mostrarFormLink, setMostrarFormLink] = useState(false);
   const [formLink, setFormLink] = useState({ titulo: '', url: '', descricao: '' });
 
+  // ESTADOS PARA VÍNCULO DE MÚLTIPLOS CNPJS (ACCOUNT SWITCHER)
+  const [mostrarFormVinculo, setMostrarFormVinculo] = useState(false);
+  const [formVinculo, setFormVinculo] = useState({ cnpj: '', nome_empresa: '', nome_contato: '', email: '', celular: '', regime_tributario: '' });
+  const [statusBuscaCnpj, setStatusBuscaCnpj] = useState('ocioso'); // ocioso, buscando, encontrado, nao_encontrado
+  const [empresasLigadas, setEmpresasLigadas] = useState([]);
+  const [mostrarSwitcher, setMostrarSwitcher] = useState(false);
+
   const [alertasSemArquivo, setAlertasSemArquivo] = useState({});
   const [boletosSolicitados, setBoletosSolicitados] = useState([]); // Memória anti-spam
   const [mensalidadesPagas, setMensalidadesPagas] = useState([]); // Memória do checkbox
@@ -354,6 +365,12 @@ export default function ClientePage({ params: paramsPromise }) {
       
       const { data: nLidos } = await supabase.from('arquivos_portal').select('id, setor, subpasta_id').eq('cliente_id', id).is('visualizado_cliente', false);
       if (nLidos) setArquivosNaoLidos(nLidos);
+
+      // NOVO: Puxa o Account Switcher (Empresas Vinculadas)
+      if (data.empresas_vinculadas && data.empresas_vinculadas.length > 0) {
+        const { data: ligadas } = await supabase.from('clientes').select('id, nome_empresa, cnpj').in('id', data.empresas_vinculadas);
+        if (ligadas) setEmpresasLigadas(ligadas);
+      }
     }
     carregarCliente();
   }, [id, router]);
@@ -957,6 +974,55 @@ export default function ClientePage({ params: paramsPromise }) {
     router.push('/login');
   }
 
+  // LOGICA DO MULTI-CNPJ
+  async function handleBuscarCnpjVinculo(e) {
+    e.preventDefault();
+    if (formVinculo.cnpj.length < 18) return mostrarToast('Preencha o CNPJ completo.', 'erro');
+    setStatusBuscaCnpj('buscando');
+    
+    // Verifica se a empresa já existe na plataforma
+    const { data, error } = await supabase.from('clientes').select('id, nome_empresa').eq('cnpj', formVinculo.cnpj).single();
+    
+    if (data) {
+      // Existe! Guarda apenas para exibição e aprovação do Admin
+      setFormVinculo(prev => ({ ...prev, nome_empresa: data.nome_empresa }));
+      setStatusBuscaCnpj('encontrado');
+    } else {
+      // Não existe! Cliente terá de preencher o resto para o Admin criar
+      setStatusBuscaCnpj('nao_encontrado');
+    }
+  }
+
+  async function handleSolicitarVinculo(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    
+    const tipo = statusBuscaCnpj === 'encontrado' ? 'vinculo_existente' : 'novo_vinculo';
+    
+    const payload = {
+      vinculo_origem_id: cliente.id,
+      tipo_solicitacao: tipo,
+      cnpj: formVinculo.cnpj,
+      nome_empresa: formVinculo.nome_empresa,
+      nome_contato: formVinculo.nome_contato || cliente.nome_contato,
+      email: formVinculo.email || cliente.email,
+      celular: formVinculo.celular || cliente.celular,
+      regime_tributario: formVinculo.regime_tributario || 'Simples Nacional'
+    };
+
+    const { error } = await supabase.from('solicitacoes_cadastro').insert([payload]);
+    
+    if (!error) {
+      mostrarToast('Pedido enviado! A equipa irá validar o vínculo em breve.', 'sucesso');
+      setMostrarFormVinculo(false);
+      setFormVinculo({ cnpj: '', nome_empresa: '', nome_contato: '', email: '', celular: '', regime_tributario: '' });
+      setStatusBuscaCnpj('ocioso');
+    } else {
+      mostrarToast('Erro ao enviar pedido: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
   async function handleResponderAlerta(e, alerta) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1209,10 +1275,38 @@ export default function ClientePage({ params: paramsPromise }) {
               <span className="text-xs text-zinc-500 font-bold tracking-wider uppercase">Portal Restrito do Cliente</span>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-zinc-400">
-              Conectado como: <strong onClick={() => setMostrarModalPerfil(true)} className="text-[#d4af37] font-extrabold cursor-pointer hover:underline" title="Ver Perfil e Trocar Senha">{operador}</strong>
+          <div className="flex items-center gap-4 relative">
+            <span className="text-sm text-zinc-400 hidden sm:inline">
+              Conectado como: <strong onClick={() => setMostrarModalPerfil(true)} className="text-[#d4af37] font-extrabold cursor-pointer hover:underline" title="Configurações da Conta">{operador}</strong>
             </span>
+            
+            {/* SWITCHER DE CONTAS */}
+            {empresasLigadas.length > 0 && (
+              <div className="relative">
+                <button onClick={() => setMostrarSwitcher(!mostrarSwitcher)} className="text-xs bg-[#1b263b] border border-zinc-700 hover:border-[#d4af37] px-3 py-2 rounded-lg transition-all font-bold flex items-center gap-2">
+                  Trocar Empresa ▼
+                </button>
+                {mostrarSwitcher && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-[#0d1b2a] border border-zinc-700 rounded-xl shadow-2xl z-[999] overflow-hidden">
+                    <div className="px-4 py-3 border-b border-zinc-800 bg-[#1b263b]/50">
+                      <p className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">Empresas Vinculadas</p>
+                    </div>
+                    {/* A empresa Mestre (a que estamos) também aparece para poder voltar */}
+                    <div onClick={() => window.location.href = `/cliente/${cliente.id}`} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50">
+                      <p className="text-xs font-bold text-[#d4af37] truncate">{cliente.nome_empresa} (Atual)</p>
+                    </div>
+                    {empresasLigadas.map(emp => (
+                      <div key={emp.id} onClick={() => window.location.href = `/cliente/${emp.id}`} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0">
+                        <p className="text-xs font-medium text-white truncate">{emp.nome_empresa}</p>
+                        <p className="text-[10px] text-zinc-500 font-mono">{emp.cnpj}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={() => setMostrarModalPerfil(true)} className="sm:hidden text-xs bg-zinc-800 px-3 py-2 rounded-lg font-bold border border-zinc-700">⚙️ Perfil</button>
             <button onClick={handleLogout} className="text-xs bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-4 py-2 rounded-lg transition-all font-bold">Sair</button>
           </div>
         </div>
@@ -2237,6 +2331,95 @@ export default function ClientePage({ params: paramsPromise }) {
                   </div>
                 </form>
               </div>
+
+              {/* GESTÃO DE MÚLTIPLOS CNPJS */}
+              {!isInterno && (
+                <div className="border-t border-zinc-800 pt-5">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">Empresas Conectadas</h4>
+                    {!mostrarFormVinculo && (
+                      <button onClick={() => { setMostrarFormVinculo(true); setStatusBuscaCnpj('ocioso'); setFormVinculo({...formVinculo, cnpj: ''}); }} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500 hover:text-white px-3 py-1.5 rounded-md font-bold transition">
+                        + Conectar CNPJ
+                      </button>
+                    )}
+                  </div>
+                  
+                  {empresasLigadas.length === 0 && !mostrarFormVinculo && (
+                    <p className="text-xs text-zinc-500 italic">Nenhuma outra empresa vinculada a este perfil.</p>
+                  )}
+
+                  {/* Lista de Ligadas no Modal */}
+                  {!mostrarFormVinculo && empresasLigadas.map(emp => (
+                    <div key={emp.id} className="bg-[#0d1b2a] border border-blue-500/20 p-3 rounded-lg flex justify-between items-center mb-2">
+                      <div>
+                        <p className="text-sm text-white font-bold">{emp.nome_empresa}</p>
+                        <p className="text-[10px] text-zinc-400">CNPJ: {emp.cnpj}</p>
+                      </div>
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded font-bold">Conectada</span>
+                    </div>
+                  ))}
+
+                  {/* FORMULÁRIO MÁGICO DE VÍNCULO */}
+                  {mostrarFormVinculo && (
+                    <div className="bg-[#0d1b2a] p-4 rounded-lg border border-blue-500/30 animate-in fade-in duration-300">
+                      {statusBuscaCnpj === 'ocioso' && (
+                        <form onSubmit={handleBuscarCnpjVinculo}>
+                          <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-2">Qual CNPJ deseja vincular à sua conta?</label>
+                          <div className="flex gap-2">
+                            <input type="text" required placeholder="00.000.000/0001-00" value={formVinculo.cnpj} onChange={e => setFormVinculo({...formVinculo, cnpj: maskCNPJ(e.target.value)})} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg p-2 text-sm text-white focus:border-blue-400 outline-none font-mono" />
+                            <button type="submit" className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-4 py-2 rounded-lg text-xs transition">Buscar</button>
+                          </div>
+                        </form>
+                      )}
+
+                      {statusBuscaCnpj === 'encontrado' && (
+                        <div className="space-y-4">
+                          <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded text-sm text-emerald-400">
+                            <strong>Empresa Encontrada!</strong><br/>
+                            {formVinculo.nome_empresa}
+                          </div>
+                          <p className="text-xs text-zinc-400">Ao solicitar o vínculo, a nossa equipa irá avaliar o seu pedido. Caso aprovado, poderá alternar entre elas no menu principal.</p>
+                          <div className="flex gap-2">
+                            <button onClick={() => setMostrarFormVinculo(false)} className="flex-1 bg-zinc-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Cancelar</button>
+                            <button onClick={handleSolicitarVinculo} disabled={subindoArquivo} className="flex-1 bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-md">{subindoArquivo ? 'Aguarde...' : 'Solicitar Vínculo Oficial'}</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {statusBuscaCnpj === 'nao_encontrado' && (
+                        <form onSubmit={handleSolicitarVinculo} className="space-y-3">
+                          <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded text-xs text-orange-400 mb-2">
+                            Este CNPJ ainda não tem portal. Preencha os dados abaixo para criarmos e vincularmos automaticamente.
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Razão Social</label>
+                            <input type="text" required value={formVinculo.nome_empresa} onChange={e => setFormVinculo({...formVinculo, nome_empresa: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white outline-none" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Regime Tributário</label>
+                              <select required value={formVinculo.regime_tributario} onChange={e => setFormVinculo({...formVinculo, regime_tributario: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white outline-none">
+                                <option value="">Selecione...</option>
+                                <option value="Simples Nacional">Simples Nacional</option>
+                                <option value="Lucro Presumido">Lucro Presumido</option>
+                                <option value="Lucro Real">Lucro Real</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">E-mail Financeiro</label>
+                              <input type="email" value={formVinculo.email} onChange={e => setFormVinculo({...formVinculo, email: e.target.value})} placeholder={cliente.email} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white outline-none" />
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <button type="button" onClick={() => setMostrarFormVinculo(false)} className="flex-1 bg-zinc-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Cancelar</button>
+                            <button type="submit" disabled={subindoArquivo} className="flex-1 bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-md">{subindoArquivo ? 'Aguarde...' : 'Criar e Vincular'}</button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
             </div>
           </div>

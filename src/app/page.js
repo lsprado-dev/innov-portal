@@ -749,27 +749,60 @@ export default function AdminPage() {
 
   async function aprovarCliente(solicitacao) {
     setSubindo(true);
-    const senhaGerada = solicitacao.cnpj.replace(/\D/g, '').substring(0, 6);
-    const { error } = await supabase.from('clientes').insert([{ 
-      nome_empresa: solicitacao.nome_empresa, 
-      cnpj: solicitacao.cnpj, 
-      nome_contato: solicitacao.nome_contato, 
-      email: solicitacao.email, 
-      celular: solicitacao.celular, 
-      regime_tributario: solicitacao.regime_tributario, 
-      senha: encriptarSenha(senhaGerada), 
-      senha_alterada: false 
-    }]);
-    if (!error) { 
-      await supabase.from('logs_auditoria').insert([{
-        usuario_nome: operador,
-        usuario_tipo: 'interno',
-        acao: 'CADASTRO_APROVADO',
-        detalhe: `Aprovou o acesso da empresa ${solicitacao.nome_empresa} (CNPJ: ${solicitacao.cnpj})`
-      }]);
-      await supabase.from('solicitacoes_cadastro').delete().eq('id', solicitacao.id); 
-      await carregarDados(); 
+
+    if (solicitacao.tipo_solicitacao === 'vinculo_existente') {
+      // 1. O CNPJ já existe! Vamos apenas cruzar e conectar as duas contas.
+      const { data: origem } = await supabase.from('clientes').select('id, empresas_vinculadas').eq('id', solicitacao.vinculo_origem_id).single();
+      const { data: destino } = await supabase.from('clientes').select('id, empresas_vinculadas').eq('cnpj', solicitacao.cnpj).single();
+
+      if (origem && destino) {
+        const vincOrigem = origem.empresas_vinculadas || [];
+        const vincDestino = destino.empresas_vinculadas || [];
+
+        if (!vincOrigem.includes(destino.id)) vincOrigem.push(destino.id);
+        if (!vincDestino.includes(origem.id)) vincDestino.push(origem.id);
+
+        await supabase.from('clientes').update({ empresas_vinculadas: vincOrigem }).eq('id', origem.id);
+        await supabase.from('clientes').update({ empresas_vinculadas: vincDestino }).eq('id', destino.id);
+      }
+
+      await supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'VINCULO_APROVADO', detalhe: `Aprovou o vínculo entre as contas de ${solicitacao.nome_empresa}` }]);
+      await supabase.from('solicitacoes_cadastro').delete().eq('id', solicitacao.id);
+
+    } else {
+      // 2. É uma Conta Nova ou um "Novo Vínculo" (Cria a conta do zero)
+      const senhaGerada = solicitacao.cnpj.replace(/\D/g, '').substring(0, 6);
+      const { data: novoCliente, error } = await supabase.from('clientes').insert([{ 
+        nome_empresa: solicitacao.nome_empresa, 
+        cnpj: solicitacao.cnpj, 
+        nome_contato: solicitacao.nome_contato, 
+        email: solicitacao.email, 
+        celular: solicitacao.celular, 
+        regime_tributario: solicitacao.regime_tributario, 
+        senha: encriptarSenha(senhaGerada), 
+        senha_alterada: false 
+      }]).select().single();
+
+      if (!error && novoCliente) { 
+        // Se a pessoa pediu para criar essa conta NOVA mas atrelada à conta DELE, faz a conexão:
+        if (solicitacao.tipo_solicitacao === 'novo_vinculo' && solicitacao.vinculo_origem_id) {
+           const { data: origem } = await supabase.from('clientes').select('id, empresas_vinculadas').eq('id', solicitacao.vinculo_origem_id).single();
+           if (origem) {
+              const vincOrigem = origem.empresas_vinculadas || [];
+              if (!vincOrigem.includes(novoCliente.id)) vincOrigem.push(novoCliente.id);
+              await supabase.from('clientes').update({ empresas_vinculadas: vincOrigem }).eq('id', origem.id);
+              await supabase.from('clientes').update({ empresas_vinculadas: [origem.id] }).eq('id', novoCliente.id);
+           }
+        }
+
+        await supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'CADASTRO_APROVADO', detalhe: `Aprovou o acesso da empresa ${solicitacao.nome_empresa} (CNPJ: ${solicitacao.cnpj})` }]);
+        await supabase.from('solicitacoes_cadastro').delete().eq('id', solicitacao.id); 
+      } else if (error) {
+        mostrarToast('Erro ao criar conta: ' + error.message, 'erro');
+      }
     }
+    
+    await carregarDados(); 
     setSubindo(false);
   }
 
@@ -1395,16 +1428,26 @@ export default function AdminPage() {
                 {pendentes.map((sol) => (
                   <div key={sol.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition">
                     <div>
-                      <div className="flex items-center gap-3 mb-1">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <h4 className="text-lg font-bold text-white">{sol.nome_empresa}</h4>
-                        <span className="text-xs bg-[#0d1b2a] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">{sol.regime_tributario}</span>
+                        <span className="text-xs bg-[#0d1b2a] text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 whitespace-nowrap">{sol.regime_tributario}</span>
+                        
+                        {/* ETIQUETAS MÁGICAS DE VÍNCULO */}
+                        {sol.tipo_solicitacao === 'vinculo_existente' && (
+                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">🔗 Ligar Conta Existente</span>
+                        )}
+                        {sol.tipo_solicitacao === 'novo_vinculo' && (
+                          <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">✨ Nova Conta Vinculada</span>
+                        )}
                       </div>
                       <p className="text-xs text-zinc-400">CNPJ: {sol.cnpj} | Responsável: <span className="text-zinc-300">{sol.nome_contato}</span></p>
                       <p className="text-xs text-zinc-400 mt-0.5">E-mail: <span className="text-[#d4af37]">{sol.email}</span> | Celular: {sol.celular}</p>
                     </div>
-                    <div className="flex gap-2 w-full md:w-auto">
+                    <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0">
                       <button onClick={() => rejeitarSolicitacao(sol.id)} className="flex-1 md:flex-none bg-red-500/10 text-red-400 border border-red-500/30 font-bold px-4 py-2 rounded text-xs hover:bg-red-500 hover:text-white transition">Recusar</button>
-                      <button onClick={() => aprovarCliente(sol)} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-4 py-2 rounded text-xs hover:bg-emerald-400 transition shadow">Aprovar e Ativar</button>
+                      <button onClick={() => aprovarCliente(sol)} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-4 py-2 rounded text-xs hover:bg-emerald-400 transition shadow whitespace-nowrap">
+                        {sol.tipo_solicitacao === 'vinculo_existente' ? 'Aprovar Vínculo' : 'Aprovar e Ativar'}
+                      </button>
                     </div>
                   </div>
                 ))}
