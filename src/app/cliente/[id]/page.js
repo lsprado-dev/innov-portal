@@ -1292,11 +1292,11 @@ export default function ClientePage({ params: paramsPromise }) {
                       <p className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">Empresas Vinculadas</p>
                     </div>
                     {/* A empresa Mestre (a que estamos) também aparece para poder voltar */}
-                    <div onClick={() => window.location.href = `/cliente/${cliente.id}`} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50">
+                    <div onClick={() => { localStorage.setItem('usuario_id', cliente.id); window.location.href = `/cliente/${cliente.id}`; }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50">
                       <p className="text-xs font-bold text-[#d4af37] truncate">{cliente.nome_empresa} (Atual)</p>
                     </div>
                     {empresasLigadas.map(emp => (
-                      <div key={emp.id} onClick={() => window.location.href = `/cliente/${emp.id}`} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0">
+                      <div key={emp.id} onClick={() => { localStorage.setItem('usuario_id', emp.id); window.location.href = `/cliente/${emp.id}`; }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0">
                         <p className="text-xs font-medium text-white truncate">{emp.nome_empresa}</p>
                         <p className="text-[10px] text-zinc-500 font-mono">{emp.cnpj}</p>
                       </div>
