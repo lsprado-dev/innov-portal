@@ -119,6 +119,10 @@ export default function ClientePage({ params: paramsPromise }) {
   const [novoPedido, setNovoPedido] = useState('');
   const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
   
+  // ESTADOS DA TRÉPLICA (RESPONDER POR BAIXO DO CARD)
+  const [chamadoReabrindo, setChamadoReabrindo] = useState(null);
+  const [textoReplica, setTextoReplica] = useState('');
+  
   // ESTADO DO MODAL DE RESPOSTA A SOLICITAÇÕES (ADMIN DENTRO DO PERFIL)
   const [modalRespostaPedido, setModalRespostaPedido] = useState({ aberto: false, pedido: null, texto: '', arquivo: null });
 
@@ -903,12 +907,29 @@ export default function ClientePage({ params: paramsPromise }) {
     carregarDadosDaAba();
     setSubindoArquivo(false);
   }
-function handleReabrirSolicitacao(pedidoAbaixo) {
-    const textoReplica = `[Ref. Pedido de ${new Date(pedidoAbaixo.criado_em).toLocaleDateString('pt-BR')}]:\n\nAinda tenho dúvidas sobre isso: `;
-    setNovoPedido(textoReplica);
-    setDepartamentoPedido(pedidoAbaixo.departamento || 'Contábil');
-    rolarPara('nova-solicitacao-form');
-    mostrarToast('Por favor, escreva a sua nova dúvida no formulário acima e envie.', 'aviso');
+async function handleEnviarReplica(pedidoOriginal) {
+    if (!textoReplica.trim()) return;
+    setSubindoArquivo(true);
+
+    // Cria um novo card pendente para o Admin, mas mantendo a referência visual
+    const textoFormatado = `[Continuação do Pedido de ${new Date(pedidoOriginal.criado_em).toLocaleDateString('pt-BR')}]:\n\n${textoReplica.trim()}`;
+
+    const { error } = await supabase.from('pedidos_cliente').insert([{ 
+      cliente_id: id, 
+      descricao: textoFormatado, 
+      status: 'pendente',
+      departamento: pedidoOriginal.departamento || 'Contábil' 
+    }]);
+
+    if (!error) {
+      mostrarToast('Nova dúvida enviada com sucesso para a equipa!', 'sucesso');
+      setChamadoReabrindo(null);
+      setTextoReplica('');
+      carregarDadosDaAba();
+    } else {
+      mostrarToast('Erro ao enviar: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
   }
   const arquivosFiltradosDaBusca = arquivos.filter((arq) => {
     const textoBusca = busca.toLowerCase();
@@ -1643,10 +1664,32 @@ function handleReabrirSolicitacao(pedidoAbaixo) {
                         )}
 
                         {!isInterno && (
-                          <div className="flex justify-end mt-4 pt-4 border-t border-zinc-800/60">
-                            <button onClick={() => handleReabrirSolicitacao(pedido)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-600 px-4 py-2 rounded-lg transition font-bold shadow-sm">
-                              Ainda tem dúvidas? Clique aqui para reabrir o assunto
-                            </button>
+                          <div className="mt-4 pt-4 border-t border-zinc-800/60">
+                            {chamadoReabrindo === pedido.id ? (
+                              <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-700 animate-in fade-in zoom-in-95 duration-200 shadow-inner">
+                                <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-2">Enviar nova dúvida sobre este assunto:</label>
+                                <textarea 
+                                  autoFocus
+                                  rows="3" 
+                                  placeholder="Digite a sua nova dúvida aqui..." 
+                                  value={textoReplica} 
+                                  onChange={(e) => setTextoReplica(e.target.value)}
+                                  className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none mb-3"
+                                ></textarea>
+                                <div className="flex justify-end gap-2">
+                                  <button onClick={() => { setChamadoReabrindo(null); setTextoReplica(''); }} className="px-4 py-2 bg-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs font-bold transition">Cancelar</button>
+                                  <button onClick={() => handleEnviarReplica(pedido)} disabled={subindoArquivo || !textoReplica.trim()} className="px-4 py-2 bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 rounded-lg text-xs font-extrabold transition disabled:opacity-50 shadow-sm">
+                                    {subindoArquivo ? 'A enviar...' : 'Enviar Mensagem'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex justify-end">
+                                <button onClick={() => { setChamadoReabrindo(pedido.id); setTextoReplica(''); }} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-600 px-4 py-2 rounded-lg transition font-bold shadow-sm">
+                                  Ainda tem dúvidas? Responder aqui
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
