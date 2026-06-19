@@ -459,6 +459,54 @@ export default function AdminPage() {
   }
 
   // NOVO: Função para o colaborador corrigir/mover a área do pedido
+  // ESTADO DO MODAL DE RESPOSTA A SOLICITAÇÕES
+  const [modalRespostaPedido, setModalRespostaPedido] = useState({ aberto: false, pedido: null, texto: '', arquivo: null });
+
+  // FUNÇÃO PARA ENVIAR A RESPOSTA E O ANEXO
+  async function handleResponderPedido(e) {
+    e.preventDefault();
+    setSubindo(true);
+    const { pedido, texto, arquivo } = modalRespostaPedido;
+
+    let caminhoArquivo = null;
+    let nomeOriginal = null;
+
+    if (arquivo) {
+      if (arquivo.size > 15 * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite de 15MB.', 'erro');
+        setSubindo(false);
+        return;
+      }
+      const timestamp = Date.now();
+      // Salva na pasta do próprio cliente para manter organização e segurança
+      caminhoArquivo = `${pedido.cliente_id}/respostas_pedidos/${timestamp}_${arquivo.name}`;
+      nomeOriginal = arquivo.name;
+      
+      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, arquivo);
+      if (storageError) {
+        mostrarToast('Erro ao anexar arquivo: ' + storageError.message, 'erro');
+        setSubindo(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('pedidos_cliente').update({
+      status: 'atendido',
+      resposta: texto,
+      caminho_arquivo_resposta: caminhoArquivo,
+      nome_arquivo_resposta: nomeOriginal
+    }).eq('id', pedido.id);
+
+    if (!error) {
+      mostrarToast('Solicitação respondida e finalizada com sucesso!', 'sucesso');
+      setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null });
+      await carregarDados();
+    } else {
+      mostrarToast('Erro ao salvar resposta: ' + error.message, 'erro');
+    }
+    setSubindo(false);
+  }
+
   // NOVO: Função para o colaborador corrigir/mover a área do pedido
   async function alterarDepartamentoPedido(id, novoDepartamento) {
     setSubindo(true);
@@ -1420,7 +1468,7 @@ export default function AdminPage() {
                       <Link href={`/cliente/${pedido.cliente_id}`} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm text-center">
                         Acessar Perfil
                       </Link>
-                      <button onClick={() => atenderPedidoCliente(pedido.id)} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-4 py-2.5 rounded-lg text-xs hover:bg-emerald-400 transition shadow-lg">Marcar como Atendido</button>
+                      <button onClick={() => setModalRespostaPedido({ aberto: true, pedido, texto: '', arquivo: null })} className="flex-1 md:flex-none bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-2.5 rounded-lg text-xs hover:bg-yellow-500 transition shadow-lg">Responder e Finalizar</button>
                     </div>
                   </div>
                 ))}
@@ -1932,6 +1980,56 @@ export default function AdminPage() {
         )}
 
       </div>
+
+      {/* MODAL DE RESPOSTA À SOLICITAÇÃO DO CLIENTE */}
+      {modalRespostaPedido.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-lg flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <div>
+                <h3 className="text-lg font-bold text-[#d4af37]">Responder Solicitação</h3>
+                <p className="text-[10px] text-zinc-400 mt-1">Cliente: {modalRespostaPedido.pedido?.clientes?.nome_empresa}</p>
+              </div>
+              <button type="button" onClick={() => setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            
+            <form onSubmit={handleResponderPedido} className="p-5 space-y-4">
+              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 mb-4">
+                <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Pedido Original:</p>
+                <p className="text-sm text-zinc-300 italic">"{modalRespostaPedido.pedido?.descricao}"</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Sua Resposta (Opcional)</label>
+                <textarea 
+                  rows="3" 
+                  placeholder="Escreva uma mensagem ou instrução para o cliente..." 
+                  value={modalRespostaPedido.texto} 
+                  onChange={(e) => setModalRespostaPedido({...modalRespostaPedido, texto: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Anexar Documento (Opcional)</label>
+                <input 
+                  type="file" 
+                  accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                  onChange={(e) => setModalRespostaPedido({...modalRespostaPedido, arquivo: e.target.files[0]})}
+                  className="text-xs text-zinc-400 bg-[#0d1b2a] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" 
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-zinc-800 mt-2">
+                <button type="button" onClick={() => setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
+                  {subindo ? 'A enviar...' : 'Enviar e Finalizar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* SISTEMA DE CONFIRMAÇÃO (Substitui o alert feio do navegador) */}
       {dialogo.aberto && (

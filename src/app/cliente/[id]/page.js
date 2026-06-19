@@ -857,7 +857,13 @@ export default function ClientePage({ params: paramsPromise }) {
     carregarDadosDaAba();
     setSubindoArquivo(false);
   }
-
+function handleReabrirSolicitacao(pedidoAbaixo) {
+    const textoReplica = `[Ref. Pedido de ${new Date(pedidoAbaixo.criado_em).toLocaleDateString('pt-BR')}]:\n\nAinda tenho dúvidas sobre isso: `;
+    setNovoPedido(textoReplica);
+    setDepartamentoPedido(pedidoAbaixo.departamento || 'Contábil');
+    rolarPara('nova-solicitacao-form');
+    mostrarToast('Por favor, escreva a sua nova dúvida no formulário acima e envie.', 'aviso');
+  }
   const arquivosFiltradosDaBusca = arquivos.filter((arq) => {
     const textoBusca = busca.toLowerCase();
     const nomeOriginal = arq.nome_original?.toLowerCase() || '';
@@ -1499,8 +1505,11 @@ export default function ClientePage({ params: paramsPromise }) {
               <h3 className="text-lg sm:text-xl font-bold text-[#d4af37] capitalize">Central de Atendimento e Solicitações</h3>
               <p className="text-xs text-zinc-400 mt-1">Envie pedidos ou recados diretos para a nossa equipa.</p>
             </div>
+            
+            <div id="nova-solicitacao-form"></div>
+            
             {!isInterno && (
-              <form onSubmit={handleEnviarPedido} className="mb-8 bg-[#0d1b2a] p-6 rounded-xl border border-zinc-800/60 space-y-5 shadow-lg">
+              <form onSubmit={handleEnviarPedido} className="mb-10 bg-[#0d1b2a] p-6 rounded-xl border border-zinc-800/60 space-y-5 shadow-lg">
                 <div>
                   <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">O que precisa hoje?</label>
                   <textarea required rows="3" placeholder="Ex: Gostaria da minha guia DAS do mês de Janeiro..." value={novoPedido} onChange={(e) => setNovoPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none transition-colors"></textarea>
@@ -1524,28 +1533,65 @@ export default function ClientePage({ params: paramsPromise }) {
                 </div>
               </form>
             )}
-            <div className="space-y-3">
-              <h4 className="text-sm font-bold text-white mb-4">Histórico de Pedidos</h4>
+            
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-white mb-2">Histórico de Pedidos</h4>
               {pedidos.length === 0 ? (
-                <p className="text-zinc-500 text-sm">Nenhuma solicitação encontrada neste perfil.</p>
+                <p className="text-zinc-500 text-sm p-4 bg-[#0d1b2a] rounded-lg">Nenhuma solicitação encontrada neste perfil.</p>
               ) : (
                 pedidos.map(pedido => (
-                  <div key={pedido.id} className="p-4 bg-[#0d1b2a] rounded-lg border border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex-1 pr-4">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <IconChatList />
-                        <span className="text-[10px] font-bold bg-[#1b263b] text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded uppercase tracking-wider">
-                          {pedido.departamento || 'Geral'}
-                        </span>
-                        <span className="text-[11px] text-zinc-500">{new Date(pedido.criado_em).toLocaleString('pt-BR')}</span>
+                  <div key={pedido.id} className={`p-5 rounded-xl border flex flex-col gap-4 ${pedido.status === 'pendente' ? 'bg-[#0d1b2a] border-zinc-700/50' : 'bg-[#0d1b2a]/60 border-emerald-500/20'}`}>
+                    
+                    {/* PARTE DO CLIENTE */}
+                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="text-[10px] font-bold bg-[#1b263b] text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                            <IconChatList /> {pedido.departamento || 'Geral'}
+                          </span>
+                          <span className="text-[11px] text-zinc-500 font-medium">Enviado em {new Date(pedido.criado_em).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                        <p className="text-sm text-zinc-200 font-medium leading-relaxed">"{pedido.descricao}"</p>
                       </div>
-                      <p className="text-sm text-zinc-200 font-medium leading-relaxed">"{pedido.descricao}"</p>
+                      
+                      <div className="flex-shrink-0">
+                        <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-md border uppercase whitespace-nowrap shadow-sm ${pedido.status === 'pendente' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'}`}>
+                          {pedido.status === 'pendente' ? <><IconMiniClock /> Aguardando Retorno</> : <><IconCheck /> Resolvido</>}
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-2 md:mt-0 flex-shrink-0">
-                      <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded border uppercase whitespace-nowrap ${pedido.status === 'pendente' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'}`}>
-                        {pedido.status === 'pendente' ? <><IconMiniClock />Enviado para Equipe</> : <><IconCheck /> Atendido</>}
-                      </span>
-                    </div>
+
+                    {/* RESPOSTA DA CONTABILIDADE (Se Atendido) */}
+                    {pedido.status === 'atendido' && (
+                      <div className="mt-2 bg-[#1b263b]/50 rounded-lg p-4 border-l-4 border-[#d4af37]">
+                        <p className="text-[10px] uppercase font-bold text-[#d4af37] mb-2 tracking-wider">Resposta da Equipa</p>
+                        
+                        {pedido.resposta ? (
+                          <p className="text-sm text-zinc-300 leading-relaxed mb-3 whitespace-pre-wrap">{pedido.resposta}</p>
+                        ) : (
+                          <p className="text-sm text-zinc-500 italic mb-3">Solicitação atendida e finalizada internamente.</p>
+                        )}
+                        
+                        {/* Se tiver arquivo anexo na resposta */}
+                        {pedido.caminho_arquivo_resposta && (
+                          <div className="flex items-center gap-3 pt-3 border-t border-zinc-800/60">
+                            <IconFile />
+                            <span className="text-xs text-zinc-300 truncate max-w-[200px]">{pedido.nome_arquivo_resposta}</span>
+                            <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="text-xs bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-1.5 rounded transition font-bold shadow-sm">
+                              Baixar Anexo
+                            </button>
+                          </div>
+                        )}
+
+                        {!isInterno && (
+                          <div className="flex justify-end mt-4 pt-3 border-t border-zinc-800/60">
+                            <button onClick={() => handleReabrirSolicitacao(pedido)} className="text-[11px] text-zinc-400 hover:text-white transition underline font-medium">
+                              Ainda com dúvida? Fazer nova solicitação sobre isso.
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
