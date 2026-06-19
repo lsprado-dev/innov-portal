@@ -2406,7 +2406,7 @@ export default function ClientePage({ params: paramsPromise }) {
                               </select>
                             </div>
                             <div>
-                              <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">E-mail Financeiro</label>
+                              <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">E-mail da nova empresa</label>
                               <input type="email" value={formVinculo.email} onChange={e => setFormVinculo({...formVinculo, email: e.target.value})} placeholder={cliente.email} className="w-full bg-[#1b263b] border border-zinc-700 rounded p-2 text-xs text-white outline-none" />
                             </div>
                           </div>
