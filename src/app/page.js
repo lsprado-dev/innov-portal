@@ -1440,6 +1440,18 @@ export default function AdminPage() {
                           <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">✨ Nova Conta Vinculada</span>
                         )}
                       </div>
+
+                      {/* NOVO: EXIBE A EMPRESA DE ORIGEM QUE SOLICITOU O VÍNCULO */}
+                      {(sol.tipo_solicitacao === 'vinculo_existente' || sol.tipo_solicitacao === 'novo_vinculo') && sol.vinculo_origem_id && (
+                        <div className="mb-3 inline-flex items-center gap-1.5 bg-[#0d1b2a] border border-[#d4af37]/30 px-3 py-1.5 rounded-lg shadow-inner">
+                          <IconCompany />
+                          <span className="text-[11px] text-zinc-400 uppercase tracking-wider">Solicitado por:</span>
+                          <span className="text-[11px] font-black text-[#d4af37]">
+                            {clientes.find(c => c.id === sol.vinculo_origem_id)?.nome_empresa || 'Empresa não encontrada'}
+                          </span>
+                        </div>
+                      )}
+
                       <p className="text-xs text-zinc-400">CNPJ: {sol.cnpj} | Responsável: <span className="text-zinc-300">{sol.nome_contato}</span></p>
                       <p className="text-xs text-zinc-400 mt-0.5">E-mail: <span className="text-[#d4af37]">{sol.email}</span> | Celular: {sol.celular}</p>
                     </div>
