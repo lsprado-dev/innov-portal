@@ -1475,9 +1475,14 @@ export default function AdminPage() {
                            <p className="text-[10px] text-[#d4af37] font-bold uppercase mb-1">Resposta da Equipa:</p>
                            <p className="text-xs text-zinc-400 italic">{pedido.resposta || 'Respondido e finalizado.'}</p>
                            {pedido.caminho_arquivo_resposta && (
-                             <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="mt-2 text-[10px] bg-zinc-800 text-white px-3 py-1.5 rounded hover:bg-zinc-700 transition">
-                               Baixar Doc Enviado
-                             </button>
+                             <div className="flex gap-2 mt-2">
+                               <button onClick={() => visualizarDocumento(pedido.caminho_arquivo_resposta)} className="text-[10px] bg-zinc-800 text-white px-3 py-1.5 rounded hover:bg-zinc-700 transition border border-zinc-700">
+                                Visualizar Anexo
+                               </button>
+                               <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="text-[10px] bg-[#d4af37]/10 text-[#d4af37] px-3 py-1.5 rounded hover:bg-[#d4af37]/20 transition border border-[#d4af37]/30">
+                                 Baixar Anexo
+                               </button>
+                             </div>
                            )}
                         </div>
                       )}

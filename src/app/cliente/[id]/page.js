@@ -1631,9 +1631,14 @@ function handleReabrirSolicitacao(pedidoAbaixo) {
                               <IconClip />
                               <span className="text-xs text-zinc-300 truncate font-mono">{pedido.nome_arquivo_resposta}</span>
                             </div>
-                            <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="w-full sm:w-auto text-xs bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-4 py-2 rounded-lg transition font-extrabold shadow-sm whitespace-nowrap">
-                              Baixar Documento
-                            </button>
+                            <div className="flex gap-2 w-full sm:w-auto">
+                              <button onClick={() => visualizarDocumento(pedido.caminho_arquivo_resposta)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700/60 px-4 py-2 rounded-lg transition font-bold shadow-sm whitespace-nowrap">
+                                Visualizar
+                              </button>
+                              <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="flex-1 sm:flex-none text-xs bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-4 py-2 rounded-lg transition font-extrabold shadow-sm whitespace-nowrap">
+                                Baixar
+                              </button>
+                            </div>
                           </div>
                         )}
 
