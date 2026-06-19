@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { enviarEmailDemanda } from './lib/email'; // Ajustado para a pasta real
 
@@ -85,6 +85,7 @@ function formatarDataHora(dataString) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [clientes, setClientes] = useState([]);
   const [pendentes, setPendentes] = useState([]);
   const [recebidos, setRecebidos] = useState([]);
@@ -181,6 +182,16 @@ export default function AdminPage() {
   function confirmarAcao(titulo, mensagem, acao, tipo = 'perigo') {
     setDialogo({ aberto: true, titulo, mensagem, acao, tipo });
   }
+
+  // NOVO: LÊ O CLIQUE DO E-MAIL MATINAL DOS GESTORES E FILTRA SOZINHO!
+  useEffect(() => {
+    const colabQuery = searchParams.get('colab');
+    if (colabQuery) {
+      setBuscaPedido(colabQuery); // Preenche a barra de pesquisa com o nome
+      setAbaAtiva('solicitacoes'); // Abre a aba certa
+      setSubAbaTicket('pendentes');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const tipoUsuario = localStorage.getItem('usuario_tipo');
@@ -914,13 +925,15 @@ export default function AdminPage() {
     !formAlerta.clientesSelecionados.find(sel => sel.id === c.id)
   );
 
-  // FILTRO INTELIGENTE PARA A ABA DE TICKETS (Busca por Nome, Ticket ou Data)
+  // FILTRO INTELIGENTE PARA A ABA DE TICKETS (Busca por Nome, Ticket, Data ou Responsável)
   const pedidosFiltrados = pedidosVisiveis.filter(p => {
     const termo = buscaPedido.toLowerCase();
     const numTicket = String(p.numero_ticket || 0).padStart(5, '0');
     const nomeEmp = p.clientes?.nome_empresa?.toLowerCase() || '';
+    const responsavelTicket = p.responsavel?.toLowerCase() || '';
     const dataFormat = new Date(p.criado_em).toLocaleDateString('pt-BR');
-    return nomeEmp.includes(termo) || numTicket.includes(termo) || dataFormat.includes(termo);
+    
+    return nomeEmp.includes(termo) || numTicket.includes(termo) || dataFormat.includes(termo) || responsavelTicket.includes(termo);
   });
 
   // FUNÇÃO DE RENDERIZAÇÃO INTELIGENTE (Agrupada ou Lista Solta)
@@ -1905,7 +1918,14 @@ export default function AdminPage() {
                       </div>
                       <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
                         <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
-                        {alerta.status === 'respondido' && alerta.caminho_arquivo && <button onClick={() => baixarDocumento(alerta.caminho_arquivo)} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded text-xs font-bold transition">Ver Anexo</button>}
+                        
+                        {alerta.status === 'respondido' && alerta.caminho_arquivo && (
+                          <>
+                            <button onClick={(e) => { e.preventDefault(); visualizarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded text-xs font-bold text-white transition">Visualizar</button>
+                            <button onClick={(e) => { e.preventDefault(); baixarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2 rounded text-xs font-bold transition">Baixar</button>
+                          </>
+                        )}
+                        
                         <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
                       </div>
                     </div>
@@ -2153,14 +2173,18 @@ export default function AdminPage() {
                   const pendentesCalculo = tarefasDoColab.filter(d => d.status === 'pendente').map(d => calcularPrazo(d.data_entrega).texto.includes('Atrasado') ? 'atrasado' : 'no_prazo');
                   const emAndamento = pendentesCalculo.filter(p => p === 'no_prazo').length;
                   const emAtraso = pendentesCalculo.filter(p => p === 'atrasado').length;
+                  
+                  // NOVO: Puxa os Tickets do Colaborador
+                  const ticketsAbertos = pedidosCliente.filter(p => p.responsavel === colab && p.status === 'pendente').length;
 
                   return (
                     <div key={colab} className="bg-[#1b263b] p-5 rounded-xl border border-zinc-800 shadow-xl">
-                      <h3 className="text-lg font-bold text-white mb-4 border-b border-zinc-800 pb-2">{colab}</h3>
+                      <h3 className="text-lg font-bold text-[#d4af37] mb-4 border-b border-zinc-800 pb-2">{colab}</h3>
                       <div className="space-y-3">
+                        <div className="flex justify-between items-center text-sm"><span className="text-zinc-400">Tickets Abertos</span><span className={`font-bold ${ticketsAbertos > 0 ? 'text-blue-400' : 'text-zinc-500'}`}>{ticketsAbertos}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-zinc-400">Demandas Em Andamento</span><span className="font-bold text-amber-400">{emAndamento}</span></div>
                         <div className="flex justify-between items-center text-sm"><span className="text-zinc-400">Tarefas Entregues</span><span className="font-bold text-emerald-400">{concluidas}</span></div>
-                        <div className="flex justify-between items-center text-sm"><span className="text-zinc-400">Em Andamento (No Prazo)</span><span className="font-bold text-blue-400">{emAndamento}</span></div>
-                        <div className="flex justify-between items-center text-sm border-t border-zinc-800 pt-3"><span className="text-red-400 font-semibold">Em Atraso</span><span className={`font-extrabold text-lg ${emAtraso > 0 ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`}>{emAtraso}</span></div>
+                        <div className="flex justify-between items-center text-sm border-t border-zinc-800 pt-3"><span className="text-red-400 font-semibold">Demandas Atrasadas</span><span className={`font-extrabold text-lg ${emAtraso > 0 ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`}>{emAtraso}</span></div>
                       </div>
                     </div>
                   );
