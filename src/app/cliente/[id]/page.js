@@ -124,13 +124,34 @@ export default function ClientePage({ params: paramsPromise }) {
   const [chamadoReabrindo, setChamadoReabrindo] = useState(null);
   const [textoReplica, setTextoReplica] = useState('');
 
-  // NOVO: Função para abrir ticket direto do arquivo
-  function handleAbrirChamadoArquivo(arq) {
-    setNovoPedido(`[Referente ao arquivo: ${arq.nome_original}]\n\nGostaria de saber: `);
-    setDepartamentoPedido(arq.setor === 'financeiro' ? 'Financeiro' : (arq.setor === 'rh' ? 'DP / RH' : 'Contábil'));
-    setAbaPrincipal('solicitacoes');
-    rolarPara('nova-solicitacao-form');
-    mostrarToast('Por favor, complete a sua dúvida abaixo e envie.', 'aviso');
+  // NOVO: ESTADOS DO MODAL DE DÚVIDA RÁPIDA NO ARQUIVO
+  const [modalDuvidaArquivo, setModalDuvidaArquivo] = useState({ aberto: false, arquivo: null, texto: '' });
+
+  async function handleEnviarDuvidaArquivo(e) {
+    e.preventDefault();
+    if (!modalDuvidaArquivo.texto.trim()) return;
+    setSubindoArquivo(true);
+    
+    const arq = modalDuvidaArquivo.arquivo;
+    const depto = arq.setor === 'financeiro' ? 'Financeiro' : (arq.setor === 'rh' ? 'DP / RH' : 'Contábil');
+    const descFinal = `[Referente ao arquivo: ${arq.nome_original}]\n\nDúvida: ${modalDuvidaArquivo.texto.trim()}`;
+
+    const { error } = await supabase.from('pedidos_cliente').insert([{ 
+      cliente_id: id, 
+      descricao: descFinal, 
+      status: 'pendente',
+      departamento: depto,
+      caminho_arquivo: arq.caminho_storage, // Anexa o arquivo automaticamente!
+      nome_arquivo: arq.nome_original
+    }]);
+
+    if (!error) {
+      mostrarToast(`Dúvida enviada para a equipa com sucesso!`, 'sucesso');
+      setModalDuvidaArquivo({ aberto: false, arquivo: null, texto: '' });
+    } else {
+      mostrarToast('Erro ao enviar dúvida: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
   }
 
   // NOVO: ESTADOS PARA OS DISCLAIMERS E BOLINHAS VERDES
@@ -338,6 +359,24 @@ export default function ClientePage({ params: paramsPromise }) {
 
     carregarDadosDaAba();
   }, [abaPrincipal, pastaAtiva, id]);
+
+  // NOVO: ATUALIZAÇÃO OTIMISTA (A bolinha verde some no exato milissegundo em que o cliente abre a pasta)
+  useEffect(() => {
+    if (isInterno || abaPrincipal !== 'pastas' || !pastaAtiva || arquivosNaoLidos.length === 0) return;
+    
+    // Procura se tem ficheiros novos exatamente na tela que o cliente está a ver agora
+    const naTela = arquivosNaoLidos.filter(a => a.setor === pastaAtiva && (a.subpasta_id || null) === (subpastaAtiva || null));
+    
+    if (naTela.length > 0) {
+      const ids = naTela.map(a => a.id);
+      // 1. Apaga do ecrã IMEDIATAMENTE (A bolinha some na hora, antes mesmo do servidor responder)
+      setArquivosNaoLidos(prev => prev.filter(a => !ids.includes(a.id)));
+      setArquivos(prev => prev.map(a => ids.includes(a.id) ? { ...a, visualizado_cliente: true } : a));
+      
+      // 2. Avisa o banco de dados em silêncio no fundo
+      supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids).then();
+    }
+  }, [pastaAtiva, subpastaAtiva, arquivosNaoLidos, isInterno, abaPrincipal]);
 
   async function atualizarBadgeGlobal(clienteId) {
     if (!clienteId) return;
@@ -1520,7 +1559,7 @@ async function handleEnviarReplica(pedidoOriginal) {
                               </>
                             )}
                             {!isInterno && (
-                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAbrirChamadoArquivo(arq); }} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-zinc-300 font-bold transition-all shadow-sm whitespace-nowrap"> Dúvida</button>
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-zinc-300 font-bold transition-all shadow-sm whitespace-nowrap">❓ Dúvida</button>
                             )}
                             <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
                             <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
@@ -2286,6 +2325,42 @@ async function handleEnviarReplica(pedidoOriginal) {
           <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
             <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
             <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DÚVIDA RÁPIDA (DIRETO DO ARQUIVO) */}
+      {modalDuvidaArquivo.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-[#d4af37]">Dúvida sobre Documento</h3>
+              <button type="button" onClick={() => setModalDuvidaArquivo({ aberto: false, arquivo: null, texto: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={handleEnviarDuvidaArquivo} className="p-5 space-y-4">
+              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 flex items-center gap-3">
+                <div className="flex-shrink-0"><IconFile /></div>
+                <span className="text-xs text-zinc-300 font-mono truncate">{modalDuvidaArquivo.arquivo?.nome_original}</span>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Escreva sua dúvida:</label>
+                <textarea 
+                  rows="4" 
+                  autoFocus
+                  required
+                  placeholder="O que você não entendeu sobre este documento?" 
+                  value={modalDuvidaArquivo.texto} 
+                  onChange={(e) => setModalDuvidaArquivo({...modalDuvidaArquivo, texto: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
+                ></textarea>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setModalDuvidaArquivo({ aberto: false, arquivo: null, texto: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
+                  {subindoArquivo ? 'A enviar...' : 'Enviar Dúvida'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
