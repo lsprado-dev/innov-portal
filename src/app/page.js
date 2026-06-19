@@ -149,6 +149,7 @@ export default function AdminPage() {
   const [buscaPedido, setBuscaPedido] = useState('');
   const [agruparPedidosPorEmpresa, setAgruparPedidosPorEmpresa] = useState(false);
   const [empresaExpandidaPedido, setEmpresaExpandidaPedido] = useState(null);
+  const [subAbaTicket, setSubAbaTicket] = useState('pendentes'); // NOVO: Abas de Tickets
 
   // ESTADO PARA O BALÃO DE COPIAR SENHA
   const [senhaCopiadaId, setSenhaCopiadaId] = useState(null);
@@ -1091,12 +1092,12 @@ export default function AdminPage() {
             <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Docs Recebidos</h3></div>
           </button>
 
-          <button onClick={() => { setAbaAtiva('solicitacoes'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'solicitacoes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
+          <button onClick={() => { setAbaAtiva('solicitacoes'); setSubAbaTicket('pendentes'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'solicitacoes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
             <div className="flex justify-between w-full items-start">
               <IconChat />
-              <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${pedidosVisiveis.length > 0 ? 'bg-[#d4af37] text-[#0d1b2a] shadow-[0_0_12px_rgba(212,175,55,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{pedidosVisiveis.length}</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded font-bold transition-all ${pedidosVisiveis.filter(p => p.status === 'pendente').length > 0 ? 'bg-[#d4af37] text-[#0d1b2a] shadow-[0_0_12px_rgba(212,175,55,0.8)] animate-pulse' : 'bg-[#0d1b2a] text-zinc-500'}`}>{pedidosVisiveis.filter(p => p.status === 'pendente').length}</span>
             </div>
-            <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Solicitações</h3></div>
+            <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Tickets Abertos</h3></div>
           </button>
           
           <button onClick={() => { setAbaAtiva('alertas'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'alertas' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
@@ -1460,16 +1461,25 @@ export default function AdminPage() {
         {abaAtiva === 'solicitacoes' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
             
-            {/* CABEÇALHO BEM ORGANIZADO ESTILO ALERTAS */}
+            {/* CABEÇALHO BEM ORGANIZADO */}
             <div className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col sm:flex-row justify-between items-center gap-4 rounded-t-xl">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                 <h2 className="text-lg font-bold text-[#d4af37]">Tickets Abertos</h2>
-                 <span className="bg-[#d4af37] text-[#0d1b2a] text-xs font-bold px-2 py-0.5 rounded-full">{pedidosFiltrados.length}</span>
+              
+              {/* AS DUAS NOVAS ABAS MÁGICAS */}
+              <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full xl:w-auto overflow-x-auto hide-scrollbar">
+                <button onClick={() => setSubAbaTicket('pendentes')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaTicket === 'pendentes' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}>
+                  Aguardando Ação 
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${subAbaTicket === 'pendentes' ? 'bg-[#0d1b2a] text-[#d4af37]' : 'bg-zinc-700 text-white'}`}>{pedidosFiltrados.filter(p => p.status === 'pendente').length}</span>
+                </button>
+                <button onClick={() => setSubAbaTicket('resolvidos')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaTicket === 'resolvidos' ? 'bg-emerald-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}>
+                  Resolvidos
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${subAbaTicket === 'resolvidos' ? 'bg-[#0d1b2a] text-emerald-500' : 'bg-zinc-700 text-white'}`}>{pedidosFiltrados.filter(p => p.status === 'atendido').length}</span>
+                </button>
               </div>
+
               <div className="flex items-center gap-3 w-full sm:w-auto flex-col sm:flex-row">
                 <label className="flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-4 py-2.5 sm:py-2 rounded-lg border border-zinc-700 w-full sm:w-auto">
                   <input type="checkbox" checked={agruparPedidosPorEmpresa} onChange={e => { setAgruparPedidosPorEmpresa(e.target.checked); setEmpresaExpandidaPedido(null); }} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
-                  <IconCompany /> Agrupar por Empresa
+                  <IconCompany /> Agrupar
                 </label>
                 <div className="relative w-full sm:w-64">
                   <input type="text" placeholder="Nº Ticket, Empresa ou Data..." value={buscaPedido} onChange={(e) => setBuscaPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
@@ -1479,14 +1489,20 @@ export default function AdminPage() {
 
             {/* CORPO DA LISTAGEM (INTELIGENTE) */}
             {(() => {
-              if (pedidosFiltrados.length === 0) return <p className="text-zinc-400 text-center py-12">Nenhum ticket encontrado com esta pesquisa.</p>;
+              const listaExibicao = pedidosFiltrados.filter(p => {
+                if (subAbaTicket === 'pendentes') return p.status === 'pendente';
+                if (subAbaTicket === 'resolvidos') return p.status === 'atendido';
+                return true;
+              });
+
+              if (listaExibicao.length === 0) return <p className="text-zinc-400 text-center py-12">Nenhum ticket encontrado nesta aba.</p>;
 
               const renderCardPedido = (pedido) => (
-                  <div key={pedido.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition border-b border-zinc-800/50 last:border-0">
+                  <div key={pedido.id} className={`p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition border-b border-zinc-800/50 last:border-0 ${pedido.status === 'pendente' ? 'bg-[#1b263b] hover:bg-zinc-800/40' : 'bg-[#0d1b2a]/50 opacity-80 hover:opacity-100'}`}>
                     <div className="flex-1 pr-4 w-full">
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <IconChat />
-                        <span className="text-xs font-black text-[#0d1b2a] bg-[#d4af37] px-2 py-0.5 rounded shadow-sm">
+                        <span className={`text-xs font-black px-2 py-0.5 rounded shadow-sm ${pedido.status === 'pendente' ? 'text-[#0d1b2a] bg-[#d4af37]' : 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'}`}>
                           #{String(pedido.numero_ticket || 0).padStart(5, '0')}
                         </span>
                         <span className="text-xs bg-[#0d1b2a] text-[#d4af37] px-2 py-0.5 rounded border border-[#d4af37]/30 font-bold uppercase">
@@ -1517,21 +1533,21 @@ export default function AdminPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-zinc-200 font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
+                      <p className={`text-sm font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50 ${pedido.status === 'pendente' ? 'text-zinc-200' : 'text-zinc-400'}`}>
                         &ldquo;{pedido.descricao}&rdquo;
                       </p>
                       
                       {/* Resposta Admin Inline */}
                       {pedido.status === 'atendido' && (
-                        <div className="mt-3 pl-4 border-l-2 border-[#d4af37]">
-                           <p className="text-[10px] text-[#d4af37] font-bold uppercase mb-1">Resposta da Equipa:</p>
+                        <div className="mt-3 pl-4 border-l-2 border-emerald-500/50">
+                           <p className="text-[10px] text-emerald-500 font-bold uppercase mb-1">Resposta da Equipa:</p>
                            <p className="text-xs text-zinc-400 italic">{pedido.resposta || 'Respondido e finalizado.'}</p>
                            {pedido.caminho_arquivo_resposta && (
                              <div className="flex gap-2 mt-2">
                                <button onClick={() => visualizarDocumento(pedido.caminho_arquivo_resposta)} className="text-[10px] bg-zinc-800 text-white px-3 py-1.5 rounded hover:bg-zinc-700 transition border border-zinc-700">
                                 Visualizar Anexo
                                </button>
-                               <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="text-[10px] bg-[#d4af37]/10 text-[#d4af37] px-3 py-1.5 rounded hover:bg-[#d4af37]/20 transition border border-[#d4af37]/30">
+                               <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="text-[10px] bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded hover:bg-emerald-500/20 transition border border-emerald-500/30">
                                  Baixar Anexo
                                </button>
                              </div>
@@ -1556,7 +1572,7 @@ export default function AdminPage() {
               // Lógica de Renderizar as pastas separadas
               if (agruparPedidosPorEmpresa) {
                 const agrupado = {};
-                pedidosFiltrados.forEach(p => {
+                listaExibicao.forEach(p => {
                   const n = p.clientes?.nome_empresa || 'Empresa Desconhecida';
                   if (!agrupado[n]) agrupado[n] = [];
                   agrupado[n].push(p);
@@ -1586,7 +1602,7 @@ export default function AdminPage() {
               }
 
               // Lógica de Renderizar todos duma vez
-              return <div className="divide-y divide-zinc-800">{pedidosFiltrados.map(pedido => renderCardPedido(pedido))}</div>;
+              return <div className="divide-y divide-zinc-800">{listaExibicao.map(pedido => renderCardPedido(pedido))}</div>;
             })()}
           </div>
         )}
