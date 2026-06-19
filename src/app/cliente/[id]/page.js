@@ -118,6 +118,52 @@ export default function ClientePage({ params: paramsPromise }) {
   const [itensLixeira, setItensLixeira] = useState([]);
   const [novoPedido, setNovoPedido] = useState('');
   const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
+  
+  // ESTADO DO MODAL DE RESPOSTA A SOLICITAÇÕES (ADMIN DENTRO DO PERFIL)
+  const [modalRespostaPedido, setModalRespostaPedido] = useState({ aberto: false, pedido: null, texto: '', arquivo: null });
+
+  async function handleResponderPedidoAdmin(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    const { pedido, texto, arquivo } = modalRespostaPedido;
+
+    let caminhoArquivo = null;
+    let nomeOriginal = null;
+
+    if (arquivo) {
+      if (arquivo.size > 15 * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite de 15MB.', 'erro');
+        setSubindoArquivo(false);
+        return;
+      }
+      const timestamp = Date.now();
+      caminhoArquivo = `${pedido.cliente_id}/respostas_pedidos/${timestamp}_${arquivo.name}`;
+      nomeOriginal = arquivo.name;
+      
+      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, arquivo);
+      if (storageError) {
+        mostrarToast('Erro ao anexar arquivo: ' + storageError.message, 'erro');
+        setSubindoArquivo(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('pedidos_cliente').update({
+      status: 'atendido',
+      resposta: texto,
+      caminho_arquivo_resposta: caminhoArquivo,
+      nome_arquivo_resposta: nomeOriginal
+    }).eq('id', pedido.id);
+
+    if (!error) {
+      mostrarToast('Solicitação respondida e finalizada com sucesso!', 'sucesso');
+      setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null });
+      await carregarDadosDaAba();
+    } else {
+      mostrarToast('Erro ao salvar resposta: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
 
   const [alertasGlobaisPendentes, setAlertasGlobaisPendentes] = useState(0);
   const [alertasGlobaisAtrasados, setAlertasGlobaisAtrasados] = useState(0); // NOVO: Conta quem perdeu o prazo
@@ -1554,10 +1600,16 @@ function handleReabrirSolicitacao(pedidoAbaixo) {
                         <p className="text-sm text-zinc-200 font-medium leading-relaxed">"{pedido.descricao}"</p>
                       </div>
                       
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 flex flex-col gap-2 items-end">
                         <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-md border uppercase whitespace-nowrap shadow-sm ${pedido.status === 'pendente' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'}`}>
                           {pedido.status === 'pendente' ? <><IconMiniClock /> Aguardando Retorno</> : <><IconCheck /> Resolvido</>}
                         </span>
+                        {/* Botão mágico para o Admin responder direto do perfil do cliente */}
+                        {isInterno && pedido.status === 'pendente' && (
+                          <button onClick={() => setModalRespostaPedido({ aberto: true, pedido, texto: '', arquivo: null })} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-3 py-1.5 rounded text-[10px] hover:bg-yellow-500 transition shadow-sm uppercase mt-1">
+                            Responder Chamado
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1905,6 +1957,56 @@ function handleReabrirSolicitacao(pedidoAbaixo) {
               </div>
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RESPOSTA À SOLICITAÇÃO (VISÃO ADMIN DENTRO DO PERFIL) */}
+      {modalRespostaPedido.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-lg flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <div>
+                <h3 className="text-lg font-bold text-[#d4af37]">Responder Solicitação</h3>
+                <p className="text-[10px] text-zinc-400 mt-1">Cliente: {cliente?.nome_empresa}</p>
+              </div>
+              <button type="button" onClick={() => setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            
+            <form onSubmit={handleResponderPedidoAdmin} className="p-5 space-y-4">
+              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 mb-4">
+                <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Pedido Original:</p>
+                <p className="text-sm text-zinc-300 italic">"{modalRespostaPedido.pedido?.descricao}"</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Sua Resposta (Opcional)</label>
+                <textarea 
+                  rows="3" 
+                  placeholder="Escreva uma mensagem ou instrução para o cliente..." 
+                  value={modalRespostaPedido.texto} 
+                  onChange={(e) => setModalRespostaPedido({...modalRespostaPedido, texto: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Anexar Documento (Opcional)</label>
+                <input 
+                  type="file" 
+                  accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                  onChange={(e) => setModalRespostaPedido({...modalRespostaPedido, arquivo: e.target.files[0]})}
+                  className="text-xs text-zinc-400 bg-[#0d1b2a] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" 
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-zinc-800 mt-2">
+                <button type="button" onClick={() => setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
+                  {subindoArquivo ? 'A enviar...' : 'Enviar e Finalizar'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
