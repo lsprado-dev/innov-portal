@@ -515,29 +515,50 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
-  // NOVO: Função para o colaborador corrigir/mover a área do pedido E AVISAR POR EMAIL
-  async function alterarDepartamentoPedido(pedido, novoDepartamento) {
+  // NOVO: Função para mover setor ou atribuir responsável e AVISAR POR E-MAIL
+  async function alterarResponsavelOuDepartamento(pedido, campo, valor) {
     setSubindo(true);
-    const { error } = await supabase.from('pedidos_cliente').update({ departamento: novoDepartamento }).eq('id', pedido.id);
+    const atualizacao = {};
+    atualizacao[campo] = valor;
+
+    const { error } = await supabase.from('pedidos_cliente').update(atualizacao).eq('id', pedido.id);
+    
     if (!error) {
-      mostrarToast(`Solicitação movida para a equipa: ${novoDepartamento}`, 'sucesso');
+      mostrarToast(`Ticket atualizado com sucesso!`, 'sucesso');
       
-      // Dispara o email automático para a nova área assumir o B.O.
-      const emailDestino = MAPA_DEPARTAMENTO_EMAIL[novoDepartamento];
-      if (emailDestino) {
-         enviarEmailDemanda({
-            to: emailDestino,
-            nomeDestinatario: `Equipa ${novoDepartamento}`,
-            nomeRemetente: operador,
-            tituloDemanda: `Transferência de Ticket - ${pedido.clientes?.nome_empresa || 'Cliente'}`,
-            descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi transferido para o seu departamento. Acesse o painel para responder.`,
-            prazo: 'Aguardando Análise'
-         }).catch(()=>{});
+      // Se mudou o departamento, avisa o departamento inteiro
+      if (campo === 'departamento') {
+        const emailDestino = MAPA_DEPARTAMENTO_EMAIL[valor];
+        if (emailDestino) {
+           enviarEmailDemanda({
+              to: emailDestino,
+              nomeDestinatario: `Equipa ${valor}`,
+              nomeRemetente: operador,
+              tituloDemanda: `Transferência de Ticket - ${pedido.clientes?.nome_empresa || 'Cliente'}`,
+              descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi transferido para o seu departamento.`,
+              prazo: 'Aguardando Análise'
+           }).catch(()=>{});
+        }
+      }
+      
+      // Se atribuiu a um colaborador específico, avisa-o diretamente
+      if (campo === 'responsavel' && valor !== '') {
+        const emailDestino = OBTER_EMAIL_FUNCIONARIO[valor];
+        if (emailDestino) {
+           enviarEmailDemanda({
+              to: emailDestino,
+              nomeDestinatario: valor.split(' ')[0],
+              nomeRemetente: operador,
+              tituloDemanda: `Ticket Atribuído a Você - ${pedido.clientes?.nome_empresa || 'Cliente'}`,
+              descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi atribuído a você para resolução.`,
+              prazo: 'Aguardando Análise'
+           }).catch(()=>{});
+        }
       }
 
       await carregarDados();
     } else {
-      mostrarToast('Erro ao mover a solicitação.', 'erro');
+      mostrarToast('Erro ao atualizar o ticket.', 'erro');
     }
     setSubindo(false);
   }
@@ -847,7 +868,7 @@ export default function AdminPage() {
   // Filtra as solicitações com base em quem está logado
   const pedidosVisiveis = eGestor 
     ? pedidosCliente 
-    : pedidosCliente.filter(p => departamentosVisiveis.includes(p.departamento));
+    : pedidosCliente.filter(p => departamentosVisiveis.includes(p.departamento) || p.responsavel === operador);
 
   // Filtra os arquivos recebidos com base em quem está logado
   const recebidosVisiveis = eGestor 
@@ -1523,21 +1544,37 @@ export default function AdminPage() {
                           {pedido.clientes?.nome_empresa || 'Empresa Removida'}
                         </span>
 
-                        <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2" onClick={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
-                          <select 
-                            value={pedido.departamento || 'Outros'} 
-                            onChange={(e) => alterarDepartamentoPedido(pedido, e.target.value)}
-                            className="bg-transparent text-[#d4af37] text-[11px] font-bold py-1 focus:outline-none cursor-pointer tracking-wider uppercase"
-                          >
-                            <option value="Contábil" className="bg-[#0d1b2a]">Contábil</option>
-                            <option value="Fiscal" className="bg-[#0d1b2a]">Fiscal</option>
-                            <option value="DP / RH" className="bg-[#0d1b2a]">DP / RH</option>
-                            <option value="Financeiro" className="bg-[#0d1b2a]">Financeiro</option>
-                            <option value="Societário" className="bg-[#0d1b2a]">Societário</option>
-                            <option value="Legalização" className="bg-[#0d1b2a]">Legalização</option>
-                            <option value="Outros" className="bg-[#0d1b2a]">Outros / Suporte</option>
-                          </select>
+                        <div className="flex gap-2 items-center flex-wrap">
+                          {/* SELECT DE SETOR */}
+                          <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2" onClick={e => e.stopPropagation()}>
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
+                            <select 
+                              value={pedido.departamento || 'Outros'} 
+                              onChange={(e) => alterarResponsavelOuDepartamento(pedido, 'departamento', e.target.value)}
+                              className="bg-transparent text-[#d4af37] text-[11px] font-bold py-1 focus:outline-none cursor-pointer tracking-wider uppercase"
+                            >
+                              <option value="Contábil" className="bg-[#0d1b2a]">Contábil</option>
+                              <option value="Fiscal" className="bg-[#0d1b2a]">Fiscal</option>
+                              <option value="DP / RH" className="bg-[#0d1b2a]">DP / RH</option>
+                              <option value="Financeiro" className="bg-[#0d1b2a]">Financeiro</option>
+                              <option value="Societário" className="bg-[#0d1b2a]">Societário</option>
+                              <option value="Legalização" className="bg-[#0d1b2a]">Legalização</option>
+                              <option value="Outros" className="bg-[#0d1b2a]">Outros / Suporte</option>
+                            </select>
+                          </div>
+                          
+                          {/* SELECT DE RESPONSÁVEL ESPECÍFICO */}
+                          <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-blue-500/50 transition-colors rounded px-2" onClick={e => e.stopPropagation()}>
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Para:</span>
+                            <select 
+                              value={pedido.responsavel || ''} 
+                              onChange={(e) => alterarResponsavelOuDepartamento(pedido, 'responsavel', e.target.value)}
+                              className="bg-transparent text-blue-400 text-[11px] font-bold py-1 focus:outline-none cursor-pointer tracking-wider uppercase"
+                            >
+                              <option value="" className="bg-[#0d1b2a]">Equipa Inteira</option>
+                              {LISTA_COLABORADORES.map(c => <option key={c} value={c} className="bg-[#0d1b2a]">{c}</option>)}
+                            </select>
+                          </div>
                         </div>
 
                         <span className="text-[11px] text-zinc-500">{new Date(pedido.criado_em).toLocaleString('pt-BR')}</span>
