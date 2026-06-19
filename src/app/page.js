@@ -1536,6 +1536,14 @@ export default function AdminPage() {
                       <p className={`text-sm font-medium leading-relaxed bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50 ${pedido.status === 'pendente' ? 'text-zinc-200' : 'text-zinc-400'}`}>
                         &ldquo;{pedido.descricao}&rdquo;
                       </p>
+                      {/* Anexo enviado pelo cliente */}
+                      {pedido.caminho_arquivo && (
+                        <div className="mt-2 flex items-center gap-2 border border-zinc-700/50 bg-[#0d1b2a] w-max px-3 py-1.5 rounded-lg">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase">Anexo do Cliente:</span>
+                          <span className="text-[11px] text-zinc-400 max-w-[150px] truncate">{pedido.nome_arquivo}</span>
+                          <button onClick={(e) => { e.preventDefault(); baixarDocumento(pedido.caminho_arquivo, pedido.nome_arquivo); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded transition ml-2">Baixar</button>
+                        </div>
+                      )}
                       
                       {/* Resposta Admin Inline */}
                       {pedido.status === 'atendido' && (

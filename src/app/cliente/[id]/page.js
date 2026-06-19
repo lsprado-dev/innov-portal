@@ -118,10 +118,20 @@ export default function ClientePage({ params: paramsPromise }) {
   const [itensLixeira, setItensLixeira] = useState([]);
   const [novoPedido, setNovoPedido] = useState('');
   const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
+  const [arquivoPedido, setArquivoPedido] = useState(null); // NOVO: Anexo no ticket do cliente
   
   // ESTADOS DA TRÉPLICA (RESPONDER POR BAIXO DO CARD)
   const [chamadoReabrindo, setChamadoReabrindo] = useState(null);
   const [textoReplica, setTextoReplica] = useState('');
+
+  // NOVO: Função para abrir ticket direto do arquivo
+  function handleAbrirChamadoArquivo(arq) {
+    setNovoPedido(`[Referente ao arquivo: ${arq.nome_original}]\n\nGostaria de saber: `);
+    setDepartamentoPedido(arq.setor === 'financeiro' ? 'Financeiro' : (arq.setor === 'rh' ? 'DP / RH' : 'Contábil'));
+    setAbaPrincipal('solicitacoes');
+    rolarPara('nova-solicitacao-form');
+    mostrarToast('Por favor, complete a sua dúvida abaixo e envie.', 'aviso');
+  }
 
   // NOVO: ESTADOS PARA OS DISCLAIMERS E BOLINHAS VERDES
   const [textosPastas, setTextosPastas] = useState({});
@@ -368,9 +378,12 @@ export default function ClientePage({ params: paramsPromise }) {
            const arquivosNaTela = data.filter(a => (a.subpasta_id || null) === (subpastaAtiva || null) && !a.visualizado_cliente);
            if (arquivosNaTela.length > 0) {
              const ids = arquivosNaTela.map(a => a.id);
-             await supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids);
+             // UPDATE OTIMISTA (Instantâneo no ecrã)
              setArquivosNaoLidos(prev => prev.filter(a => !ids.includes(a.id)));
              setArquivos(prev => prev.map(a => ids.includes(a.id) ? { ...a, visualizado_cliente: true } : a));
+             
+             // Atualiza no banco de dados em segundo plano, sem travar a tela
+             supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids).then();
            }
         }
       }
@@ -958,15 +971,36 @@ export default function ClientePage({ params: paramsPromise }) {
     if (!novoPedido.trim() || !departamentoPedido) return;
     
     setSubindoArquivo(true);
+    let caminhoArquivo = null;
+    let nomeOriginal = null;
+
+    if (arquivoPedido) {
+      if (arquivoPedido.size > 15 * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite de 15MB.', 'erro');
+        setSubindoArquivo(false); return;
+      }
+      const timestamp = Date.now();
+      caminhoArquivo = `${id}/pedidos_cliente/${timestamp}_${arquivoPedido.name}`;
+      nomeOriginal = arquivoPedido.name;
+      const { error } = await supabase.storage.from('documentos').upload(caminhoArquivo, arquivoPedido);
+      if (error) {
+        mostrarToast('Erro ao anexar arquivo: ' + error.message, 'erro');
+        setSubindoArquivo(false); return;
+      }
+    }
+
     await supabase.from('pedidos_cliente').insert([{ 
       cliente_id: id, 
       descricao: novoPedido.trim(), 
       status: 'pendente',
-      departamento: departamentoPedido 
+      departamento: departamentoPedido,
+      caminho_arquivo: caminhoArquivo,
+      nome_arquivo: nomeOriginal
     }]);
 
     mostrarToast(`A sua solicitação foi enviada para o departamento ${departamentoPedido}!`, 'sucesso');
     setNovoPedido('');
+    setArquivoPedido(null);
     setDepartamentoPedido('Contábil'); // Reseta para o padrão
     carregarDadosDaAba();
     setSubindoArquivo(false);
@@ -1231,7 +1265,7 @@ async function handleEnviarReplica(pedidoOriginal) {
                 const qtdNovos = !isInterno ? arquivosNaoLidos.filter(a => a.setor === pasta.id).length : 0;
                 return (
                   <button key={pasta.id} onClick={() => { setPastaAtiva(pasta.id); rolarPara('conteudo-pastas'); }} className={`relative flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === pasta.id ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
-                    {qtdNovos > 0 && <span className="absolute -top-2 -right-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse border border-emerald-400">{qtdNovos} Novo{qtdNovos > 1 ? 's' : ''}</span>}
+                    {qtdNovos > 0 && <span className="absolute -top-2 -right-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm border border-emerald-400">{qtdNovos} Novo{qtdNovos > 1 ? 's' : ''}</span>}
                     {pasta.icon}
                     <h3 className="text-sm font-bold text-white mb-1">{pasta.nome}</h3>
                     <p className="text-[10px] text-zinc-400">{pasta.desc}</p>
@@ -1485,6 +1519,9 @@ async function handleEnviarReplica(pedidoOriginal) {
                                 <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
                               </>
                             )}
+                            {!isInterno && (
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAbrirChamadoArquivo(arq); }} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-zinc-300 font-bold transition-all shadow-sm whitespace-nowrap"> Dúvida</button>
+                            )}
                             <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
                             <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
                           </div>
@@ -1683,6 +1720,10 @@ async function handleEnviarReplica(pedidoOriginal) {
                     <option value="Outros">Outros / Dúvida Geral</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">Anexar Documento (Opcional)</label>
+                  <input type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" onChange={(e) => setArquivoPedido(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" />
+                </div>
                 <div className="flex justify-end border-t border-zinc-800/60 pt-5 mt-2">
                   <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-8 py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.2)] disabled:opacity-50 w-full sm:w-auto">
                     {subindoArquivo ? 'A Enviar...' : 'Enviar Solicitação para Equipa'}
@@ -1738,6 +1779,12 @@ async function handleEnviarReplica(pedidoOriginal) {
                           <span className="text-[11px] text-zinc-500 font-medium">Enviado em {new Date(pedido.criado_em).toLocaleDateString('pt-BR')}</span>
                         </div>
                         <p className="text-sm text-zinc-200 font-medium leading-relaxed">"{pedido.descricao}"</p>
+                        {pedido.caminho_arquivo && (
+                          <div className="mt-3 flex items-center gap-2 border border-zinc-700/50 bg-[#0d1b2a] w-max px-3 py-1.5 rounded-lg">
+                            <IconClip /> <span className="text-[11px] text-zinc-400 max-w-[150px] truncate">{pedido.nome_arquivo}</span>
+                            <button onClick={(e) => { e.preventDefault(); baixarDocumento(pedido.caminho_arquivo, pedido.nome_arquivo); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-1 rounded transition ml-2">Baixar</button>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="flex-shrink-0 flex flex-col gap-2 items-end">
