@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { enviarEmailDemanda } from './lib/email'; // Ajustado para a pasta real
 
@@ -85,7 +85,6 @@ function formatarDataHora(dataString) {
 
 export default function AdminPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [clientes, setClientes] = useState([]);
   const [pendentes, setPendentes] = useState([]);
   const [recebidos, setRecebidos] = useState([]);
@@ -185,13 +184,16 @@ export default function AdminPage() {
 
   // NOVO: LÊ O CLIQUE DO E-MAIL MATINAL DOS GESTORES E FILTRA SOZINHO!
   useEffect(() => {
-    const colabQuery = searchParams.get('colab');
-    if (colabQuery) {
-      setBuscaPedido(colabQuery); // Preenche a barra de pesquisa com o nome
-      setAbaAtiva('solicitacoes'); // Abre a aba certa
-      setSubAbaTicket('pendentes');
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const colabQuery = urlParams.get('colab');
+      if (colabQuery) {
+        setBuscaPedido(colabQuery); // Preenche a barra de pesquisa com o nome
+        setAbaAtiva('solicitacoes'); // Abre a aba certa
+        setSubAbaTicket('pendentes');
+      }
     }
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     const tipoUsuario = localStorage.getItem('usuario_tipo');
