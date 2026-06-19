@@ -1434,10 +1434,10 @@ export default function AdminPage() {
                         
                         {/* ETIQUETAS MÁGICAS DE VÍNCULO */}
                         {sol.tipo_solicitacao === 'vinculo_existente' && (
-                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">🔗 Ligar Conta Existente</span>
+                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">Linkar Conta Existente</span>
                         )}
                         {sol.tipo_solicitacao === 'novo_vinculo' && (
-                          <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">✨ Nova Conta Vinculada</span>
+                          <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded uppercase font-bold whitespace-nowrap">Nova Conta Vinculada</span>
                         )}
                       </div>
 
