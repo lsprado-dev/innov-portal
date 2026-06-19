@@ -1476,7 +1476,7 @@ export default function AdminPage() {
                            <p className="text-xs text-zinc-400 italic">{pedido.resposta || 'Respondido e finalizado.'}</p>
                            {pedido.caminho_arquivo_resposta && (
                              <button onClick={() => baixarDocumento(pedido.caminho_arquivo_resposta, pedido.nome_arquivo_resposta)} className="mt-2 text-[10px] bg-zinc-800 text-white px-3 py-1.5 rounded hover:bg-zinc-700 transition">
-                               📥 Baixar Anexo Enviado
+                               Baixar Doc Enviado
                              </button>
                            )}
                         </div>
