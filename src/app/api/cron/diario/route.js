@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { enviarEmailDemanda } from '../../../../lib/email'; // Confirme que o caminho para o email.js está correto
+import { enviarEmailDemanda } from '../../../lib/email';
 
 export async function GET(req) {
   try {
