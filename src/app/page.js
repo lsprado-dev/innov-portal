@@ -144,6 +144,12 @@ export default function AdminPage() {
   const [buscaAlerta, setBuscaAlerta] = useState('');
   const [buscaCliente, setBuscaCliente] = useState('');
   
+  // NOVOS ESTADOS PARA SELEÇÃO E BUSCA DE TICKETS
+  const [modoSelecaoRecebidos, setModoSelecaoRecebidos] = useState(false);
+  const [buscaPedido, setBuscaPedido] = useState('');
+  const [agruparPedidosPorEmpresa, setAgruparPedidosPorEmpresa] = useState(false);
+  const [empresaExpandidaPedido, setEmpresaExpandidaPedido] = useState(null);
+
   // ESTADO PARA O BALÃO DE COPIAR SENHA
   const [senhaCopiadaId, setSenhaCopiadaId] = useState(null);
   
@@ -872,6 +878,15 @@ export default function AdminPage() {
     !formAlerta.clientesSelecionados.find(sel => sel.id === c.id)
   );
 
+  // FILTRO INTELIGENTE PARA A ABA DE TICKETS (Busca por Nome, Ticket ou Data)
+  const pedidosFiltrados = pedidosVisiveis.filter(p => {
+    const termo = buscaPedido.toLowerCase();
+    const numTicket = String(p.numero_ticket || 0).padStart(5, '0');
+    const nomeEmp = p.clientes?.nome_empresa?.toLowerCase() || '';
+    const dataFormat = new Date(p.criado_em).toLocaleDateString('pt-BR');
+    return nomeEmp.includes(termo) || numTicket.includes(termo) || dataFormat.includes(termo);
+  });
+
   // FUNÇÃO DE RENDERIZAÇÃO INTELIGENTE (Agrupada ou Lista Solta)
   const renderLista = (lista, renderCard) => {
     if (lista.length === 0) return <p className="text-zinc-500 text-center py-8">Nenhum registo encontrado.</p>;
@@ -1352,18 +1367,30 @@ export default function AdminPage() {
             {/* PAINEL DE AÇÕES EM LOTE NO TOPO */}
             {recebidosVisiveis.length > 0 && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-4 rounded-xl shadow-lg gap-4">
-                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
-                  <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={recebidosVisiveis.length > 0 && selecionadosRecebidos.length === recebidosVisiveis.length} onChange={toggleSelecionarTodosRecebidos} />
-                  Selecionar Todos ({recebidosVisiveis.length})
-                </label>
-                
-                {selecionadosRecebidos.length > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end border-t sm:border-t-0 border-zinc-700 pt-4 sm:pt-0">
-                    <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionadosRecebidos.length} selecionado(s)</span>
-                    <button onClick={handleAceitarEmLote} className="flex-1 sm:flex-none text-xs bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/30 px-4 py-2.5 sm:py-2 rounded text-emerald-400 font-extrabold transition text-center shadow-sm">Mover para Histórico</button>
-                    <button onClick={handleBaixarEmLote} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-4 py-2.5 sm:py-2 rounded text-blue-400 font-extrabold transition text-center shadow-sm">Baixar Tudo</button>
-                    <button onClick={handleExcluirEmLote} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-4 py-2.5 sm:py-2 rounded text-red-400 font-extrabold transition text-center shadow-sm">Excluir</button>
+                {!modoSelecaoRecebidos ? (
+                  <div className="w-full flex justify-between items-center">
+                    <h3 className="text-white font-bold text-sm flex items-center gap-2"><IconInbox /> Docs Pendentes ({recebidosVisiveis.length})</h3>
+                    <button onClick={() => setModoSelecaoRecebidos(true)} className="text-xs bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-2.5 rounded-lg hover:bg-yellow-500 transition shadow-sm">Selecionar Múltiplos Arquivos</button>
                   </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
+                        <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={recebidosVisiveis.length > 0 && selecionadosRecebidos.length === recebidosVisiveis.length} onChange={toggleSelecionarTodosRecebidos} />
+                        Selecionar Todos ({recebidosVisiveis.length})
+                      </label>
+                      <button onClick={() => { setModoSelecaoRecebidos(false); setSelecionadosRecebidos([]); }} className="text-xs text-zinc-400 hover:text-white transition underline font-medium">Cancelar</button>
+                    </div>
+                    
+                    {selecionadosRecebidos.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end border-t sm:border-t-0 border-zinc-700 pt-4 sm:pt-0">
+                        <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionadosRecebidos.length} selecionado(s)</span>
+                        <button onClick={handleAceitarEmLote} className="flex-1 sm:flex-none text-xs bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/30 px-4 py-2.5 sm:py-2 rounded text-emerald-400 font-extrabold transition text-center shadow-sm">Mover para Histórico</button>
+                        <button onClick={handleBaixarEmLote} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-4 py-2.5 sm:py-2 rounded text-blue-400 font-extrabold transition text-center shadow-sm">Baixar Tudo</button>
+                        <button onClick={handleExcluirEmLote} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-4 py-2.5 sm:py-2 rounded text-red-400 font-extrabold transition text-center shadow-sm">Excluir</button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1374,11 +1401,13 @@ export default function AdminPage() {
               ) : (
                 <div className="divide-y divide-zinc-800">
                   {recebidosVisiveis.map((doc) => (
-                    <label key={doc.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition w-full min-w-0 cursor-pointer ${selecionadosRecebidos.includes(doc.id) ? 'bg-[#d4af37]/10' : 'bg-[#1b263b] hover:bg-zinc-800/40'}`}>
+                    <div key={doc.id} onClick={() => modoSelecaoRecebidos && toggleSelecionarRecebido(doc.id)} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition w-full min-w-0 ${modoSelecaoRecebidos ? 'cursor-pointer' : ''} ${selecionadosRecebidos.includes(doc.id) ? 'bg-[#d4af37]/10' : 'bg-[#1b263b] hover:bg-zinc-800/40'}`}>
                       <div className="flex items-start gap-4 min-w-0 flex-1 w-full">
-                        <div className="pt-1">
-                          <input type="checkbox" checked={selecionadosRecebidos.includes(doc.id)} onChange={() => toggleSelecionarRecebido(doc.id)} className="accent-[#d4af37] w-5 h-5 cursor-pointer shadow-sm" />
-                        </div>
+                        {modoSelecaoRecebidos && (
+                          <div className="pt-1">
+                            <input type="checkbox" checked={selecionadosRecebidos.includes(doc.id)} onChange={() => {}} className="accent-[#d4af37] w-5 h-5 cursor-pointer shadow-sm pointer-events-none" />
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-3 mb-1 flex-wrap">
                             <h4 className={`text-lg font-bold truncate max-w-md transition-colors ${selecionadosRecebidos.includes(doc.id) ? 'text-[#d4af37]' : 'text-zinc-200'}`}>{doc.nome_documento}</h4>
@@ -1386,8 +1415,8 @@ export default function AdminPage() {
                               {doc.clientes?.nome_empresa || 'Empresa Removida'}
                             </span>
                             
-                            {/* NOVO: SELECT DE SETOR NO DOCUMENTO RECEBIDO */}
-                            <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2" onClick={(e) => e.preventDefault()}>
+                            {/* SELECT DE SETOR NO DOCUMENTO RECEBIDO */}
+                            <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2" onClick={(e) => e.stopPropagation()}>
                               <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
                               <select 
                                 value={doc.departamento || 'Outros'} 
@@ -1411,14 +1440,16 @@ export default function AdminPage() {
                         </div>
                       </div>
                       
-                      {/* Oculta os botões individuais se tiver lotes marcados (Para focar no topo) */}
-                      <div className={`flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto mt-3 md:mt-0 transition-opacity ${selecionadosRecebidos.length > 0 && !selecionadosRecebidos.includes(doc.id) ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); visualizarDocumento(doc.caminho_storage); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-3 py-2.5 rounded text-xs font-bold transition text-white">Visualizar</button>
-                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); baixarDocumento(doc.caminho_storage, doc.nome_original); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-3 py-2.5 rounded text-xs font-bold transition-all shadow-sm">Baixar</button>
-                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); aceitarEMoverParaHistorico(doc); }} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-3 py-2.5 rounded text-xs hover:bg-emerald-400 transition shadow-sm">Mover para Histórico</button>
-                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); rejeitarEDeletar(doc); }} className="flex-1 md:flex-none px-3 py-2.5 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded text-xs transition">Excluir</button>
-                      </div>
-                    </label>
+                      {/* Oculta os botões individuais se tiver em modo selecao */}
+                      {!modoSelecaoRecebidos && (
+                        <div className="flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto mt-3 md:mt-0 transition-opacity">
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); visualizarDocumento(doc.caminho_storage); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-3 py-2.5 rounded text-xs font-bold transition text-white">Visualizar</button>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); baixarDocumento(doc.caminho_storage, doc.nome_original); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-3 py-2.5 rounded text-xs font-bold transition-all shadow-sm">Baixar</button>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); aceitarEMoverParaHistorico(doc); }} className="flex-1 md:flex-none bg-emerald-500 text-black font-extrabold px-3 py-2.5 rounded text-xs hover:bg-emerald-400 transition shadow-sm">Mover para Histórico</button>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); rejeitarEDeletar(doc); }} className="flex-1 md:flex-none px-3 py-2.5 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded text-xs transition">Excluir</button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -1428,13 +1459,31 @@ export default function AdminPage() {
 
         {abaAtiva === 'solicitacoes' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
-            {pedidosVisiveis.length === 0 ? (
-              <p className="text-zinc-400 text-center py-12">Nenhuma solicitação pendente para a sua equipa.</p>
-            ) : (
-              <div className="divide-y divide-zinc-800">
-                {pedidosVisiveis.map((pedido) => (
-                  <div key={pedido.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition">
-                    <div className="flex-1 pr-4">
+            
+            {/* CABEÇALHO BEM ORGANIZADO ESTILO ALERTAS */}
+            <div className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col sm:flex-row justify-between items-center gap-4 rounded-t-xl">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                 <h2 className="text-lg font-bold text-[#d4af37]">Tickets Abertos</h2>
+                 <span className="bg-[#d4af37] text-[#0d1b2a] text-xs font-bold px-2 py-0.5 rounded-full">{pedidosFiltrados.length}</span>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-col sm:flex-row">
+                <label className="flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-4 py-2.5 sm:py-2 rounded-lg border border-zinc-700 w-full sm:w-auto">
+                  <input type="checkbox" checked={agruparPedidosPorEmpresa} onChange={e => { setAgruparPedidosPorEmpresa(e.target.checked); setEmpresaExpandidaPedido(null); }} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
+                  <IconCompany /> Agrupar por Empresa
+                </label>
+                <div className="relative w-full sm:w-64">
+                  <input type="text" placeholder="Nº Ticket, Empresa ou Data..." value={buscaPedido} onChange={(e) => setBuscaPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                </div>
+              </div>
+            </div>
+
+            {/* CORPO DA LISTAGEM (INTELIGENTE) */}
+            {(() => {
+              if (pedidosFiltrados.length === 0) return <p className="text-zinc-400 text-center py-12">Nenhum ticket encontrado com esta pesquisa.</p>;
+
+              const renderCardPedido = (pedido) => (
+                  <div key={pedido.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition border-b border-zinc-800/50 last:border-0">
+                    <div className="flex-1 pr-4 w-full">
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <IconChat />
                         <span className="text-xs font-black text-[#0d1b2a] bg-[#d4af37] px-2 py-0.5 rounded shadow-sm">
@@ -1444,8 +1493,7 @@ export default function AdminPage() {
                           {pedido.clientes?.nome_empresa || 'Empresa Removida'}
                         </span>
 
-                        {/* NOVO: SELECT PREMIUM DE TRIAGEM DE DEPARTAMENTO */}
-                        <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2">
+                        <div className="flex items-center gap-1 bg-[#0d1b2a] border border-zinc-700 hover:border-[#d4af37]/50 transition-colors rounded px-2" onClick={e => e.stopPropagation()}>
                           <span className="text-[10px] text-zinc-500 uppercase font-bold hidden sm:inline">Setor:</span>
                           <select 
                             value={pedido.departamento || 'Outros'} 
@@ -1473,7 +1521,7 @@ export default function AdminPage() {
                         &ldquo;{pedido.descricao}&rdquo;
                       </p>
                       
-                      {/* Mostra a resposta da equipa para o Admin lembrar o que foi dito */}
+                      {/* Resposta Admin Inline */}
                       {pedido.status === 'atendido' && (
                         <div className="mt-3 pl-4 border-l-2 border-[#d4af37]">
                            <p className="text-[10px] text-[#d4af37] font-bold uppercase mb-1">Resposta da Equipa:</p>
@@ -1491,11 +1539,11 @@ export default function AdminPage() {
                         </div>
                       )}
                     </div>
+
                     <div className="flex gap-2 w-full md:w-auto whitespace-nowrap mt-2 md:mt-0 flex-col sm:flex-row items-end">
                       <Link href={`/cliente/${pedido.cliente_id}`} className="flex-1 w-full md:w-auto border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm text-center">
                         Acessar Perfil
                       </Link>
-                      {/* Só mostra o botão de responder se ainda estiver pendente */}
                       {pedido.status === 'pendente' && (
                         <button onClick={() => setModalRespostaPedido({ aberto: true, pedido, texto: '', arquivo: null })} className="flex-1 w-full md:w-auto bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-2.5 rounded-lg text-xs hover:bg-yellow-500 transition shadow-lg">
                           Responder e Finalizar
@@ -1503,9 +1551,43 @@ export default function AdminPage() {
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+              );
+
+              // Lógica de Renderizar as pastas separadas
+              if (agruparPedidosPorEmpresa) {
+                const agrupado = {};
+                pedidosFiltrados.forEach(p => {
+                  const n = p.clientes?.nome_empresa || 'Empresa Desconhecida';
+                  if (!agrupado[n]) agrupado[n] = [];
+                  agrupado[n].push(p);
+                });
+
+                return (
+                  <div className="divide-y divide-zinc-800/50">
+                    {Object.keys(agrupado).sort().map(empresa => (
+                      <div key={empresa} className="flex flex-col">
+                        <button onClick={() => setEmpresaExpandidaPedido(empresaExpandidaPedido === empresa ? null : empresa)} className="w-full flex items-center justify-between p-4 bg-[#1b263b] hover:bg-zinc-800/50 transition focus:outline-none">
+                          <div className="flex items-center gap-3">
+                            <IconCompany />
+                            <span className="font-bold text-white text-sm">{empresa}</span>
+                            <span className="text-[10px] bg-[#d4af37]/20 text-[#d4af37] px-2 py-0.5 rounded-full border border-[#d4af37]/30">{agrupado[empresa].length} ticket(s)</span>
+                          </div>
+                          <span className="text-zinc-500 text-xs font-bold">{empresaExpandidaPedido === empresa ? 'Ocultar ▲' : 'Ver Tickets ▼'}</span>
+                        </button>
+                        {empresaExpandidaPedido === empresa && (
+                          <div className="p-0 bg-[#0d1b2a]/60 border-t border-zinc-800/50 divide-y divide-zinc-800/50">
+                            {agrupado[empresa].map(pedido => renderCardPedido(pedido))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              // Lógica de Renderizar todos duma vez
+              return <div className="divide-y divide-zinc-800">{pedidosFiltrados.map(pedido => renderCardPedido(pedido))}</div>;
+            })()}
           </div>
         )}
 
