@@ -494,7 +494,8 @@ export default function AdminPage() {
       status: 'atendido',
       resposta: texto,
       caminho_arquivo_resposta: caminhoArquivo,
-      nome_arquivo_resposta: nomeOriginal
+      nome_arquivo_resposta: nomeOriginal,
+      data_resolucao: new Date().toISOString()
     }).eq('id', pedido.id);
 
     if (!error) {
@@ -1436,6 +1437,9 @@ export default function AdminPage() {
                     <div className="flex-1 pr-4">
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <IconChat />
+                        <span className="text-xs font-black text-[#0d1b2a] bg-[#d4af37] px-2 py-0.5 rounded shadow-sm">
+                          #{String(pedido.numero_ticket || 0).padStart(5, '0')}
+                        </span>
                         <span className="text-xs bg-[#0d1b2a] text-[#d4af37] px-2 py-0.5 rounded border border-[#d4af37]/30 font-bold uppercase">
                           {pedido.clientes?.nome_empresa || 'Empresa Removida'}
                         </span>

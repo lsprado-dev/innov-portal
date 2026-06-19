@@ -156,7 +156,8 @@ export default function ClientePage({ params: paramsPromise }) {
       status: 'atendido',
       resposta: texto,
       caminho_arquivo_resposta: caminhoArquivo,
-      nome_arquivo_resposta: nomeOriginal
+      nome_arquivo_resposta: nomeOriginal,
+      data_resolucao: new Date().toISOString()
     }).eq('id', pedido.id);
 
     if (!error) {
@@ -171,6 +172,8 @@ export default function ClientePage({ params: paramsPromise }) {
 
   const [alertasGlobaisPendentes, setAlertasGlobaisPendentes] = useState(0);
   const [alertasGlobaisAtrasados, setAlertasGlobaisAtrasados] = useState(0); // NOVO: Conta quem perdeu o prazo
+  const [pedidosResolvidosNaoLidos, setPedidosResolvidosNaoLidos] = useState(0); // NOVO: Banner verde
+  const [subAbaSolicitacao, setSubAbaSolicitacao] = useState('ativas'); // NOVO: Filtro de abas
 
   // ESTADOS DO MODAL DE PERFIL E SENHA
   const [mostrarModalPerfil, setMostrarModalPerfil] = useState(false);
@@ -298,14 +301,18 @@ export default function ClientePage({ params: paramsPromise }) {
     if (!clienteId) return;
     const { data } = await supabase.from('alertas_clientes').select('id, prazo').eq('cliente_id', clienteId).eq('status', 'pendente');
     if (data) {
-      const hoje = new Date().toISOString().split('T')[0]; // Pega a data de hoje no formato YYYY-MM-DD
+      const hoje = new Date().toISOString().split('T')[0];
       const atrasados = data.filter(a => a.prazo && a.prazo < hoje).length;
       setAlertasGlobaisAtrasados(atrasados);
-      setAlertasGlobaisPendentes(data.length - atrasados); // Os pendentes normais são o total menos os atrasados
+      setAlertasGlobaisPendentes(data.length - atrasados); 
     } else {
       setAlertasGlobaisPendentes(0);
       setAlertasGlobaisAtrasados(0);
     }
+
+    // Busca tickets resolvidos que o cliente ainda não viu
+    const { data: dataPedidos } = await supabase.from('pedidos_cliente').select('id').eq('cliente_id', clienteId).eq('status', 'atendido').is('visualizado_em', null);
+    if (dataPedidos) setPedidosResolvidosNaoLidos(dataPedidos.length);
   }
 
   async function carregarDadosDaAba() {
@@ -335,7 +342,19 @@ export default function ClientePage({ params: paramsPromise }) {
     } 
     else if (abaPrincipal === 'solicitacoes') {
       const { data } = await supabase.from('pedidos_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
-      if (data) setPedidos(data);
+      if (data) {
+        setPedidos(data);
+        const tipoSalvo = localStorage.getItem('usuario_tipo');
+        if (tipoSalvo !== 'interno') {
+          const naoLidos = data.filter(p => !p.visualizado_em && p.status === 'atendido').map(p => p.id);
+          if (naoLidos.length > 0) {
+            await supabase.from('pedidos_cliente').update({ visualizado_em: new Date().toISOString() }).in('id', naoLidos);
+            atualizarBadgeGlobal(id); // Limpa o banner verde da tela
+            // Atualiza localmente para mudar a cor para cinza sem precisar recarregar a tela
+            setPedidos(prev => prev.map(p => naoLidos.includes(p.id) ? { ...p, visualizado_em: new Date().toISOString() } : p));
+          }
+        }
+      }
     } 
     else if (abaPrincipal === 'alertas') {
       const { data } = await supabase.from('alertas_clientes').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
@@ -1100,6 +1119,21 @@ async function handleEnviarReplica(pedidoOriginal) {
           </div>
         )}
 
+        {!isInterno && pedidosResolvidosNaoLidos > 0 && (
+          <div className="mb-8 bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-in fade-in slide-in-from-top-4 duration-500">
+             <div className="flex items-center gap-3 w-full sm:w-auto">
+                <span className="text-2xl animate-bounce">✅</span>
+                <div>
+                   <h3 className="text-emerald-400 font-bold text-sm">Você possui {pedidosResolvidosNaoLidos} solicitação(ões) respondida(s)!</h3>
+                   <p className="text-xs text-emerald-200/70">A equipa atendeu ao seu pedido. Clique para conferir a resposta e baixar anexos se houver.</p>
+                </div>
+             </div>
+             <button onClick={() => { setAbaPrincipal('solicitacoes'); rolarPara('conteudo-abas'); }} className="w-full sm:w-auto bg-emerald-500 text-[#0d1b2a] font-extrabold px-6 py-2.5 rounded-lg text-xs hover:bg-emerald-400 transition shadow-md whitespace-nowrap">
+                Conferir Resposta
+             </button>
+          </div>
+        )}
+
         {/* NAVEGAÇÃO PRINCIPAL INTELIGENTE */}
         <div className="flex flex-wrap gap-4 mb-8 border-b border-zinc-800 pb-px">
           <button onClick={() => { setAbaPrincipal('pastas'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'pastas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
@@ -1602,17 +1636,46 @@ async function handleEnviarReplica(pedidoOriginal) {
             )}
             
             <div className="space-y-6">
-              <h4 className="text-sm font-bold text-white mb-2">Histórico de Pedidos</h4>
-              {pedidos.length === 0 ? (
-                <p className="text-zinc-500 text-sm p-4 bg-[#0d1b2a] rounded-lg">Nenhuma solicitação encontrada neste perfil.</p>
-              ) : (
-                pedidos.map(pedido => (
-                  <div key={pedido.id} className={`p-5 rounded-xl border flex flex-col gap-4 ${pedido.status === 'pendente' ? 'bg-[#0d1b2a] border-zinc-700/50' : 'bg-[#0d1b2a]/60 border-emerald-500/20'}`}>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 pb-2 mb-4 gap-4">
+                <h4 className="text-sm font-bold text-white">Histórico de Tickets</h4>
+                <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-800 w-full sm:w-auto">
+                  <button onClick={() => setSubAbaSolicitacao('ativas')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold transition-all ${subAbaSolicitacao === 'ativas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}>Ativas Recentes</button>
+                  <button onClick={() => setSubAbaSolicitacao('antigas')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold transition-all ${subAbaSolicitacao === 'antigas' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}>Arquivo (Antigas)</button>
+                </div>
+              </div>
+
+              {(() => {
+                const hojeApp = new Date();
+                const pedidosAtivos = pedidos.filter(p => {
+                  if (p.status === 'pendente') return true;
+                  if (!p.data_resolucao) return true;
+                  const diffDias = (hojeApp - new Date(p.data_resolucao)) / (1000 * 60 * 60 * 24);
+                  return diffDias <= 2;
+                });
+                
+                const pedidosAntigos = pedidos.filter(p => {
+                  if (p.status === 'pendente') return false;
+                  if (!p.data_resolucao) return false;
+                  const diffDias = (hojeApp - new Date(p.data_resolucao)) / (1000 * 60 * 60 * 24);
+                  return diffDias > 2;
+                });
+
+                const listaExibicao = subAbaSolicitacao === 'ativas' ? pedidosAtivos : pedidosAntigos;
+
+                if (listaExibicao.length === 0) {
+                  return <p className="text-zinc-500 text-sm p-4 bg-[#0d1b2a] rounded-lg">Nenhum ticket encontrado nesta categoria.</p>;
+                }
+
+                return listaExibicao.map(pedido => (
+                  <div key={pedido.id} className={`p-5 rounded-xl border flex flex-col gap-4 transition-all duration-300 ${pedido.status === 'pendente' ? 'bg-[#0d1b2a] border-zinc-700/50' : (pedido.visualizado_em && !isInterno ? 'bg-[#0d1b2a]/40 border-emerald-500/10 opacity-60 grayscale-[30%] hover:opacity-100 hover:grayscale-0' : 'bg-[#0d1b2a]/90 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)]')}`}>
                     
                     {/* PARTE DO CLIENTE */}
                     <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="text-[10px] font-black bg-[#d4af37] text-[#0d1b2a] px-2 py-0.5 rounded tracking-wider flex items-center shadow-sm">
+                            #{String(pedido.numero_ticket || 0).padStart(5, '0')}
+                          </span>
                           <span className="text-[10px] font-bold bg-[#1b263b] text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
                             <IconChatList /> {pedido.departamento || 'Geral'}
                           </span>
@@ -1696,7 +1759,7 @@ async function handleEnviarReplica(pedidoOriginal) {
                     )}
                   </div>
                 ))
-              )}
+              })()}  {/* <--- O SEGREDO ESTÁ AQUI: TROCAR )} POR })()} */}
             </div>
           </div>
         )}
