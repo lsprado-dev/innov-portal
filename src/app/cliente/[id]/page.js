@@ -122,6 +122,11 @@ export default function ClientePage({ params: paramsPromise }) {
   // ESTADOS DA TRÉPLICA (RESPONDER POR BAIXO DO CARD)
   const [chamadoReabrindo, setChamadoReabrindo] = useState(null);
   const [textoReplica, setTextoReplica] = useState('');
+
+  // NOVO: ESTADOS PARA OS DISCLAIMERS E BOLINHAS VERDES
+  const [textosPastas, setTextosPastas] = useState({});
+  const [arquivosNaoLidos, setArquivosNaoLidos] = useState([]);
+  const [modalTextoPasta, setModalTextoPasta] = useState({ aberto: false, setor: '', texto: '' });
   
   // ESTADO DO MODAL DE RESPOSTA A SOLICITAÇÕES (ADMIN DENTRO DO PERFIL)
   const [modalRespostaPedido, setModalRespostaPedido] = useState({ aberto: false, pedido: null, texto: '', arquivo: null });
@@ -280,9 +285,36 @@ export default function ClientePage({ params: paramsPromise }) {
       setCliente(data);
       setCarregando(false);
       atualizarBadgeGlobal(id);
+
+      // NOVO: Puxa os disclaimers das pastas e as bolinhas verdes
+      const { data: txts } = await supabase.from('textos_pastas').select('*');
+      if (txts) {
+        const map = {};
+        txts.forEach(t => map[t.setor] = t.descricao);
+        setTextosPastas(map);
+      }
+      
+      const { data: nLidos } = await supabase.from('arquivos_portal').select('id, setor, subpasta_id').eq('cliente_id', id).is('visualizado_cliente', false);
+      if (nLidos) setArquivosNaoLidos(nLidos);
     }
     carregarCliente();
   }, [id, router]);
+
+  // NOVO: Função para o Admin salvar a explicação global
+  async function salvarTextoPasta(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    const { setor, texto } = modalTextoPasta;
+    const { error } = await supabase.from('textos_pastas').upsert({ setor, descricao: texto });
+    if (!error) {
+       setTextosPastas(prev => ({...prev, [setor]: texto}));
+       mostrarToast('Explicação atualizada para todos os clientes!', 'sucesso');
+       setModalTextoPasta({ aberto: false, setor: '', texto: '' });
+    } else {
+       mostrarToast('Erro ao salvar: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
 
   useEffect(() => {
     setBusca(''); 
@@ -328,7 +360,20 @@ export default function ClientePage({ params: paramsPromise }) {
 
       // 2. Carrega arquivos ativos (fora da lixeira)
       const { data } = await supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
-      if (data) setArquivos(data);
+      if (data) {
+        setArquivos(data);
+        // NOVO: Apaga as bolinhas verdes se o cliente estiver vendo a pasta
+        const tipoSalvo = localStorage.getItem('usuario_tipo');
+        if (tipoSalvo !== 'interno') {
+           const arquivosNaTela = data.filter(a => (a.subpasta_id || null) === (subpastaAtiva || null) && !a.visualizado_cliente);
+           if (arquivosNaTela.length > 0) {
+             const ids = arquivosNaTela.map(a => a.id);
+             await supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids);
+             setArquivosNaoLidos(prev => prev.filter(a => !ids.includes(a.id)));
+             setArquivos(prev => prev.map(a => ids.includes(a.id) ? { ...a, visualizado_cliente: true } : a));
+           }
+        }
+      }
 
       // 3. Carrega status de pagamentos manuais (apenas Financeiro)
       if (pastaAtiva === 'financeiro') {
@@ -1176,31 +1221,23 @@ async function handleEnviarReplica(pedidoOriginal) {
         {abaPrincipal === 'pastas' && (
           <>
             <div className="flex flex-col md:flex-row w-full gap-4 mb-10">
-              <button onClick={() => { setPastaAtiva('contabil'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contabil' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
-                <IconFolderLarge />
-                <h3 className="text-sm font-bold text-white mb-1">Contábil</h3>
-                <p className="text-[10px] text-zinc-400">Balanços e DREs</p>
-              </button>
-              <button onClick={() => { setPastaAtiva('fiscal'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'fiscal' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
-                <IconChartLarge />
-                <h3 className="text-sm font-bold text-white mb-1">Fiscal</h3>
-                <p className="text-[10px] text-zinc-400">Guias e Impostos</p>
-              </button>
-              <button onClick={() => { setPastaAtiva('rh'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'rh' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
-                <IconUsersLarge />
-                <h3 className="text-sm font-bold text-white mb-1">DP / RH</h3>
-                <p className="text-[10px] text-zinc-400">Folhas e Recibos</p>
-              </button>
-              <button onClick={() => { setPastaAtiva('contrato'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'contrato' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
-                <IconDocLarge />
-                <h3 className="text-sm font-bold text-white mb-1">Contratos</h3>
-                <p className="text-[10px] text-zinc-400">Atos e Alterações</p>
-              </button>
-              <button onClick={() => { setPastaAtiva('financeiro'); rolarPara('conteudo-pastas'); }} className={`flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === 'financeiro' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-[#d4af37]/50'}`}>
-                <IconFinanceiroLarge />
-                <h3 className="text-sm font-bold text-white mb-1">Financeiro</h3>
-                <p className="text-[10px] text-zinc-400">Controle de mensalidades</p>
-              </button>
+              {[
+                { id: 'contabil', nome: 'Contábil', desc: 'Balanços e DREs', icon: <IconFolderLarge /> },
+                { id: 'fiscal', nome: 'Fiscal', desc: 'Guias e Impostos', icon: <IconChartLarge /> },
+                { id: 'rh', nome: 'DP / RH', desc: 'Folhas e Recibos', icon: <IconUsersLarge /> },
+                { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
+                { id: 'financeiro', nome: 'Financeiro', desc: 'Controle de mensalidades', icon: <IconFinanceiroLarge /> }
+              ].map(pasta => {
+                const qtdNovos = !isInterno ? arquivosNaoLidos.filter(a => a.setor === pasta.id).length : 0;
+                return (
+                  <button key={pasta.id} onClick={() => { setPastaAtiva(pasta.id); rolarPara('conteudo-pastas'); }} className={`relative flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === pasta.id ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+                    {qtdNovos > 0 && <span className="absolute -top-2 -right-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse border border-emerald-400">{qtdNovos} Novo{qtdNovos > 1 ? 's' : ''}</span>}
+                    {pasta.icon}
+                    <h3 className="text-sm font-bold text-white mb-1">{pasta.nome}</h3>
+                    <p className="text-[10px] text-zinc-400">{pasta.desc}</p>
+                  </button>
+                )
+              })}
             </div>
 
             <div id="conteudo-pastas"></div> {/* Âncora Invisível */}
@@ -1318,6 +1355,20 @@ async function handleEnviarReplica(pedidoOriginal) {
               </div>
             ) : pastaAtiva && (
               <div className="bg-[#1b263b] p-5 sm:p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
+                
+                {/* NOVO: DISCLAIMER DA PASTA */}
+                <div className="bg-[#0d1b2a]/50 p-4 rounded-lg border border-zinc-800/60 mb-6 flex justify-between items-start gap-4">
+                   <div>
+                     <h4 className="text-sm font-bold text-[#d4af37] uppercase tracking-wider mb-1">Sobre esta pasta</h4>
+                     <p className="text-sm text-zinc-300 leading-relaxed">{textosPastas[pastaAtiva] || 'Documentos importantes desta categoria.'}</p>
+                   </div>
+                   {isInterno && (
+                     <button onClick={() => setModalTextoPasta({ aberto: true, setor: pastaAtiva, texto: textosPastas[pastaAtiva] || '' })} className="flex-shrink-0 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded border border-zinc-700 transition font-bold shadow-sm">
+                       ✏️ Editar Texto
+                     </button>
+                   )}
+                </div>
+
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
                   {/* BREADCRUMBS INTELIGENTES TIPO GOOGLE DRIVE */}
                   <h3 className="text-lg sm:text-xl font-bold text-[#d4af37] capitalize flex items-center gap-1.5 sm:gap-2 flex-wrap w-full lg:w-auto leading-relaxed">
@@ -1368,19 +1419,24 @@ async function handleEnviarReplica(pedidoOriginal) {
                 {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS */}
                 {pastasAtuais.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                    {pastasAtuais.map(pasta => (
-                      <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md">
-                        <div className="flex items-center gap-3 flex-1 overflow-hidden" onClick={() => setSubpastaAtiva(pasta.id)}>
-                          <IconFolderSolid /> <span className="font-bold text-zinc-200 truncate">{pasta.nome}</span>
-                        </div>
-                        {isInterno && (
-                          <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
-                            <button onClick={(e) => { e.stopPropagation(); handleRenomearPasta(pasta); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-600 px-2 py-1 rounded font-bold text-zinc-300">Renomear</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeletarPasta(pasta); }} className="text-[10px] bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded font-bold border border-red-500/20">Excluir</button>
+                    {pastasAtuais.map(pasta => {
+                      const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
+                      return (
+                        <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md">
+                          <div className="flex items-center gap-3 flex-1 overflow-hidden relative" onClick={() => setSubpastaAtiva(pasta.id)}>
+                            <IconFolderSolid /> 
+                            <span className="font-bold text-zinc-200 truncate">{pasta.nome}</span>
+                            {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-1"></span>}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          {isInterno && (
+                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
+                              <button onClick={(e) => { e.stopPropagation(); handleRenomearPasta(pasta); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-600 px-2 py-1 rounded font-bold text-zinc-300">Renomear</button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeletarPasta(pasta); }} className="text-[10px] bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded font-bold border border-red-500/20">Excluir</button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2183,6 +2239,38 @@ async function handleEnviarReplica(pedidoOriginal) {
           <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
             <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
             <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA EDITAR DISCLAIMER DA PASTA (ADMIN) */}
+      {modalTextoPasta.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-[#d4af37]">Editar Explicação</h3>
+              <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', texto: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={salvarTextoPasta} className="p-5 space-y-4">
+              <p className="text-xs text-zinc-400">Esta explicação aparecerá para <strong>todos os clientes</strong> quando entrarem na pasta <strong className="text-white uppercase">{modalTextoPasta.setor}</strong>.</p>
+              <div>
+                <textarea 
+                  rows="4" 
+                  autoFocus
+                  required
+                  placeholder="Escreva a explicação para clientes leigos..." 
+                  value={modalTextoPasta.texto} 
+                  onChange={(e) => setModalTextoPasta({...modalTextoPasta, texto: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
+                ></textarea>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', texto: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
+                  {subindoArquivo ? 'Salvando...' : 'Salvar para Todos'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
