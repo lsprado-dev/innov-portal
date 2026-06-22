@@ -157,6 +157,10 @@ export default function AdminPage() {
   // ESTADO DOS LOGS DE AUDITORIA
   const [logs, setLogs] = useState([]);
 
+  // ESTADOS PARA EDIÇÃO MANUAL DE CLIENTE
+  const [modalEditarCliente, setModalEditarCliente] = useState({ aberto: false, cliente: null });
+  const [formEditar, setFormEditar] = useState({ nome_empresa: '', nome_contato: '', email: '', celular: '', regime_tributario: '' });
+
   // SISTEMA DE TOASTS PREMIUM
   const [toasts, setToasts] = useState([]);
   function mostrarToast(mensagem, tipo = 'sucesso') {
@@ -205,7 +209,6 @@ export default function AdminPage() {
       return;
     } 
     
-    // CÃO DE GUARDA: Só entra se for 'interno' E o nome constar na lista oficial da equipe
     const colaboradorValido = LISTA_COLABORADORES.includes(nomeUsuario);
     
     if (tipoUsuario !== 'interno' || !colaboradorValido) {
@@ -217,79 +220,67 @@ export default function AdminPage() {
         setFormAlerta(prev => ({ ...prev, responsavel: nomeUsuario }));
       }
       setAutenticando(false);
-      carregarDados();
     }
   }, [router]);
 
-  async function carregarDados() {
-    // [ENGENHARIA DA LIXEIRA] Purga automática de registros com mais de 30 dias
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - 30);
-    const dataLimiteISO = dataLimite.toISOString();
+  // Carregamento inteligente sob demanda (Gasta zero memória/cache fantasma)
+  useEffect(() => {
+    if (!autenticando) {
+      carregarDadosDaAba();
+    }
+  }, [abaAtiva, autenticando]);
+
+  async function carregarDadosDaAba() {
+    // Contador síncrono de armazenamento leve
+    supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).then(r => {
+      supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).then(e => {
+        setTotalArquivosSistema((r.count || 0) + (e.count || 0));
+      });
+    });
+
+    // Puxa contadores rápidos para os cards superiores
+    supabase.from('solicitacoes_cadastro').select('id', { count: 'exact' }).then(r => setPendentes({length: r.count || 0}));
+    supabase.from('envios_cliente').select('id').eq('status', 'pendente').then(r => setRecebidos({length: r.data?.length || 0}));
     
-    // 1. Busca quais são os arquivos físicos no Storage que já venceram
-    const { data: arqVencidos } = await supabase.from('arquivos_portal').select('caminho_storage').lt('data_exclusao', dataLimiteISO);
-    const { data: envVencidos } = await supabase.from('envios_cliente').select('caminho_storage').lt('data_exclusao', dataLimiteISO);
-    
-    let caminhosParaDeletar = [];
-    if (arqVencidos) caminhosParaDeletar = [...caminhosParaDeletar, ...arqVencidos.map(a => a.caminho_storage)];
-    if (envVencidos) caminhosParaDeletar = [...caminhosParaDeletar, ...envVencidos.map(a => a.caminho_storage)];
-    
-    // 2. Apaga o PDF/Imagem real do HD do servidor (Evita custo fantasma)
-    if (caminhosParaDeletar.length > 0) {
-      await supabase.storage.from('documentos').remove(caminhosParaDeletar);
+    // Traz registros pesados exclusivamente para a aba que está na tela
+    if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
+      const { data } = await supabase.from('clientes').select('*').order('nome_empresa');
+      if (data) setClientes(data);
+    } 
+    else if (abaAtiva === 'pendentes') {
+      const { data } = await supabase.from('solicitacoes_cadastro').select('*').order('criado_em');
+      if (data) setPendentes(data);
+    } 
+    else if (abaAtiva === 'recebidos') {
+      const { data } = await supabase.from('envios_cliente').select('*, clientes(nome_empresa)').eq('status', 'pendente').order('criado_em', { ascending: false }).limit(300);
+      if (data) setRecebidos(data);
+    } 
+    else if (abaAtiva === 'solicitacoes') {
+      const { data } = await supabase.from('pedidos_cliente').select('*, clientes(nome_empresa)').order('criado_em', { ascending: false }).limit(200);
+      if (data) setPedidosCliente(data);
+    } 
+    else if (abaAtiva === 'alertas') {
+      const { data } = await supabase.from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)').order('criado_em', { ascending: false }).limit(300);
+      if (data) setAlertas(data);
+      const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email').order('nome_empresa');
+      if (clis) setClientes(clis);
+    } 
+    else if (abaAtiva === 'demandas') {
+      const { data } = await supabase.from('demandas_equipe').select('*').order('criado_em', { ascending: false }).limit(200);
+      if (data) setDemandas(data);
+    }
+    else if (abaAtiva === 'auditoria') {
+      const { data } = await supabase.from('logs_auditoria').select('*').order('criado_em', { ascending: false }).limit(100);
+      if (data) setLogs(data);
+      const { data: clis } = await supabase.from('clientes').select('id');
+      if (clis) setClientes(clis);
     }
 
-    // 3. Finalmente, limpa os registros textuais do banco de dados
-    await supabase.from('arquivos_portal').delete().lt('data_exclusao', dataLimiteISO);
-    await supabase.from('envios_cliente').delete().lt('data_exclusao', dataLimiteISO);
+    setCarregandoDados(false);
+  }
 
-    // Carrega os logs de auditoria mais recentes (limite de 100 ações)
-    const resLogs = await supabase.from('logs_auditoria').select('*').order('criado_em', { ascending: false }).limit(100);
-    if (resLogs.data) setLogs(resLogs.data);
-
-    const resAtivos = await supabase.from('clientes').select('*').order('nome_empresa');
-    if (resAtivos.data) setClientes(resAtivos.data);
-
-    const resPendentes = await supabase.from('solicitacoes_cadastro').select('*').order('criado_em');
-    if (resPendentes.data) setPendentes(resPendentes.data);
-
-    // Limite de 500 para evitar sobrecarga de memória no navegador
-    const resRecebidos = await supabase
-      .from('envios_cliente')
-      .select('*, clientes(nome_empresa)')
-      .eq('status', 'pendente')
-      .order('criado_em', { ascending: false })
-      .limit(500);
-    if (resRecebidos.data) setRecebidos(resRecebidos.data);
-
-    // Removemos o .eq('status', 'pendente') para puxar TODAS as solicitações (histórico completo)
-    const resPedidos = await supabase
-      .from('pedidos_cliente')
-      .select('*, clientes(nome_empresa)')
-      .order('criado_em', { ascending: false })
-      .limit(300);
-    if (resPedidos.data) setPedidosCliente(resPedidos.data);
-
-    const resDemandas = await supabase
-      .from('demandas_equipe')
-      .select('*')
-      .order('criado_em', { ascending: false })
-      .limit(300);
-    if (resDemandas.data) setDemandas(resDemandas.data);
-
-    const resAlertas = await supabase
-      .from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)')
-      .order('criado_em', { ascending: false })
-      .limit(500);
-    if (resAlertas.data) setAlertas(resAlertas.data);
-
-    // CONTAGEM DE SAÚDE DO SISTEMA (Total de Arquivos)
-    const { count: countPortal } = await supabase.from('arquivos_portal').select('*', { count: 'exact', head: true });
-    const { count: countEnvios } = await supabase.from('envios_cliente').select('*', { count: 'exact', head: true });
-    setTotalArquivosSistema((countPortal || 0) + (countEnvios || 0));
-    
-    setCarregandoDados(false); // <-- DESLIGA O SKELETON QUANDO TUDO CHEGAR!
+  async function carregarDados() {
+    await carregarDadosDaAba();
   }
 
   function handleLogout() {
@@ -353,6 +344,30 @@ export default function AdminPage() {
       exibir_vencimento_email: true
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handleEditarClienteManual(e) {
+    e.preventDefault();
+    setSubindo(true);
+    const { error } = await supabase
+      .from('clientes')
+      .update({
+        nome_empresa: formEditar.nome_empresa,
+        nome_contato: formEditar.nome_contato,
+        email: formEditar.email,
+        celular: formEditar.celular,
+        regime_tributario: formEditar.regime_tributario
+      })
+      .eq('id', modalEditarCliente.cliente.id);
+
+    if (!error) {
+      mostrarToast('Dados da empresa atualizados com sucesso!', 'sucesso');
+      setModalEditarCliente({ aberto: false, cliente: null });
+      await carregarDados();
+    } else {
+      mostrarToast('Erro ao atualizar dados: ' + error.message, 'erro');
+    }
+    setSubindo(false);
   }
 
   async function handleCriarAlerta(e) {
@@ -1482,7 +1497,17 @@ export default function AdminPage() {
                       )}
                     </div>
                     <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-2">
-                      <Link href={`/cliente/${cli.id}`} className="flex-1 border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] text-center py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm">Acessar Perfil</Link>
+                      <Link href={`/cliente/${cli.id}`} className="flex-1 border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] text-center py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm">Perfil</Link>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setModalEditarCliente({ aberto: true, cliente: cli });
+                          setFormEditar({ nome_empresa: cli.nome_empresa, nome_contato: cli.nome_contato, email: cli.email, celular: cli.celular, regime_tributario: cli.regime_tributario });
+                        }} 
+                        className="px-3 bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] text-zinc-300 rounded-lg text-xs font-bold transition"
+                      >
+                        Editar
+                      </button>
                       <button onClick={() => deletarCliente(cli.id)} className="px-3 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs transition font-bold">Excluir</button>
                     </div>
                   </div>
@@ -2408,6 +2433,57 @@ export default function AdminPage() {
           <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
             <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
             <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+          </div>
+        </div>
+      )}
+
+      {/* 📝 MODAL DE EDIÇÃO MANUAL DE CLIENTE */}
+      {modalEditarCliente.aberto && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold text-[#d4af37]">Editar Empresa</h3>
+                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">CNPJ imutável: {modalEditarCliente.cliente?.cnpj}</p>
+              </div>
+              <button type="button" onClick={() => setModalEditarCliente({ aberto: false, cliente: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={handleEditarClienteManual} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Razão Social / Nome Fantasia</label>
+                <input type="text" required value={formEditar.nome_empresa} onChange={e => setFormEditar({...formEditar, nome_empresa: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Nome do Contato</label>
+                <input type="text" required value={formEditar.nome_contato} onChange={e => setFormEditar({...formEditar, nome_contato: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">E-mail</label>
+                  <input type="email" required value={formEditar.email} onChange={e => setFormEditar({...formEditar, email: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Telefone Celular</label>
+                  <input type="text" required value={formEditar.celular} onChange={e => setFormEditar({...formEditar, celular: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Regime Tributário</label>
+                <select value={formEditar.regime_tributario} onChange={e => setFormEditar({...formEditar, regime_tributario: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none cursor-pointer">
+                  <option value="Simples Nacional">Simples Nacional</option>
+                  <option value="Lucro Presumido">Lucro Presumido</option>
+                  <option value="Lucro Real">Lucro Real</option>
+                  <option value="MEI">MEI</option>
+                  <option value="Pessoa Física">Pessoa Física</option>
+                </select>
+              </div>
+              <div className="pt-4 flex justify-end gap-2 border-t border-zinc-800">
+                <button type="button" onClick={() => setModalEditarCliente({ aberto: false, cliente: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2 rounded-lg text-xs font-extrabold transition shadow-lg">
+                  {subindo ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
