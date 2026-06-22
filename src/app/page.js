@@ -272,7 +272,7 @@ export default function AdminPage() {
     else if (abaAtiva === 'auditoria') {
       const { data } = await supabase.from('logs_auditoria').select('*').order('criado_em', { ascending: false }).limit(100);
       if (data) setLogs(data);
-      const { data: clis } = await supabase.from('clientes').select('id');
+      const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email');
       if (clis) setClientes(clis);
     }
 
@@ -1039,12 +1039,12 @@ export default function AdminPage() {
       c.nome_empresa?.toLowerCase().includes(termo) || 
       c.cnpj?.includes(termo) || 
       c.email?.toLowerCase().includes(termo) ||
-      c.regime_tributario?.toLowerCase().includes(termo) // 🚀 NOVO: Olha o regime tributário!
+      c.regime_tributario?.toLowerCase().includes(termo) // NOVO: Olha o regime tributário!
     );
   });
 
   const clientesParaAlerta = clientes.filter(c =>
-    c.nome_empresa.toLowerCase().includes(buscaAlertaInput.toLowerCase()) &&
+    c.nome_empresa?.toLowerCase().includes(buscaAlertaInput.toLowerCase()) &&
     !formAlerta.clientesSelecionados.find(sel => sel.id === c.id)
   );
 
