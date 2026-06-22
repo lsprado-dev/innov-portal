@@ -1494,8 +1494,6 @@ export default function ClientePage({ params: paramsPromise }) {
                   <option value="Simples Nacional">Simples Nacional</option>
                   <option value="Lucro Presumido">Lucro Presumido</option>
                   <option value="Lucro Real">Lucro Real</option>
-                  <option value="MEI">MEI</option>
-                  <option value="Pessoa Física">Pessoa Física</option>
                 </select>
               ) : (
                 <span className="bg-[#0d1b2a] text-[#d4af37] px-4 py-2 rounded-lg text-xs sm:text-sm font-bold border border-[#d4af37]/30 w-full sm:w-auto text-center">
