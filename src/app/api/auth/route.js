@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import { NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabase';
 
@@ -113,11 +114,24 @@ export async function POST(request) {
       // Se for sócio, mostra o nome dele no topo da tela. Se não, mostra o contato da empresa.
       const nomePainel = isSocio ? socioDados.nome : (clienteFinal.nome_contato || clienteFinal.nome_empresa || 'Cliente');
 
+      // 🔐 Gerando o Passe VIP (Token)
+      const token = jwt.sign(
+        {
+          aud: 'authenticated',
+          role: 'authenticated',
+          sub: clienteFinal.id, // O banco reconhece este ID
+          email: emailFinal
+        },
+        process.env.SUPABASE_JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
       return NextResponse.json({
         success: true,
         tipo: 'cliente',
         nome: nomePainel,
-        id: clienteFinal.id
+        id: clienteFinal.id,
+        token: token // Devolvemos o token para o frontend!
       });
     } else {
       return NextResponse.json({ success: false, error: 'Senha incorreta para esta conta.' }, { status: 401 });

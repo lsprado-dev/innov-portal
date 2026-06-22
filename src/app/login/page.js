@@ -170,6 +170,9 @@ export default function LoginPage() {
       if (data.id) {
         localStorage.setItem('usuario_id', data.id);
       }
+      if (data.token) {
+        localStorage.setItem('supabase_token', data.token); //  Passe VIP aqui!
+      }
 
       if (data.tipo === 'interno') {
         router.push('/');
