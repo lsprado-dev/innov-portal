@@ -1476,7 +1476,7 @@ export default function ClientePage({ params: paramsPromise }) {
                     title={isInterno ? "Clique para editar os dados cadastrais" : ""}
                   >
                     {cliente.nome_empresa}
-                    {isInterno && <span className="opacity-0 group-hover:opacity-100 text-[10px] text-[#d4af37] transition-opacity bg-zinc-800/80 px-2 py-1 rounded uppercase tracking-widest border border-[#d4af37]/30 shadow-md">✏️ Editar</span>}
+                    {isInterno && <span className="opacity-0 group-hover:opacity-100 text-[10px] text-[#d4af37] transition-opacity bg-zinc-800/80 px-2 py-1 rounded uppercase tracking-widest border border-[#d4af37]/30 shadow-md">Editar</span>}
                   </h1>
                   <p className="text-zinc-400 text-sm">CNPJ: {cliente.cnpj}</p>
                 </div>
