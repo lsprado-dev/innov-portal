@@ -609,9 +609,43 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   function handleDeletarPasta(pasta) {
-    confirmarAcao('Excluir Pasta', `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`, async () => {
+    // TRAVA DUPLA: Verifica o CNPJ limpo OU se o nome da empresa contém "lsprado" (ignorando maiúsculas/minúsculas)
+    const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
+    const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
+    const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
+    
+    const mensagem = isCoringa
+      ? `MODO CORINGA: Tem certeza que deseja excluir a pasta "${pasta.nome}" para TODOS OS CLIENTES do sistema?\n\nOs arquivos que estão dentro delas não serão perdidos, voltarão para a tela inicial de cada cliente.`
+      : `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`;
+
+    confirmarAcao(isCoringa ? 'Excluir Pasta Global' : 'Excluir Pasta', mensagem, async () => {
       setSubindoArquivo(true);
-      await supabase.from('pastas_portal').delete().eq('id', pasta.id);
+      if (isCoringa && pastaAtiva !== 'financeiro') {
+        // Deleta a pasta com este nome e setor em todos os clientes de uma vez
+        await supabase.from('pastas_portal').delete().eq('nome', pasta.nome).eq('setor', pasta.setor);
+      } else {
+        // Deleta apenas a pasta deste cliente específico
+        await supabase.from('pastas_portal').delete().eq('id', pasta.id);
+      }
+      setSubpastaAtiva(null);
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
+  }
+    
+    const mensagem = isCoringa
+      ? `MODO CORINGA: Tem certeza que deseja excluir a pasta "${pasta.nome}" para TODOS OS CLIENTES do sistema?\n\nOs arquivos que estão dentro delas não serão perdidos, voltarão para a tela inicial de cada cliente.`
+      : `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`;
+
+    confirmarAcao(isCoringa ? 'Excluir Pasta Global' : 'Excluir Pasta', mensagem, async () => {
+      setSubindoArquivo(true);
+      if (isCoringa && pastaAtiva !== 'financeiro') {
+        // Deleta a pasta com este nome e setor em todos os clientes de uma vez
+        await supabase.from('pastas_portal').delete().eq('nome', pasta.nome).eq('setor', pasta.setor);
+      } else {
+        // Deleta apenas a pasta deste cliente específico
+        await supabase.from('pastas_portal').delete().eq('id', pasta.id);
+      }
       setSubpastaAtiva(null);
       await carregarDadosDaAba();
       setSubindoArquivo(false);
@@ -628,7 +662,11 @@ export default function ClientePage({ params: paramsPromise }) {
       return false;
     }
     const timestamp = Date.now();
-    const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
+    
+    // MÁGICA: Remove acentos (ç, ã), espaços e vírgulas só para o link do servidor não explodir!
+    const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
+    const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${nomeSeguro}`;
+    
     const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
     
     if (storageError) {
@@ -2104,7 +2142,7 @@ export default function ClientePage({ params: paramsPromise }) {
                     )}
                   </div>
                 ))
-              })()}  {/* <--- O SEGREDO ESTÁ AQUI: TROCAR )} POR })()} */}
+              })()}
             </div>
           </div>
         )}
@@ -2705,4 +2743,3 @@ export default function ClientePage({ params: paramsPromise }) {
 
     </div>
   );
-}
