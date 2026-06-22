@@ -172,6 +172,9 @@ export default function LoginPage() {
       }
       if (data.token) {
         localStorage.setItem('supabase_token', data.token); //  Passe VIP aqui!
+      } else {
+        //  Se for Admin (interno), limpa o token de cliente para não dar conflito!
+        localStorage.removeItem('supabase_token');
       }
 
       if (data.tipo === 'interno') {
