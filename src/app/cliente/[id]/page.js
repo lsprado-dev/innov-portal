@@ -538,19 +538,59 @@ export default function ClientePage({ params: paramsPromise }) {
   }
 
   // ===============================================
-  // GESTÃO DE PASTAS (APENAS ADMIN)
+  // GESTÃO DE PASTAS (APENAS ADMIN E CORINGA)
   // ===============================================
+
+  async function processarPastaCoringa(nomePastaCoringa, parentIdAtual) {
+    // TRAVA: Só espelha se for a Lsprado e ignora o Financeiro
+    if (cliente?.cnpj !== '50.457.640/0001-01') return;
+    if (pastaAtiva === 'financeiro') return;
+
+    const { data: allClients } = await supabase.from('clientes').select('id');
+    const otherClients = allClients.filter(c => c.id !== id);
+
+    if (!parentIdAtual) {
+      // Se for na raiz, cria para todos na raiz
+      const insertData = otherClients.map(c => ({
+        cliente_id: c.id, setor: pastaAtiva, nome: nomePastaCoringa, parent_id: null
+      }));
+      await supabase.from('pastas_portal').insert(insertData);
+    } else {
+      // Se for uma subpasta, procura a pasta pai nos outros clientes para colocar lá dentro
+      const parentFolder = pastas.find(p => p.id === parentIdAtual);
+      if (parentFolder) {
+        const { data: possibleParents } = await supabase.from('pastas_portal')
+          .select('id, cliente_id').eq('nome', parentFolder.nome).eq('setor', pastaAtiva).is('parent_id', null);
+        
+        const insertData = [];
+        otherClients.forEach(c => {
+          const match = possibleParents?.find(p => p.cliente_id === c.id);
+          if (match) {
+            insertData.push({ cliente_id: c.id, setor: pastaAtiva, nome: nomePastaCoringa, parent_id: match.id });
+          }
+        });
+        if (insertData.length > 0) await supabase.from('pastas_portal').insert(insertData);
+      }
+    }
+    mostrarToast('Pasta Padrão (Lsprado) replicada para os outros clientes!', 'sucesso');
+  }
+
   function handleCriarPasta() {
     abrirInputModal('Nova Pasta', '', 'Digite o nome da pasta...', async (nomePasta) => {
       if (!nomePasta || nomePasta.trim() === '') return;
       setSubindoArquivo(true);
-      const { error } = await supabase.from('pastas_portal').insert([{
+      
+      // Select para podermos pegar no ID da pasta que acabou de ser criada
+      const { error, data: novaPasta } = await supabase.from('pastas_portal').insert([{
         cliente_id: id,
         setor: pastaAtiva,
         nome: nomePasta.trim(),
         parent_id: subpastaAtiva || null
-      }]);
+      }]).select().single();
+      
       if (!error) {
+        // Dispara o Coringa se for a Lsprado
+        await processarPastaCoringa(nomePasta.trim(), subpastaAtiva);
         await registrarAuditoria('PASTA_CRIADA', `Criou a pasta "${nomePasta.trim()}" no setor de ${pastaAtiva}.`);
         await carregarDadosDaAba();
       }
@@ -581,64 +621,52 @@ export default function ClientePage({ params: paramsPromise }) {
   // ===============================================
   // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
   // ===============================================
+  
+  async function fazerUploadUnitario(file, targetPastaId) {
+    if (file.size > 15 * 1024 * 1024) {
+      mostrarToast(`Ignorado: "${file.name}" excede 15MB.`, 'erro');
+      return false;
+    }
+    const timestamp = Date.now();
+    const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
+    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
+    
+    if (storageError) {
+      mostrarToast(`Erro no arquivo "${file.name}": ${storageError.message}`, 'erro');
+      return false;
+    }
+    
+    // BLINDAGEM: O arquivo só responde ao UUID desta pasta exata, nunca pelo nome de texto!
+    await supabase.from('arquivos_portal').insert([{ 
+      cliente_id: id, setor: pastaAtiva, subpasta_id: targetPastaId, nome_original: file.name, caminho_storage: caminhoArquivo, enviado_por: operador 
+    }]);
+    
+    await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}".`);
+    return true;
+  }
+
   async function handleUpload(eOrFiles) {
     let files = [];
-    // Descobre de onde vieram os arquivos (Botão ou Drag & Drop)
-    if (eOrFiles?.target?.files) {
-      files = Array.from(eOrFiles.target.files);
-    } else if (eOrFiles instanceof FileList) {
-      files = Array.from(eOrFiles);
-    } else if (Array.isArray(eOrFiles)) {
-      files = eOrFiles;
-    } else if (eOrFiles instanceof File) {
-      files = [eOrFiles];
-    }
+    if (eOrFiles?.target?.files) files = Array.from(eOrFiles.target.files);
+    else if (eOrFiles instanceof FileList) files = Array.from(eOrFiles);
+    else if (Array.isArray(eOrFiles)) files = eOrFiles;
+    else if (eOrFiles instanceof File) files = [eOrFiles];
 
     if (files.length === 0 || !pastaAtiva) return;
-
-    // Trava de segurança (Máximo 10)
-    if (files.length > 10) {
-      return mostrarToast('Por favor, selecione no máximo 10 arquivos por vez.', 'erro');
-    }
+    if (files.length > 20) return mostrarToast('Por favor, selecione no máximo 20 arquivos por vez.', 'erro');
 
     setSubindoArquivo(true);
     let sucessoCount = 0;
 
-    // Loop que sobe arquivo por arquivo
     for (const file of files) {
-      if (file.size > 15 * 1024 * 1024) {
-        mostrarToast(`Ignorado: "${file.name}" excede 15MB.`, 'erro');
-        continue;
-      }
-
-      const timestamp = Date.now();
-      const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${file.name}`;
-      
-      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
-
-      if (storageError) {
-        mostrarToast(`Erro no arquivo "${file.name}": ${storageError.message}`, 'erro');
-        continue;
-      }
-
-      await supabase.from('arquivos_portal').insert([{ 
-        cliente_id: id, 
-        setor: pastaAtiva, 
-        subpasta_id: subpastaAtiva, 
-        nome_original: file.name, 
-        caminho_storage: caminhoArquivo, 
-        enviado_por: operador 
-      }]);
-
-      await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" na pasta ${pastaAtiva}.`);
-      sucessoCount++;
+      const uploaded = await fazerUploadUnitario(file, subpastaAtiva);
+      if (uploaded) sucessoCount++;
     }
 
     if (sucessoCount > 0) {
       mostrarToast(`${sucessoCount} documento(s) publicado(s) com sucesso!`, 'sucesso');
       await carregarDadosDaAba();
     }
-    
     setSubindoArquivo(false);
   }
 
@@ -1199,16 +1227,68 @@ export default function ClientePage({ params: paramsPromise }) {
     e.preventDefault();
     setIsDragging(false);
   }
-  function handleDrop(e) {
+  async function handleDrop(e) {
     e.preventDefault();
     setIsDragging(false);
-    if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') {
-      const files = e.dataTransfer.files;
-      // Agora manda a lista inteira de arquivos arrastados!
-      if (files && files.length > 0) handleUpload(files);
-    } else {
-      mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar o arquivo.', 'aviso');
+    
+    if (abaPrincipal !== 'pastas' || !pastaAtiva || pastaAtiva === 'financeiro') {
+      return mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar arquivos ou pastas.', 'aviso');
     }
+
+    const items = e.dataTransfer.items;
+    if (!items || items.length === 0) return;
+
+    setSubindoArquivo(true);
+    let sucessoCount = 0;
+
+    // Corre os itens atirados para o ecrã
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i].webkitGetAsEntry();
+      if (!item) continue;
+
+      if (item.isFile) {
+        // Se for um ficheiro normal solto
+        const file = await new Promise(res => item.file(res));
+        if (file) {
+          const uploaded = await fazerUploadUnitario(file, subpastaAtiva);
+          if (uploaded) sucessoCount++;
+        }
+      } else if (item.isDirectory) {
+        // 🚀 SE FOR UMA PASTA: CRIA A PASTA NA BASE DE DADOS PRIMEIRO
+        const { data: novaPasta, error: erroPasta } = await supabase.from('pastas_portal').insert([{
+          cliente_id: id,
+          setor: pastaAtiva,
+          nome: item.name, // Nome da pasta que veio do Windows/Mac
+          parent_id: subpastaAtiva || null
+        }]).select().single();
+
+        if (!erroPasta && novaPasta) {
+          // Espelha se for a Lsprado
+          await processarPastaCoringa(novaPasta.nome, subpastaAtiva);
+          
+          // Abre a pasta atirada e puxa os ficheiros de lá de dentro
+          const dirReader = item.createReader();
+          const entries = await new Promise(res => dirReader.readEntries(res));
+
+          for (let entry of entries) {
+             if (entry.isFile) {
+                const file = await new Promise(res => entry.file(res));
+                if (file) {
+                   // Usa o ID da pasta que acabou de ser criada no servidor!
+                   const uploaded = await fazerUploadUnitario(file, novaPasta.id); 
+                   if (uploaded) sucessoCount++;
+                }
+             }
+          }
+        }
+      }
+    }
+
+    if (sucessoCount > 0) {
+      mostrarToast(`Upload de ${sucessoCount} ficheiro(s) concluído com sucesso!`, 'sucesso');
+      await carregarDadosDaAba();
+    }
+    setSubindoArquivo(false);
   }
 
   // Efeito SKELETON (Carregamento Premium)
