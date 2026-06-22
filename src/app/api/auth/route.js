@@ -1,6 +1,12 @@
-import jwt from 'jsonwebtoken';
 import { NextResponse } from 'next/server';
-import { supabase } from '../../lib/supabase';
+import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+
+// 🔑 CHAVE MESTRA: Usamos o Service Role para o login poder ler o banco trancado
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // E-mails reais e atualizados da sua equipe
 const EQUIPE_INTERNA = {
@@ -15,7 +21,6 @@ const EQUIPE_INTERNA = {
   'lucas@innovbusiness.com.br': 'Lucas (Financeiro)'
 };
 
-// Função de criptografia reversível para validar os Clientes
 const encriptarSenha = (text) => {
   if (!text) return '';
   return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
@@ -25,40 +30,45 @@ export async function POST(request) {
   try {
     const { email, password } = await request.json();
 
-    // Limpa espaços invisíveis e converte tudo para minúsculo
     let emailTratado = email.trim().toLowerCase(); 
-
     let emailFinal = emailTratado;
     if (!emailTratado.includes('@')) {
       emailFinal = `${emailTratado}@innovbusiness.com.br`;
     }
 
     // ========================================================
-    // 1. Validação da Equipe Interna (Via Supabase Auth Nativo)
+    // 1. Validação da Equipe Interna (Admin)
     // ========================================================
     if (EQUIPE_INTERNA[emailFinal]) {
-      const { data: authData } = await supabase.auth.signInWithPassword({
+      const { data: authData } = await supabaseAdmin.auth.signInWithPassword({
         email: emailFinal,
         password: password,
       });
 
       if (authData?.user) {
         const nomeAdmin = authData.user.user_metadata?.nome || EQUIPE_INTERNA[emailFinal];
-        return NextResponse.json({ success: true, tipo: 'interno', nome: nomeAdmin, id: authData.user.id });
+        
+        // 🔥 NOVO: Geramos o Passe VIP pro Admin com a tag is_admin: true
+        const tokenAdmin = jwt.sign(
+          { aud: 'authenticated', role: 'authenticated', sub: authData.user.id, email: emailFinal, is_admin: true },
+          process.env.SUPABASE_JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
+        return NextResponse.json({ success: true, tipo: 'interno', nome: nomeAdmin, id: authData.user.id, token: tokenAdmin });
       } else {
         return NextResponse.json({ success: false, error: 'Senha incorreta para este membro da equipe.' }, { status: 401 });
       }
     }
 
     // ========================================================
-    // 2. Validação do Cliente (Titular principal ou Sócio)
+    // 2. Validação do Cliente (Usando Supabase Admin)
     // ========================================================
     let clienteFinal = null;
     let isSocio = false;
     let socioDados = null;
 
-    // A) Primeiro, procura pelo e-mail do titular da empresa
-    const { data: clienteTitular } = await supabase
+    const { data: clienteTitular } = await supabaseAdmin
       .from('clientes')
       .select('*')
       .eq('email', emailFinal)
@@ -67,10 +77,7 @@ export async function POST(request) {
     if (clienteTitular) {
       clienteFinal = clienteTitular;
     } else {
-      // B) Se não for o titular, VARREDURA FLEXÍVEL NO JSON! 
-      // Puxa os clientes e acha o sócio sem ligar pra maiúsculas ou minúsculas
-      const { data: todosClientes } = await supabase.from('clientes').select('*');
-      
+      const { data: todosClientes } = await supabaseAdmin.from('clientes').select('*');
       if (todosClientes) {
         for (const cli of todosClientes) {
           if (cli.socios && Array.isArray(cli.socios)) {
@@ -79,60 +86,39 @@ export async function POST(request) {
               clienteFinal = cli;
               isSocio = true;
               socioDados = socioEncontrado;
-              break; // Achou o sócio, para a busca na hora!
+              break; 
             }
           }
         }
       }
     }
 
-    // Se depois disso tudo não achou ninguém, bloqueia o acesso
     if (!clienteFinal) {
       return NextResponse.json({ success: false, error: 'Usuário ou e-mail não encontrado no sistema.' }, { status: 404 });
     }
 
-    // ========================================================
-    // 3. Validação de Senha (Titular VS Sócio)
-    // ========================================================
     const senhaCriptografadaDigitada = encriptarSenha(password);
-    
-    // Regra da senha padrão (6 primeiros dígitos do CNPJ)
     const apenasNumeros = clienteFinal.cnpj.replace(/\D/g, '');
     const senhaCNPJ = apenasNumeros.substring(0, 6);
 
     let loginAprovado = false;
-
     if (isSocio) {
-      // Compara com a senha do JSON do sócio
       if (socioDados.senha === senhaCriptografadaDigitada || password === senhaCNPJ) loginAprovado = true;
     } else {
-      // Compara com a senha do titular
       if (clienteFinal.senha === senhaCriptografadaDigitada || password === senhaCNPJ) loginAprovado = true;
     }
 
     if (loginAprovado) {
-      // Se for sócio, mostra o nome dele no topo da tela. Se não, mostra o contato da empresa.
       const nomePainel = isSocio ? socioDados.nome : (clienteFinal.nome_contato || clienteFinal.nome_empresa || 'Cliente');
 
-      // 🔐 Gerando o Passe VIP (Token)
+      // 🔐 Gerando o Passe VIP do Cliente
       const token = jwt.sign(
-        {
-          aud: 'authenticated',
-          role: 'authenticated',
-          sub: clienteFinal.id, // O banco reconhece este ID
-          email: emailFinal
-        },
+        { aud: 'authenticated', role: 'authenticated', sub: clienteFinal.id, email: emailFinal },
         process.env.SUPABASE_JWT_SECRET,
         { expiresIn: '7d' }
       );
 
-      return NextResponse.json({
-        success: true,
-        tipo: 'cliente',
-        nome: nomePainel,
-        id: clienteFinal.id,
-        token: token // Devolvemos o token para o frontend!
-      });
+      return NextResponse.json({ success: true, tipo: 'cliente', nome: nomePainel, id: clienteFinal.id, token: token });
     } else {
       return NextResponse.json({ success: false, error: 'Senha incorreta para esta conta.' }, { status: 401 });
     }
