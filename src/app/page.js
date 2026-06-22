@@ -717,9 +717,20 @@ export default function AdminPage() {
       const resultado = [];
       for(let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
-        const colunas = lines[i].split(',');
+        
+        // AUTO-DETECÇÃO: Identifica se o Excel salvou com ponto e vírgula ou vírgula
+        const linha = lines[i];
+        const colunas = linha.includes(';') ? linha.split(';') : linha.split(',');
+        
         if (colunas.length >= 2) {
-          resultado.push({ nome_empresa: colunas[0]?.trim(), cnpj: colunas[1]?.trim(), nome_contato: colunas[2]?.trim() || '', email: colunas[3]?.trim() || '', celular: colunas[4]?.trim() || '', regime_tributario: colunas[5]?.trim() || 'Simples Nacional' });
+          resultado.push({ 
+            nome_empresa: colunas[0]?.trim(), 
+            cnpj: colunas[1]?.trim(), 
+            nome_contato: colunas[2]?.trim() || '', 
+            email: colunas[3]?.trim() || '', 
+            celular: colunas[4]?.trim() || '', 
+            regime_tributario: colunas[5]?.trim() || 'Simples Nacional' 
+          });
         }
       }
       setPreviewCSV(resultado);
