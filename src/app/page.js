@@ -740,8 +740,10 @@ export default function AdminPage() {
         senha_alterada: false
       };
       
-      await supabase.from('clientes').insert([clienteComSenha]); 
+      // MÁGICA DO UPSERT: Se o CNPJ já existir, ele atualiza as outras colunas sem duplicar!
+      await supabase.from('clientes').upsert(clienteComSenha, { on: 'cnpj' }); 
     }
+    mostrarToast('Planilha processada! Novas empresas adicionadas e antigas atualizadas.', 'sucesso');
     setPreviewCSV(null); 
     await carregarDados();
     setSubindo(false);
