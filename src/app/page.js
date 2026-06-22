@@ -730,20 +730,42 @@ export default function AdminPage() {
   async function salvarClientesCSV() {
     if (!previewCSV) return;
     setSubindo(true);
+    
     for (const cli of previewCSV) { 
-      // Extrai os 6 primeiros dígitos do CNPJ para a senha padrão
-      const senhaGerada = cli.cnpj ? cli.cnpj.replace(/\D/g, '').substring(0, 6) : '123456';
-      
-      const clienteComSenha = {
-        ...cli,
-        senha: encriptarSenha(senhaGerada),
-        senha_alterada: false
-      };
-      
-      // MÁGICA DO UPSERT: Se o CNPJ já existir, ele atualiza as outras colunas sem duplicar!
-      await supabase.from('clientes').upsert(clienteComSenha, { on: 'cnpj' }); 
+      if (!cli.cnpj) continue;
+
+      // 1. Consulta se o CNPJ já está cadastrado no banco
+      const { data: clienteExistente } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('cnpj', cli.cnpj)
+        .single();
+
+      if (clienteExistente) {
+        // 2. Se já existir, atualiza os dados cadastrais (incluindo o nome!) SEM mexer na senha atual dele
+        await supabase
+          .from('clientes')
+          .update({
+            nome_empresa: cli.nome_empresa,
+            nome_contato: cli.nome_contato,
+            email: cli.email,
+            celular: cli.celular,
+            regime_tributario: cli.regime_tributario
+          })
+          .eq('id', clienteExistente.id);
+      } else {
+        // 3. Se for um CNPJ inédito, aí sim cria o registro do zero com a senha padrão
+        const senhaGerada = cli.cnpj.replace(/\D/g, '').substring(0, 6);
+        const clienteNovo = {
+          ...cli,
+          senha: encriptarSenha(senhaGerada),
+          senha_alterada: false
+        };
+        await supabase.from('clientes').insert([clienteNovo]); 
+      }
     }
-    mostrarToast('Planilha processada! Novas empresas adicionadas e antigas atualizadas.', 'sucesso');
+
+    mostrarToast('Planilha processada! Novas empresas adicionadas e dados antigos atualizados.', 'sucesso');
     setPreviewCSV(null); 
     await carregarDados();
     setSubindo(false);
