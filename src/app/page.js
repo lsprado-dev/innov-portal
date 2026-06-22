@@ -715,21 +715,54 @@ export default function AdminPage() {
     reader.onload = function(event) {
       const lines = event.target.result.split('\n');
       const resultado = [];
+      
       for(let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
+        const linha = lines[i].trim();
+        if (!linha) continue;
         
-        // AUTO-DETECÇÃO: Identifica se o Excel salvou com ponto e vírgula ou vírgula
-        const linha = lines[i];
-        const colunas = linha.includes(';') ? linha.split(';') : linha.split(',');
+        // PROCESSAMENTO INTELIGENTE: Lê caractere por caractere respeitando aspas duplas ("...")
+        let colunas = [];
+        let atual = '';
+        let dentroDeAspas = false;
+        
+        // Auto-detecta se o separador da linha é vírgula ou ponto e vírgula fora de aspas
+        let countVirgula = 0;
+        let countPontoVirgula = 0;
+        for (let j = 0; j < linha.length; j++) {
+          if (linha[j] === '"') dentroDeAspas = !dentroDeAspas;
+          if (!dentroDeAspas) {
+            if (linha[j] === ',') countVirgula++;
+            if (linha[j] === ';') countPontoVirgula++;
+          }
+        }
+        const separador = countPontoVirgula > countVirgula ? ';' : ',';
+        
+        // Reseta o estado para processar as colunas de verdade
+        dentroDeAspas = false;
+        for (let j = 0; j < linha.length; j++) {
+          const char = linha[j];
+          if (char === '"') {
+            dentroDeAspas = !dentroDeAspas;
+          } else if (char === separador && !dentroDeAspas) {
+            // Remove aspas nas pontas, limpa espaços e remove vírgulas residuais do Excel nas pontas
+            let val = atual.trim().replace(/^"|"$/g, '').trim().replace(/,$/, '');
+            colunas.push(val);
+            atual = '';
+          } else {
+            atual += char;
+          }
+        }
+        let valFinal = atual.trim().replace(/^"|"$/g, '').trim().replace(/,$/, '');
+        colunas.push(valFinal);
         
         if (colunas.length >= 2) {
           resultado.push({ 
-            nome_empresa: colunas[0]?.trim(), 
-            cnpj: colunas[1]?.trim(), 
-            nome_contato: colunas[2]?.trim() || '', 
-            email: colunas[3]?.trim() || '', 
-            celular: colunas[4]?.trim() || '', 
-            regime_tributario: colunas[5]?.trim() || 'Simples Nacional' 
+            nome_empresa: colunas[0] || '', 
+            cnpj: colunas[1] || '', 
+            nome_contato: colunas[2] || '', 
+            email: colunas[3] || '', 
+            celular: colunas[4] || '', 
+            regime_tributario: colunas[5] || 'Simples Nacional' 
           });
         }
       }
