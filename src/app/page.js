@@ -111,6 +111,13 @@ export default function AdminPage() {
   const [previewCSV, setPreviewCSV] = useState(null);
   const [autenticando, setAutenticando] = useState(true);
   const [carregandoDados, setCarregandoDados] = useState(true); // <-- NOVA TRAVA INICIAL
+  
+  // PAGINAÇÃO
+  const TAMANHO_PAGINA = 50;
+  const [paginaAtual, setPaginaAtual] = useState(0);
+  const [temMaisDados, setTemMaisDados] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+
   const [operador, setOperador] = useState('Administrador');
   const [subindo, setSubindo] = useState(false);
 
@@ -223,64 +230,99 @@ export default function AdminPage() {
     }
   }, [router]);
 
-  // Carregamento inteligente sob demanda (Gasta zero memória/cache fantasma)
+  // Carregamento inteligente com reset de paginação
   useEffect(() => {
     if (!autenticando) {
-      carregarDadosDaAba();
+      setPaginaAtual(0);
+      setTemMaisDados(false);
+      carregarDadosDaAba(0, true);
     }
   }, [abaAtiva, autenticando]);
 
-  async function carregarDadosDaAba() {
-    // Contador síncrono de armazenamento leve
-    supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).then(r => {
-      supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).then(e => {
-        setTotalArquivosSistema((r.count || 0) + (e.count || 0));
-      });
-    });
+  async function carregarDadosDaAba(pagina = 0, recarregar = false) {
+    if (recarregar) setCarregandoDados(true);
 
-    // Puxa contadores rápidos para os cards superiores
-    supabase.from('solicitacoes_cadastro').select('id', { count: 'exact' }).then(r => setPendentes({length: r.count || 0}));
-    supabase.from('envios_cliente').select('id').eq('status', 'pendente').then(r => setRecebidos({length: r.data?.length || 0}));
+    // Atualiza os contadores só na primeira página para otimizar a velocidade
+    if (pagina === 0) {
+      supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).then(r => {
+        supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).then(e => {
+          setTotalArquivosSistema((r.count || 0) + (e.count || 0));
+        });
+      });
+      supabase.from('solicitacoes_cadastro').select('id', { count: 'exact' }).then(r => setPendentes({length: r.count || 0}));
+      supabase.from('envios_cliente').select('id').eq('status', 'pendente').then(r => setRecebidos({length: r.data?.length || 0}));
+    }
     
-    // Traz registros pesados exclusivamente para a aba que está na tela
+    // Cálculo Mágico do RANGE (Ex: Página 0 pega do 0 ao 49 | Página 1 pega do 50 ao 99)
+    const from = pagina * TAMANHO_PAGINA;
+    const to = from + TAMANHO_PAGINA - 1;
+    
+    let novaBusca = [];
+
     if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
       const { data } = await supabase.from('clientes').select('*').order('nome_empresa');
       if (data) setClientes(data);
+      setTemMaisDados(false); // Clientes carregamos tudo de uma vez para não quebrar a busca
     } 
     else if (abaAtiva === 'pendentes') {
       const { data } = await supabase.from('solicitacoes_cadastro').select('*').order('criado_em');
       if (data) setPendentes(data);
+      setTemMaisDados(false);
     } 
     else if (abaAtiva === 'recebidos') {
-      const { data } = await supabase.from('envios_cliente').select('*, clientes(nome_empresa)').eq('status', 'pendente').order('criado_em', { ascending: false }).limit(300);
-      if (data) setRecebidos(data);
+      const { data } = await supabase.from('envios_cliente').select('*, clientes(nome_empresa)').eq('status', 'pendente').order('criado_em', { ascending: false }).range(from, to);
+      novaBusca = data || [];
+      setRecebidos(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
     } 
     else if (abaAtiva === 'solicitacoes') {
-      const { data } = await supabase.from('pedidos_cliente').select('*, clientes(nome_empresa)').order('criado_em', { ascending: false }).limit(200);
-      if (data) setPedidosCliente(data);
+      const { data } = await supabase.from('pedidos_cliente').select('*, clientes(nome_empresa)').order('criado_em', { ascending: false }).range(from, to);
+      novaBusca = data || [];
+      setPedidosCliente(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
     } 
     else if (abaAtiva === 'alertas') {
-      const { data } = await supabase.from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)').order('criado_em', { ascending: false }).limit(300);
-      if (data) setAlertas(data);
-      const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email').order('nome_empresa');
-      if (clis) setClientes(clis);
+      const { data } = await supabase.from('alertas_clientes').select('*, clientes(nome_empresa, regime_tributario)').order('criado_em', { ascending: false }).range(from, to);
+      novaBusca = data || [];
+      setAlertas(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
+      if (recarregar) {
+        const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email').order('nome_empresa');
+        if (clis) setClientes(clis);
+      }
     } 
     else if (abaAtiva === 'demandas') {
-      const { data } = await supabase.from('demandas_equipe').select('*').order('criado_em', { ascending: false }).limit(200);
-      if (data) setDemandas(data);
+      const { data } = await supabase.from('demandas_equipe').select('*').order('criado_em', { ascending: false }).range(from, to);
+      novaBusca = data || [];
+      setDemandas(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
     }
     else if (abaAtiva === 'auditoria') {
-      const { data } = await supabase.from('logs_auditoria').select('*').order('criado_em', { ascending: false }).limit(100);
-      if (data) setLogs(data);
-      const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email');
-      if (clis) setClientes(clis);
+      const { data } = await supabase.from('logs_auditoria').select('*').order('criado_em', { ascending: false }).range(from, to);
+      novaBusca = data || [];
+      setLogs(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
+      if (recarregar) {
+        const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email');
+        if (clis) setClientes(clis);
+      }
+    }
+
+    // Se vieram exatos 50 itens (TAMANHO_PAGINA), significa que provavelmente ainda tem mais!
+    if (['recebidos', 'solicitacoes', 'alertas', 'demandas', 'auditoria'].includes(abaAtiva)) {
+      setTemMaisDados(novaBusca.length === TAMANHO_PAGINA);
     }
 
     setCarregandoDados(false);
+    setCarregandoMais(false);
   }
 
   async function carregarDados() {
-    await carregarDadosDaAba();
+    setPaginaAtual(0);
+    await carregarDadosDaAba(0, true);
+  }
+
+  function handleCarregarMais() {
+    if (carregandoMais) return;
+    const proximaPagina = paginaAtual + 1;
+    setPaginaAtual(proximaPagina);
+    setCarregandoMais(true);
+    carregarDadosDaAba(proximaPagina, false);
   }
 
   function handleLogout() {
@@ -2352,6 +2394,16 @@ export default function AdminPage() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+      {/* BOTAO DE CARREGAR MAIS (PAGINAÇÃO) */}
+        {temMaisDados && (
+          <div className="flex justify-center mt-8 mb-12">
+            <button onClick={handleCarregarMais} disabled={carregandoMais} className="bg-[#1b263b] border border-[#d4af37]/50 text-[#d4af37] px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#d4af37] hover:text-[#0d1b2a] transition-all flex items-center gap-2">
+              {carregandoMais ? <span className="animate-spin border-2 border-current border-t-transparent rounded-full w-4 h-4"></span> : '▼'}
+              {carregandoMais ? 'Buscando registros antigos...' : 'Carregar Mais Registros'}
+            </button>
           </div>
         )}
 
