@@ -999,10 +999,10 @@ export default function AdminPage() {
     ? pedidosCliente 
     : pedidosCliente.filter(p => departamentosVisiveis.includes(p.departamento) || p.responsavel === operador);
 
-  // Filtra os arquivos recebidos com base em quem está logado
+  // Filtra os arquivos recebidos com base em quem está logado (Protegido contra o hack de performance)
   const recebidosVisiveis = eGestor 
     ? recebidos 
-    : recebidos.filter(r => departamentosVisiveis.includes(r.departamento));
+    : (Array.isArray(recebidos) ? recebidos.filter(r => departamentosVisiveis.includes(r.departamento)) : recebidos);
 
   const demandasVisiveis = demandas.filter(d => eGestor || d.atribuido_para === operador || d.criado_por === operador);
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
@@ -1529,7 +1529,7 @@ export default function AdminPage() {
               <p className="text-zinc-400 text-center py-12">Nenhuma solicitação de cadastro pendente no momento.</p>
             ) : (
               <div className="divide-y divide-zinc-800">
-                {pendentes.map((sol) => (
+                {Array.isArray(pendentes) && pendentes.map((sol) => (
                   <div key={sol.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1b263b] hover:bg-zinc-800/40 transition">
                     <div>
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -1610,7 +1610,7 @@ export default function AdminPage() {
                 <p className="text-zinc-400 text-center py-12">Nenhum documento na sua área para análise.</p>
               ) : (
                 <div className="divide-y divide-zinc-800">
-                  {recebidosVisiveis.map((doc) => (
+                  {Array.isArray(recebidosVisiveis) && recebidosVisiveis.map((doc) => (
                     <div key={doc.id} onClick={() => modoSelecaoRecebidos && toggleSelecionarRecebido(doc.id)} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition w-full min-w-0 ${modoSelecaoRecebidos ? 'cursor-pointer' : ''} ${selecionadosRecebidos.includes(doc.id) ? 'bg-[#d4af37]/10' : 'bg-[#1b263b] hover:bg-zinc-800/40'}`}>
                       <div className="flex items-start gap-4 min-w-0 flex-1 w-full">
                         {modoSelecaoRecebidos && (
