@@ -1502,7 +1502,13 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => {
                           setModalEditarCliente({ aberto: true, cliente: cli });
-                          setFormEditar({ nome_empresa: cli.nome_empresa, nome_contato: cli.nome_contato, email: cli.email, celular: cli.celular, regime_tributario: cli.regime_tributario });
+                          setFormEditar({ 
+                            nome_empresa: cli.nome_empresa || '', 
+                            nome_contato: cli.nome_contato || '', 
+                            email: cli.email || '', 
+                            celular: cli.celular || '', 
+                            regime_tributario: cli.regime_tributario || 'Simples Nacional' 
+                          });
                         }} 
                         className="px-3 bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] text-zinc-300 rounded-lg text-xs font-bold transition"
                       >

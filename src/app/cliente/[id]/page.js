@@ -1576,8 +1576,8 @@ export default function ClientePage({ params: paramsPromise }) {
             {pastaAtiva === 'financeiro' ? (
               <div className="bg-[#1b263b] p-8 rounded-xl border border-[#d4af37]/30 shadow-xl mb-10">
                 <div className="border-b border-zinc-800 pb-4 mb-6">
-                  <h3 className="text-xl font-bold text-[#d4af37]">Gestão Financeira</h3>
-                  <p className="text-sm text-zinc-400 mt-1">Anexe aqui os comprovantes referentes a cada competência. O vencimento ocorre sempre no mês subsequente.</p>
+                  <h3 className="text-xl font-bold text-[#d4af37]">Controle Mensalidades</h3>
+                  <p className="text-sm text-zinc-400 mt-1">Anexe os comprovantes de pagamento de cada competência. Este controle é manual e serve para sua organização, permitindo acompanhar os meses já pagos e armazenar os comprovantes. Basta marcar o check da competência paga e caso deseje, anexar o comprovante.</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
