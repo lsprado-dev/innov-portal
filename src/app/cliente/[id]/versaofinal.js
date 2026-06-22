@@ -632,6 +632,25 @@ export default function ClientePage({ params: paramsPromise }) {
       setSubindoArquivo(false);
     });
   }
+    
+    const mensagem = isCoringa
+      ? `MODO CORINGA: Tem certeza que deseja excluir a pasta "${pasta.nome}" para TODOS OS CLIENTES do sistema?\n\nOs arquivos que estão dentro delas não serão perdidos, voltarão para a tela inicial de cada cliente.`
+      : `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`;
+
+    confirmarAcao(isCoringa ? 'Excluir Pasta Global' : 'Excluir Pasta', mensagem, async () => {
+      setSubindoArquivo(true);
+      if (isCoringa && pastaAtiva !== 'financeiro') {
+        // Deleta a pasta com este nome e setor em todos os clientes de uma vez
+        await supabase.from('pastas_portal').delete().eq('nome', pasta.nome).eq('setor', pasta.setor);
+      } else {
+        // Deleta apenas a pasta deste cliente específico
+        await supabase.from('pastas_portal').delete().eq('id', pasta.id);
+      }
+      setSubpastaAtiva(null);
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+    });
+  }
 
   // ===============================================
   // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
@@ -2724,4 +2743,3 @@ export default function ClientePage({ params: paramsPromise }) {
 
     </div>
   );
-  }
