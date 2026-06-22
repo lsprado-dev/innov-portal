@@ -308,6 +308,32 @@ export default function ClientePage({ params: paramsPromise }) {
   const [operador, setOperador] = useState('Desconhecido');
   const [isInterno, setIsInterno] = useState(false);
   
+  // NOVO: Estados para edição manual do cliente pelo Admin na página do cliente
+  const [modalEditarCliente, setModalEditarCliente] = useState(false);
+  const [formEditar, setFormEditar] = useState({ nome_empresa: '', nome_contato: '', email: '', celular: '' });
+
+  async function handleSalvarEdicaoManual(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    
+    const { error } = await supabase.from('clientes').update({
+      nome_empresa: formEditar.nome_empresa,
+      nome_contato: formEditar.nome_contato,
+      email: formEditar.email,
+      celular: formEditar.celular
+    }).eq('id', id);
+
+    if (!error) {
+      mostrarToast('Dados cadastrais atualizados com sucesso!', 'sucesso');
+      setCliente({ ...cliente, ...formEditar });
+      setModalEditarCliente(false);
+      await registrarAuditoria('CLIENTE_EDITADO', `Editou os dados cadastrais da empresa ${formEditar.nome_empresa}.`);
+    } else {
+      mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
   const [busca, setBusca] = useState('');
   const [mostrarAutocomplete, setMostrarAutocomplete] = useState(false);
 
@@ -1434,7 +1460,24 @@ export default function ClientePage({ params: paramsPromise }) {
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 text-center sm:text-left">
                 <img src="/logo.png" alt="Logo Innovative" className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-lg" />
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">{cliente.nome_empresa}</h1>
+                  <h1 
+                    className={`text-2xl sm:text-3xl font-bold text-white mb-1 flex items-center justify-center sm:justify-start gap-3 ${isInterno ? 'cursor-pointer hover:text-[#d4af37] transition group' : ''}`}
+                    onClick={() => {
+                      if (isInterno) {
+                        setFormEditar({
+                          nome_empresa: cliente.nome_empresa || '',
+                          nome_contato: cliente.nome_contato || '',
+                          email: cliente.email || '',
+                          celular: cliente.celular || ''
+                        });
+                        setModalEditarCliente(true);
+                      }
+                    }}
+                    title={isInterno ? "Clique para editar os dados cadastrais" : ""}
+                  >
+                    {cliente.nome_empresa}
+                    {isInterno && <span className="opacity-0 group-hover:opacity-100 text-[10px] text-[#d4af37] transition-opacity bg-zinc-800/80 px-2 py-1 rounded uppercase tracking-widest border border-[#d4af37]/30 shadow-md">✏️ Editar</span>}
+                  </h1>
                   <p className="text-zinc-400 text-sm">CNPJ: {cliente.cnpj}</p>
                 </div>
               </div>
@@ -2737,6 +2780,80 @@ export default function ClientePage({ params: paramsPromise }) {
                 <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', texto: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
                   {subindoArquivo ? 'Salvando...' : 'Salvar para Todos'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO MANUAL (ADMIN) */}
+      {modalEditarCliente && isInterno && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-[#d4af37]">Editar Dados Cadastrais</h3>
+              <button type="button" onClick={() => setModalEditarCliente(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            
+            <form onSubmit={handleSalvarEdicaoManual} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">CNPJ (Intocável)</label>
+                <input 
+                  type="text" 
+                  value={cliente.cnpj} 
+                  disabled 
+                  className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-500 cursor-not-allowed opacity-70"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Razão Social / Nome da Empresa</label>
+                <input 
+                  type="text" 
+                  required
+                  value={formEditar.nome_empresa} 
+                  onChange={(e) => setFormEditar({...formEditar, nome_empresa: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Nome do Contato Principal</label>
+                <input 
+                  type="text" 
+                  value={formEditar.nome_contato} 
+                  onChange={(e) => setFormEditar({...formEditar, nome_contato: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">E-mail de Contato</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={formEditar.email} 
+                    onChange={(e) => setFormEditar({...formEditar, email: e.target.value})}
+                    className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Telemóvel / Celular</label>
+                  <input 
+                    type="tel" 
+                    value={formEditar.celular} 
+                    onChange={(e) => setFormEditar({...formEditar, celular: maskCelular(e.target.value)})}
+                    className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-zinc-800 mt-2">
+                <button type="button" onClick={() => setModalEditarCliente(false)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
+                  {subindoArquivo ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>
