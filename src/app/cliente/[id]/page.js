@@ -1016,6 +1016,23 @@ export default function ClientePage({ params: paramsPromise }) {
     mostrarToast('Copiado para a área de transferência!', 'sucesso');
   }
 
+  // NOVO: ALTERAR REGIME DIRETAMENTE DO PERFIL (APENAS ADMIN)
+  async function handleAlterarRegime(novoRegime) {
+    if (!novoRegime || novoRegime === cliente.regime_tributario) return;
+    setSubindoArquivo(true);
+    
+    const { error } = await supabase.from('clientes').update({ regime_tributario: novoRegime }).eq('id', id);
+    
+    if (!error) {
+      setCliente({ ...cliente, regime_tributario: novoRegime });
+      mostrarToast(`Regime atualizado para ${novoRegime}!`, 'sucesso');
+      await registrarAuditoria('CLIENTE_EDITADO', `Alterou o regime tributário para ${novoRegime}.`);
+    } else {
+      mostrarToast('Erro ao atualizar regime: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
   function handleLogout() {
     localStorage.removeItem('usuario_nome'); localStorage.removeItem('usuario_tipo'); localStorage.removeItem('usuario_id');
     router.push('/login');
@@ -1421,9 +1438,28 @@ export default function ClientePage({ params: paramsPromise }) {
                   <p className="text-zinc-400 text-sm">CNPJ: {cliente.cnpj}</p>
                 </div>
               </div>
-              <span className="bg-[#0d1b2a] text-[#d4af37] px-4 py-2 rounded-lg text-xs sm:text-sm font-bold border border-[#d4af37]/30 w-full sm:w-auto text-center">
-                {cliente.regime_tributario}
-              </span>
+              
+              {/* MAGICA: Dropdown para o Admin, Texto normal para o Cliente */}
+              {isInterno ? (
+                <select
+                  value={cliente.regime_tributario || 'Simples Nacional'}
+                  onChange={(e) => handleAlterarRegime(e.target.value)}
+                  disabled={subindoArquivo}
+                  className="bg-[#0d1b2a] text-[#d4af37] px-4 py-2.5 rounded-lg text-xs sm:text-sm font-bold border border-[#d4af37]/50 hover:bg-[#1b263b] w-full sm:w-auto text-center cursor-pointer focus:outline-none focus:border-yellow-500 transition-colors disabled:opacity-50 shadow-sm appearance-none"
+                  title="Clique para alterar o Regime Tributário"
+                >
+                  <option value="Simples Nacional">Simples Nacional</option>
+                  <option value="Lucro Presumido">Lucro Presumido</option>
+                  <option value="Lucro Real">Lucro Real</option>
+                  <option value="MEI">MEI</option>
+                  <option value="Pessoa Física">Pessoa Física</option>
+                </select>
+              ) : (
+                <span className="bg-[#0d1b2a] text-[#d4af37] px-4 py-2 rounded-lg text-xs sm:text-sm font-bold border border-[#d4af37]/30 w-full sm:w-auto text-center">
+                  {cliente.regime_tributario}
+                </span>
+              )}
+
             </div>
           </header>
         )}
