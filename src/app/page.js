@@ -952,7 +952,12 @@ export default function AdminPage() {
 
   const clientesFiltrados = clientes.filter(c => {
     const termo = buscaCliente.toLowerCase();
-    return c.nome_empresa?.toLowerCase().includes(termo) || c.cnpj?.includes(termo) || c.email?.toLowerCase().includes(termo);
+    return (
+      c.nome_empresa?.toLowerCase().includes(termo) || 
+      c.cnpj?.includes(termo) || 
+      c.email?.toLowerCase().includes(termo) ||
+      c.regime_tributario?.toLowerCase().includes(termo) // 🚀 NOVO: Olha o regime tributário!
+    );
   });
 
   const clientesParaAlerta = clientes.filter(c =>
