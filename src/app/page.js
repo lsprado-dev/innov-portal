@@ -172,6 +172,13 @@ export default function AdminPage() {
   const [modalEditarCliente, setModalEditarCliente] = useState({ aberto: false, cliente: null });
   const [formEditar, setFormEditar] = useState({ nome_empresa: '', nome_contato: '', email: '', celular: '', regime_tributario: '' });
 
+  // NOVOS ESTADOS PARA ADICIONAR CLIENTES (MANUAL E CSV)
+  const [modalAdicionar, setModalAdicionar] = useState(false);
+  const [abaAdicionar, setAbaAdicionar] = useState('manual'); // 'manual' ou 'csv'
+  const [tipoAdicionar, setTipoAdicionar] = useState('mensalista'); // 'mensalista' ou 'especiais'
+  const [formManual, setFormManual] = useState({ nome_empresa: '', documento: '', nome_contato: '', email: '', celular: '', regime_tributario: 'Simples Nacional' });
+  const [tipoImportacaoCsv, setTipoImportacaoCsv] = useState('mensalista'); // 'mensalista' ou 'especiais'
+
   // SISTEMA DE TOASTS PREMIUM
   const [toasts, setToasts] = useState([]);
   function mostrarToast(mensagem, tipo = 'sucesso') {
@@ -772,6 +779,56 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
+  // Lógica Unificada para criação de cliente MANUAL
+  async function handleAdicionarManual(e) {
+    e.preventDefault();
+    setSubindo(true);
+
+    if(!formManual.nome_empresa || !formManual.documento) {
+      mostrarToast('Nome e Documento são obrigatórios.', 'erro');
+      setSubindo(false); return;
+    }
+
+    const docNumeros = formManual.documento.replace(/\D/g, '');
+    if (docNumeros.length < 11) {
+      mostrarToast('Documento inválido.', 'erro');
+      setSubindo(false); return;
+    }
+
+    const isEspecial = tipoAdicionar === 'especiais';
+    const campoBusca = isEspecial ? 'cpf' : 'cnpj';
+    
+    const payload = {
+      nome_empresa: formManual.nome_empresa,
+      nome_contato: formManual.nome_contato,
+      email: formManual.email,
+      celular: formManual.celular,
+      regime_tributario: formManual.regime_tributario,
+      tipo_conta: isEspecial ? 'especiais' : 'mensalista',
+      senha: encriptarSenha(docNumeros.substring(0, 6)),
+      senha_alterada: false
+    };
+    payload[campoBusca] = formManual.documento;
+
+    const { data: existe } = await supabase.from('clientes').select('id').eq(campoBusca, formManual.documento).single();
+
+    if (existe) {
+      mostrarToast('Este cliente (Documento) já existe na base!', 'aviso');
+    } else {
+      const { error } = await supabase.from('clientes').insert([payload]);
+      if (!error) {
+        mostrarToast('Cliente cadastrado com sucesso!', 'sucesso');
+        setModalAdicionar(false);
+        setFormManual({ nome_empresa: '', documento: '', nome_contato: '', email: '', celular: '', regime_tributario: 'Simples Nacional' });
+        await carregarDados();
+      } else {
+        mostrarToast('Erro ao cadastrar: ' + error.message, 'erro');
+      }
+    }
+    setSubindo(false);
+  }
+
+  // Inteligência Nova de CSV
   function handleUploadCSV(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -784,12 +841,10 @@ export default function AdminPage() {
         const linha = lines[i].trim();
         if (!linha) continue;
         
-        // PROCESSAMENTO INTELIGENTE: Lê caractere por caractere respeitando aspas duplas ("...")
         let colunas = [];
         let atual = '';
         let dentroDeAspas = false;
         
-        // Auto-detecta se o separador da linha é vírgula ou ponto e vírgula fora de aspas
         let countVirgula = 0;
         let countPontoVirgula = 0;
         for (let j = 0; j < linha.length; j++) {
@@ -801,14 +856,12 @@ export default function AdminPage() {
         }
         const separador = countPontoVirgula > countVirgula ? ';' : ',';
         
-        // Reseta o estado para processar as colunas de verdade
         dentroDeAspas = false;
         for (let j = 0; j < linha.length; j++) {
           const char = linha[j];
           if (char === '"') {
             dentroDeAspas = !dentroDeAspas;
           } else if (char === separador && !dentroDeAspas) {
-            // Remove aspas nas pontas, limpa espaços e remove vírgulas residuais do Excel nas pontas
             let val = atual.trim().replace(/^"|"$/g, '').trim().replace(/,$/, '');
             colunas.push(val);
             atual = '';
@@ -820,19 +873,36 @@ export default function AdminPage() {
         colunas.push(valFinal);
         
         if (colunas.length >= 2) {
-          resultado.push({ 
-            nome_empresa: colunas[0] || '', 
-            cnpj: colunas[1] || '', 
-            nome_contato: colunas[2] || '', 
-            email: colunas[3] || '', 
-            celular: colunas[4] || '', 
-            regime_tributario: colunas[5] || 'Simples Nacional' 
-          });
+          if (tipoImportacaoCsv === 'especiais') {
+            // NOME | CPF | Nome do contato | E-mail do contato | Telefone do contato
+            resultado.push({
+              nome_empresa: colunas[0] || '',
+              cpf: colunas[1] || '',
+              nome_contato: colunas[2] || '',
+              email: colunas[3] || '',
+              celular: colunas[4] || '',
+              regime_tributario: 'Pessoa Física',
+              tipo_conta: 'especiais'
+            });
+          } else {
+            // EMPRESA | CNPJ | NOME CONTATO | E-MAIL | CELULAR | REGIME TRIBUTÁRIO
+            resultado.push({ 
+              nome_empresa: colunas[0] || '', 
+              cnpj: colunas[1] || '', 
+              nome_contato: colunas[2] || '', 
+              email: colunas[3] || '', 
+              celular: colunas[4] || '', 
+              regime_tributario: colunas[5] || 'Simples Nacional',
+              tipo_conta: 'mensalista'
+            });
+          }
         }
       }
       setPreviewCSV(resultado);
+      setModalAdicionar(false); // Fecha o modal para mostrar a tabela de pré-visualização
     };
     reader.readAsText(file, 'UTF-8');
+    e.target.value = null; // Reseta o input
   }
 
   async function salvarClientesCSV() {
@@ -840,17 +910,19 @@ export default function AdminPage() {
     setSubindo(true);
     
     for (const cli of previewCSV) { 
-      if (!cli.cnpj) continue;
+      const documentoPrincipal = cli.cnpj || cli.cpf;
+      if (!documentoPrincipal) continue;
 
-      // 1. Consulta se o CNPJ já está cadastrado no banco
+      const isEspecial = cli.tipo_conta === 'especiais';
+      const campoBusca = isEspecial ? 'cpf' : 'cnpj';
+
       const { data: clienteExistente } = await supabase
         .from('clientes')
         .select('id')
-        .eq('cnpj', cli.cnpj)
+        .eq(campoBusca, documentoPrincipal)
         .single();
 
       if (clienteExistente) {
-        // 2. Se já existir, atualiza os dados cadastrais (incluindo o nome!) SEM mexer na senha atual dele
         await supabase
           .from('clientes')
           .update({
@@ -858,12 +930,12 @@ export default function AdminPage() {
             nome_contato: cli.nome_contato,
             email: cli.email,
             celular: cli.celular,
-            regime_tributario: cli.regime_tributario
+            regime_tributario: cli.regime_tributario,
+            tipo_conta: cli.tipo_conta
           })
           .eq('id', clienteExistente.id);
       } else {
-        // 3. Se for um CNPJ inédito, aí sim cria o registro do zero com a senha padrão
-        const senhaGerada = cli.cnpj.replace(/\D/g, '').substring(0, 6);
+        const senhaGerada = documentoPrincipal.replace(/\D/g, '').substring(0, 6);
         const clienteNovo = {
           ...cli,
           senha: encriptarSenha(senhaGerada),
@@ -873,7 +945,7 @@ export default function AdminPage() {
       }
     }
 
-    mostrarToast('Planilha processada! Novas empresas adicionadas e dados antigos atualizados.', 'sucesso');
+    mostrarToast('Planilha processada! Novas empresas/pessoas adicionadas e dados antigos atualizados.', 'sucesso');
     setPreviewCSV(null); 
     await carregarDados();
     setSubindo(false);
@@ -1268,13 +1340,14 @@ export default function AdminPage() {
                 <table className="w-full text-left text-xs border-collapse min-w-[500px]">
                   <thead>
                     <tr className="border-b border-zinc-800 text-zinc-400 uppercase">
-                      <th className="pb-2">Empresa</th><th className="pb-2">CNPJ</th><th className="pb-2">E-mail</th><th className="pb-2">Regime</th>
+                      <th className="pb-2">Nome/Empresa</th><th className="pb-2">Documento</th><th className="pb-2">E-mail</th><th className="pb-2">Tipo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {previewCSV.map((c, i) => (
                       <tr key={i} className="border-b border-zinc-800/50 text-zinc-200">
-                        <td className="py-2 font-medium">{c.nome_empresa}</td><td className="py-2">{c.cnpj}</td><td className="py-2">{c.email}</td><td className="py-2 text-[#d4af37]">{c.regime_tributario}</td>
+                        <td className="py-2 font-medium">{c.nome_empresa}</td><td className="py-2">{c.cnpj || c.cpf}</td><td className="py-2">{c.email}</td>
+                        <td className="py-2 text-[#d4af37]">{c.tipo_conta === 'especiais' ? 'Societário' : 'Mensalista'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1510,11 +1583,11 @@ export default function AdminPage() {
             <div className="bg-[#1b263b] p-4 rounded-xl border border-zinc-800 shadow-lg flex flex-col gap-4">
               
               {/* AS NOVAS SUB-ABAS (MENSALISTAS VS ESPECIAIS) */}
-              <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-800 w-full sm:w-max overflow-x-auto hide-scrollbar">
-                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+              <div className="flex bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full sm:w-max overflow-x-auto hide-scrollbar gap-1">
+                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
                   Mensalistas (Ativos)
                 </button>
-                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
                   Processos Societários
                 </button>
               </div>
@@ -1523,10 +1596,9 @@ export default function AdminPage() {
                 <div className="w-full sm:w-1/2 relative">
                   <input type="text" placeholder="Pesquisar por nome, CNPJ/CPF ou e-mail..." value={buscaCliente} onChange={(e) => setBuscaCliente(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37] transition-colors" />
                 </div>
-                <label className="w-full sm:w-auto bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2.5 rounded-lg font-bold text-sm transition shadow-lg cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap">
-                  <IconDocument /> Importar Planilha CSV
-                  <input type="file" accept=".csv" className="hidden" onChange={handleUploadCSV} />
-                </label>
+                <button onClick={() => setModalAdicionar(true)} className="w-full sm:w-auto bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2.5 rounded-lg font-bold text-sm transition shadow-lg flex items-center justify-center gap-2 whitespace-nowrap">
+                  + Adicionar Clientes
+                </button>
               </div>
             </div>
 
@@ -2529,6 +2601,110 @@ export default function AdminPage() {
           <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
             <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
             <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+          </div>
+        </div>
+      )}
+
+{/* 🚀 NOVO: MODAL UNIFICADO PARA ADICIONAR CLIENTES */}
+      {modalAdicionar && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-lg flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
+              <h3 className="text-lg font-bold text-[#d4af37]">Adicionar Novo Cliente</h3>
+              <button type="button" onClick={() => setModalAdicionar(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            
+            <div className="flex bg-[#0d1b2a] p-1 border-b border-zinc-800">
+              <button onClick={() => setAbaAdicionar('manual')} className={`flex-1 px-4 py-3 text-xs font-bold transition-all ${abaAdicionar === 'manual' ? 'bg-[#1b263b] text-white border-b-2 border-[#d4af37]' : 'text-zinc-500 hover:text-zinc-300'}`}>Adição Manual</button>
+              <button onClick={() => setAbaAdicionar('csv')} className={`flex-1 px-4 py-3 text-xs font-bold transition-all ${abaAdicionar === 'csv' ? 'bg-[#1b263b] text-white border-b-2 border-[#d4af37]' : 'text-zinc-500 hover:text-zinc-300'}`}>Importar CSV</button>
+            </div>
+
+            <div className="p-5">
+              {abaAdicionar === 'manual' && (
+                <form onSubmit={handleAdicionarManual} className="space-y-4">
+                  <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-700 w-full">
+                    <button type="button" onClick={() => setTipoAdicionar('mensalista')} className={`flex-1 px-4 py-2 rounded-md text-xs font-bold transition-all ${tipoAdicionar === 'mensalista' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Mensalista (CNPJ)</button>
+                    <button type="button" onClick={() => setTipoAdicionar('especiais')} className={`flex-1 px-4 py-2 rounded-md text-xs font-bold transition-all ${tipoAdicionar === 'especiais' ? 'bg-purple-500 text-white' : 'text-zinc-400 hover:text-white'}`}>Societário (CPF)</button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Nome / Razão Social</label>
+                    <input type="text" required value={formManual.nome_empresa} onChange={e => setFormManual({...formManual, nome_empresa: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Documento ({tipoAdicionar === 'especiais' ? 'CPF' : 'CNPJ'})</label>
+                    <input type="text" required value={formManual.documento} onChange={e => setFormManual({...formManual, documento: e.target.value})} placeholder={tipoAdicionar === 'especiais' ? '000.000.000-00' : '00.000.000/0001-00'} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none font-mono" />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Nome do Contato</label>
+                      <input type="text" value={formManual.nome_contato} onChange={e => setFormManual({...formManual, nome_contato: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">E-mail</label>
+                      <input type="email" value={formManual.email} onChange={e => setFormManual({...formManual, email: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Telefone / Celular</label>
+                      <input type="text" value={formManual.celular} onChange={e => setFormManual({...formManual, celular: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Regime Tributário</label>
+                      <select value={formManual.regime_tributario} onChange={e => setFormManual({...formManual, regime_tributario: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none cursor-pointer">
+                        <option value="Simples Nacional">Simples Nacional</option>
+                        <option value="Lucro Presumido">Lucro Presumido</option>
+                        <option value="Lucro Real">Lucro Real</option>
+                        <option value="MEI">MEI</option>
+                        <option value="Pessoa Física">Pessoa Física</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex justify-end gap-2 border-t border-zinc-800">
+                    <button type="submit" disabled={subindo} className="w-full bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-3 rounded-lg text-sm font-extrabold transition shadow-lg">
+                      {subindo ? 'Salvando...' : 'Cadastrar Cliente'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {abaAdicionar === 'csv' && (
+                <div className="space-y-6">
+                  <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-700">
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-3">Esta planilha é de clientes Mensalistas ou Societário?</label>
+                    <div className="space-y-2">
+                      <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${tipoImportacaoCsv === 'mensalista' ? 'bg-zinc-800 border-zinc-500 text-white' : 'bg-[#1b263b] border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
+                        <input type="radio" name="tipo_csv" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={tipoImportacaoCsv === 'mensalista'} onChange={() => setTipoImportacaoCsv('mensalista')} />
+                        <span className="text-sm font-bold">Mensalistas (CNPJ)</span>
+                      </label>
+                      <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${tipoImportacaoCsv === 'especiais' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[#1b263b] border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
+                        <input type="radio" name="tipo_csv" className="accent-purple-500 w-4 h-4 cursor-pointer" checked={tipoImportacaoCsv === 'especiais'} onChange={() => setTipoImportacaoCsv('especiais')} />
+                        <span className="text-sm font-bold">Societário (CPF)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <p className="text-xs text-blue-400 font-bold mb-2">Formato Exigido do CSV:</p>
+                    {tipoImportacaoCsv === 'especiais' ? (
+                      <p className="text-[10px] text-zinc-400 font-mono">1. Nome | 2. CPF | 3. Nome Contato | 4. E-mail | 5. Telefone</p>
+                    ) : (
+                      <p className="text-[10px] text-zinc-400 font-mono">1. Empresa | 2. CNPJ | 3. Nome Contato | 4. E-mail | 5. Celular | 6. Regime</p>
+                    )}
+                  </div>
+
+                  <label className="w-full bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-3 rounded-lg font-bold text-sm transition shadow-lg cursor-pointer flex items-center justify-center gap-2">
+                    <IconDocument /> Buscar Arquivo CSV
+                    <input type="file" accept=".csv" className="hidden" onChange={handleUploadCSV} />
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
