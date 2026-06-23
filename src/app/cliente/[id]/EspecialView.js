@@ -44,9 +44,49 @@ export default function EspecialView({ params }) {
   const [subindoArquivo, setSubindoArquivo] = useState(false);
   const [toasts, setToasts] = useState([]);
   
-  // Formulários
+  // Formulários e Estados de Documentos
   const [descricaoDoc, setDescricaoDoc] = useState('');
   const [arquivoDoc, setArquivoDoc] = useState(null);
+  const [processoSelecionadoDoc, setProcessoSelecionadoDoc] = useState(''); // NOVO: Para múltiplos processos
+
+  // FUNÇÃO NOVA: Upload do Admin direto para o Processo (Aba Documentação)
+  async function handleUploadAdminDoc(e, procId = null) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) return mostrarToast('Arquivo excede 15MB.', 'erro');
+
+    setSubindoArquivo(true);
+    const timestamp = Date.now();
+    const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
+    const caminhoArquivo = `${id}/societario/${timestamp}_${nomeSeguro}`;
+
+    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
+    
+    if (storageError) {
+      mostrarToast('Erro ao subir arquivo: ' + storageError.message, 'erro');
+      setSubindoArquivo(false); return;
+    }
+
+    const payload = {
+      cliente_id: id,
+      setor: 'societario',
+      nome_original: file.name,
+      caminho_storage: caminhoArquivo,
+      enviado_por: operador
+    };
+    if (procId) payload.processo_id = procId; // Linka ao processo se existir
+
+    const { data: novoArq, error: dbError } = await supabase.from('arquivos_portal').insert([payload]).select().single();
+
+    if (!dbError && novoArq) {
+      mostrarToast('Documento disponibilizado ao cliente!', 'sucesso');
+      setDocsRecebidos([novoArq, ...docsRecebidos]);
+    } else {
+      mostrarToast('Erro ao registrar no banco de dados.', 'erro');
+    }
+    setSubindoArquivo(false);
+    e.target.value = null; // Reseta o input file
+  }
 
   // Modais do Admin
   const [modalProcesso, setModalProcesso] = useState({ aberto: false, tipo: 'novo', processo: null });
@@ -212,18 +252,26 @@ export default function EspecialView({ params }) {
       return;
     }
 
-    const { error: dbError } = await supabase.from('envios_cliente').insert([{
+    const payloadEnvio = {
       cliente_id: id,
       nome_documento: descricaoDoc.trim(),
       nome_original: arquivoDoc.name,
       caminho_storage: caminhoArquivo,
       departamento: departamentoDestino,
       status: 'pendente'
-    }]);
+    };
+    
+    // Se for Societário, amarra ao processo (se houver 1 ou se o cliente selecionou no dropdown)
+    if (departamentoDestino === 'Societário') {
+       if (processos.length === 1) payloadEnvio.processo_id = processos[0].id;
+       else if (processoSelecionadoDoc) payloadEnvio.processo_id = processoSelecionadoDoc;
+    }
+
+    const { error: dbError } = await supabase.from('envios_cliente').insert([payloadEnvio]);
 
     if (!dbError) {
       mostrarToast('Documento enviado com sucesso!', 'sucesso');
-      setDescricaoDoc(''); setArquivoDoc(null);
+      setDescricaoDoc(''); setArquivoDoc(null); setProcessoSelecionadoDoc('');
       await carregarDados();
       await notificarGoogleSheets('NOVO_DOCUMENTO', `O cliente enviou o documento: ${descricaoDoc.trim()} para o setor ${departamentoDestino}`);
     } else {
@@ -504,6 +552,25 @@ export default function EspecialView({ params }) {
               </div>
             </div>
 
+            {/* BANNER PIX PREMIUM */}
+            <div className="bg-[#0d1b2a] p-6 rounded-xl border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-5 mb-8 shadow-md">
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                 <div className="bg-emerald-500/10 p-3.5 rounded-full text-emerald-400 border border-emerald-500/20">
+                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 4v16m8-8H4"/></svg>
+                 </div>
+                 <div>
+                   <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Pagamento Rápido via PIX</h3>
+                   <p className="text-xs text-zinc-400">Chave CNPJ: <strong className="text-emerald-400 text-sm tracking-widest ml-1">52.305.552/0001-01</strong></p>
+                 </div>
+              </div>
+              <button 
+                onClick={() => { navigator.clipboard.writeText('52.305.552/0001-01'); mostrarToast('Chave PIX copiada para a área de transferência!', 'sucesso'); }} 
+                className="bg-emerald-500 text-[#0d1b2a] font-extrabold px-6 py-3 rounded-lg text-xs hover:bg-emerald-400 transition w-full sm:w-auto shadow-[0_0_15px_rgba(16,185,129,0.3)] whitespace-nowrap"
+              >
+                Copiar Chave PIX
+              </button>
+            </div>
+
             {/* BANNER DINÂMICO DE PAGAMENTOS PENDENTES */}
             {(cliente.pagamentos_pendentes || isInterno) && (
               <div className="bg-[#d4af37]/10 p-6 rounded-xl border border-[#d4af37]/30 flex flex-col sm:flex-row justify-between items-start gap-4 shadow-md mb-8">
@@ -527,19 +594,19 @@ export default function EspecialView({ params }) {
               </div>
             )}
 
-            <form onSubmit={(e) => handleEnviarDocumento(e, 'Financeiro')} className="bg-[#0d1b2a] p-6 rounded-xl border border-zinc-800 shadow-inner mb-8 max-w-2xl">
+            <form onSubmit={(e) => handleEnviarDocumento(e, 'Financeiro')} className="bg-[#0d1b2a] p-5 sm:p-6 rounded-xl border border-zinc-800 shadow-inner mb-8 max-w-2xl overflow-hidden w-full">
               <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Enviar Comprovante de Pagamento</h3>
-              <div className="space-y-4">
-                <div>
+              <div className="space-y-4 w-full">
+                <div className="w-full">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Do que se trata este comprovante?</label>
-                  <input type="text" required placeholder="Ex: Pagamento da Taxa DARE, Honorários Parcela 1..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                  <input type="text" required placeholder="Ex: Taxa DARE..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full max-w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Anexar Comprovante (PDF/Imagem)</label>
-                  <input type="file" required accept=".pdf,image/*" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#d4af37]/20 file:text-[#d4af37]" />
+                <div className="w-full">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Anexar Comprovante</label>
+                  <input type="file" required accept=".pdf,image/*" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full max-w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#d4af37]/20 file:text-[#d4af37]" />
                 </div>
-                <button type="submit" disabled={subindoArquivo} className="w-full bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg disabled:opacity-50">
-                  {subindoArquivo ? 'A enviar...' : 'Confirmar e Enviar Comprovante'}
+                <button type="submit" disabled={subindoArquivo} className="w-full bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg disabled:opacity-50 mt-2">
+                  {subindoArquivo ? 'A enviar...' : 'Confirmar e Enviar'}
                 </button>
               </div>
             </form>
