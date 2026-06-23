@@ -93,25 +93,12 @@ export default function AdminPage() {
   const [alertas, setAlertas] = useState([]);
   
  const [abaAtiva, setAbaAtiva] = useState('ativos');
-  const [subAbaAtivos, setSubAbaAtivos] = useState('mensalistas'); // NOVO: Filtro de Especiais
+  const [subAbaAtivos, setSubAbaAtivos] = useState('mensalistas'); 
   const [subAbaDemanda, setSubAbaDemanda] = useState('pendentes'); 
   const [subAbaAlerta, setSubAbaAlerta] = useState('historico_geral'); 
-
-  // CONSTANTES DO PROCESSO SOCIETÁRIO (8 PASSOS)
-  const PASSOS_SOCIETARIO = [
-    { id: 1, nome: 'Viabilidade' },
-    { id: 2, nome: 'DBE (Documento Básico de Entrada)' },
-    { id: 3, nome: 'Pagamento da Taxa DARE' },
-    { id: 4, nome: 'Emissão de Documentos e Contrato Social' },
-    { id: 5, nome: 'Assinatura de Documentos' },
-    { id: 6, nome: 'Registro na Junta Comercial' },
-    { id: 7, nome: 'Protocolar Processo' },
-    { id: 8, nome: 'Deferido (Concluído)' }
-  ];
-
-  // ESTADOS DO MODAL SOCIETÁRIO
-  const [modalPasso, setModalPasso] = useState({ aberto: false, cliente: null });
-  const [novoPassoSelecionado, setNovoPassoSelecionado] = useState(1);
+  
+  // NOVO ESTADO: Guarda os processos ativos de todos os clientes
+  const [processosSocietarios, setProcessosSocietarios] = useState([]);
 
   // ESTADO DE SELEÇÃO DE DOCS RECEBIDOS
   const [selecionadosRecebidos, setSelecionadosRecebidos] = useState([]);
@@ -276,7 +263,12 @@ export default function AdminPage() {
     if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
       const { data } = await supabase.from('clientes').select('*').order('nome_empresa');
       if (data) setClientes(data);
-      setTemMaisDados(false); // Clientes carregamos tudo de uma vez para não quebrar a busca
+      
+      // Carrega os processos vinculados a esses clientes
+      const { data: procs } = await supabase.from('processos_societarios').select('*');
+      if (procs) setProcessosSocietarios(procs);
+
+      setTemMaisDados(false); 
     } 
     else if (abaAtiva === 'pendentes') {
       const { data } = await supabase.from('solicitacoes_cadastro').select('*').order('criado_em');
@@ -423,40 +415,6 @@ export default function AdminPage() {
       await carregarDados();
     } else {
       mostrarToast('Erro ao atualizar dados: ' + error.message, 'erro');
-    }
-    setSubindo(false);
-  }
-
-  async function handleAtualizarPassoSocietario(e) {
-    e.preventDefault();
-    setSubindo(true);
-    
-    const { cliente } = modalPasso;
-    
-    const { error } = await supabase
-      .from('clientes')
-      .update({ passo_societario: novoPassoSelecionado })
-      .eq('id', cliente.id);
-
-    if (!error) {
-      mostrarToast('Processo societário atualizado com sucesso!', 'sucesso');
-      
-      // MÁGICA: Avisa a Maria por e-mail
-      const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(novoPassoSelecionado))?.nome;
-      
-      enviarEmailDemanda({
-         to: OBTER_EMAIL_FUNCIONARIO['Maria (Societário)'],
-         nomeDestinatario: 'Maria (Societário)',
-         nomeRemetente: operador,
-         tituloDemanda: `Atualização de Processo: ${cliente.nome_empresa || cliente.nome_contato}`,
-         descricao: `O processo do cliente foi avançado para o PASSO ${novoPassoSelecionado}: ${passoNome}.`,
-         prazo: 'Acompanhamento Interno'
-      }).catch(()=>{});
-
-      setModalPasso({ aberto: false, cliente: null });
-      await carregarDados(); 
-    } else {
-      mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
     }
     setSubindo(false);
   }
@@ -1581,8 +1539,10 @@ export default function AdminPage() {
 
                 return listaExibicao.map((cli) => {
                   const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial';
-                  const passoAtual = cli.passo_societario || 1;
-                  const porcentagemProgresso = Math.round((passoAtual / 8) * 100);
+                  
+                  // Busca todos os processos deste cliente específico
+                  const processosDoCliente = processosSocietarios.filter(p => p.cliente_id === cli.id);
+                  const quantidadeProcessos = processosDoCliente.length;
 
                   return (
                     <div key={cli.id} className={`p-6 rounded-xl border shadow-xl flex flex-col justify-between transition ${isEspecial ? 'bg-[#0d1b2a] border-purple-500/30 hover:border-purple-500/60' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
@@ -1603,22 +1563,19 @@ export default function AdminPage() {
                         <p className="text-xs text-zinc-400 mb-1">E-mail: <span className="text-zinc-300 truncate inline-block max-w-[200px] align-bottom">{cli.email || 'Não informado'}</span></p>
                         <p className="text-xs text-zinc-400">Contato: <span className="text-zinc-300">{cli.nome_contato || 'Não informado'}</span></p>
                         
-                        {/* 🚀 A BARRA DE PROGRESSO SOCIETÁRIA */}
+                        {/* 🚀 O CARD INFORMATIVO DE PROCESSOS MÚLTIPLOS */}
                         {isEspecial && (
-                          <div className="mt-5 p-3 bg-[#1b263b] rounded-lg border border-zinc-800/80">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Status do Processo</span>
-                              <span className="text-[10px] font-black text-purple-400">{porcentagemProgresso}%</span>
-                            </div>
-                            <div className="w-full bg-[#0d1b2a] rounded-full h-2 mb-2 border border-zinc-800">
-                              <div className="bg-gradient-to-r from-purple-600 to-purple-400 h-2 rounded-full transition-all duration-500" style={{ width: `${porcentagemProgresso}%` }}></div>
-                            </div>
-                            <div className="flex justify-between items-center mt-1">
-                              <p className="text-[10px] text-zinc-300 truncate mr-2">Passo {passoAtual}: {PASSOS_SOCIETARIO.find(p => p.id === passoAtual)?.nome}</p>
-                              <button onClick={() => { setModalPasso({ aberto: true, cliente: cli }); setNovoPassoSelecionado(passoAtual); }} className="text-[10px] bg-purple-500/20 text-purple-300 hover:bg-purple-500 hover:text-white px-2 py-1 rounded font-bold transition">
-                                Atualizar
-                              </button>
-                            </div>
+                          <div className="mt-5 p-4 bg-[#1b263b] rounded-lg border border-purple-500/20 text-center">
+                            {quantidadeProcessos === 0 ? (
+                              <p className="text-xs text-zinc-500 italic">Nenhum processo iniciado.</p>
+                            ) : (
+                              <>
+                                <span className="text-3xl font-black text-purple-400 block mb-1">{quantidadeProcessos}</span>
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                                  {quantidadeProcessos > 1 ? 'Processos Ativos' : 'Processo Ativo'}
+                                </span>
+                              </>
+                            )}
                           </div>
                         )}
 
@@ -2618,52 +2575,6 @@ export default function AdminPage() {
                 <button type="button" onClick={() => setModalEditarCliente({ aberto: false, cliente: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2 rounded-lg text-xs font-extrabold transition shadow-lg">
                   {subindo ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE ATUALIZAR STATUS DO PROCESSO SOCIETÁRIO */}
-      {modalPasso.aberto && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
-          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-bold text-purple-400">Avançar Processo</h3>
-                <p className="text-[10px] text-zinc-400 mt-0.5">{modalPasso.cliente?.nome_empresa || modalPasso.cliente?.nome_contato}</p>
-              </div>
-              <button type="button" onClick={() => setModalPasso({ aberto: false, cliente: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
-            </div>
-            
-            <form onSubmit={handleAtualizarPassoSocietario} className="p-5 space-y-4">
-              <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-3">Selecione a fase atual do processo:</label>
-                <div className="space-y-2 max-h-[40vh] overflow-y-auto hide-scrollbar">
-                  {PASSOS_SOCIETARIO.map(passo => (
-                    <label key={passo.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${novoPassoSelecionado === passo.id ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[#1b263b] border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
-                      <input 
-                        type="radio" 
-                        name="passo_processo"
-                        className="accent-purple-500 w-4 h-4 cursor-pointer"
-                        checked={novoPassoSelecionado === passo.id} 
-                        onChange={() => setNovoPassoSelecionado(passo.id)}
-                      />
-                      <span className="text-sm font-bold">Passo {passo.id}: {passo.nome}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <p className="text-[10px] text-zinc-500 text-center italic">
-                Ao salvar, a Maria (Societário) receberá um e-mail e o cliente verá o avanço no portal.
-              </p>
-
-              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
-                <button type="button" onClick={() => setModalPasso({ aberto: false, cliente: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
-                <button type="submit" disabled={subindo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-[0_0_15px_rgba(168,85,247,0.4)] disabled:opacity-50">
-                  {subindo ? 'Salvando...' : 'Avançar Etapa'}
                 </button>
               </div>
             </form>
