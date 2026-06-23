@@ -98,14 +98,17 @@ export async function POST(request) {
     }
 
     const senhaCriptografadaDigitada = encriptarSenha(password);
-    const apenasNumeros = clienteFinal.cnpj.replace(/\D/g, '');
-    const senhaCNPJ = apenasNumeros.substring(0, 6);
+    
+    // NOVO: Pega o CNPJ, se não tiver, pega o CPF. Se não tiver nenhum, usa vazio para não quebrar o código.
+    const documentoPrincipal = clienteFinal.cnpj || clienteFinal.cpf || '';
+    const apenasNumeros = documentoPrincipal.replace(/\D/g, '');
+    const senhaPadrao = apenasNumeros.substring(0, 6);
 
     let loginAprovado = false;
     if (isSocio) {
-      if (socioDados.senha === senhaCriptografadaDigitada || password === senhaCNPJ) loginAprovado = true;
+      if (socioDados.senha === senhaCriptografadaDigitada || password === senhaPadrao) loginAprovado = true;
     } else {
-      if (clienteFinal.senha === senhaCriptografadaDigitada || password === senhaCNPJ) loginAprovado = true;
+      if (clienteFinal.senha === senhaCriptografadaDigitada || password === senhaPadrao) loginAprovado = true;
     }
 
     if (loginAprovado) {
