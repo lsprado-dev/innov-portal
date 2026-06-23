@@ -329,6 +329,7 @@ export default function AdminPage() {
     localStorage.removeItem('usuario_nome');
     localStorage.removeItem('usuario_tipo');
     localStorage.removeItem('usuario_id');
+    localStorage.removeItem('supabase_token'); 
     router.push('/login');
   }
 
@@ -1077,11 +1078,12 @@ export default function AdminPage() {
 
   const clientesFiltrados = clientes.filter(c => {
     const termo = buscaCliente.toLowerCase();
+    // Agora ( || '') para impedir que o Javascript quebre se o campo estiver vazio!
     return (
-      c.nome_empresa?.toLowerCase().includes(termo) || 
-      c.cnpj?.includes(termo) || 
-      c.email?.toLowerCase().includes(termo) ||
-      c.regime_tributario?.toLowerCase().includes(termo) // NOVO: Olha o regime tributário!
+      (c.nome_empresa?.toLowerCase() || '').includes(termo) || 
+      (c.cnpj || '').includes(termo) || 
+      (c.email?.toLowerCase() || '').includes(termo) ||
+      (c.regime_tributario?.toLowerCase() || '').includes(termo)
     );
   });
 
