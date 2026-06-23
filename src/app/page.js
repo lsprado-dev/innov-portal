@@ -2537,8 +2537,8 @@ export default function AdminPage() {
           <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-bold text-[#d4af37]">Editar Empresa</h3>
-                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">CNPJ imutável: {modalEditarCliente.cliente?.cnpj}</p>
+                <h3 className="text-lg font-bold text-[#d4af37]">Editar Cadastro</h3>
+                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">Documento: {modalEditarCliente.cliente?.cnpj || modalEditarCliente.cliente?.cpf || 'Não informado'}</p>
               </div>
               <button type="button" onClick={() => setModalEditarCliente({ aberto: false, cliente: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
