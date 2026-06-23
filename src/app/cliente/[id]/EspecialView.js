@@ -2,6 +2,7 @@
 import { useEffect, useState, use } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
+import { enviarEmailDemanda } from '../../lib/email';
 
 // ==========================================
 // ÍCONES PREMIUM (SVG)
@@ -23,37 +24,43 @@ const PASSOS_SOCIETARIO = [
   { id: 8, nome: 'Deferido (Concluído)', desc: 'Processo finalizado com sucesso! A sua empresa está pronta.' }
 ];
 
-export default function EspecialView({ params: paramsPromise }) {
+export default function EspecialView({ params }) {
   const router = useRouter();
-  const params = use(paramsPromise);
-  const { id } = params;
+  const resolvedParams = use(params);
+  const { id } = resolvedParams;
 
   const [cliente, setCliente] = useState(null);
+  const [processos, setProcessos] = useState([]);
   const [abaAtiva, setAbaAtiva] = useState('status');
   
-  // Estados de Dados
-  const [docsRecebidos, setDocsRecebidos] = useState([]); // Docs enviados pela contabilidade
-  const [docsEnviados, setDocsEnviados] = useState([]);   // Docs enviados pelo cliente
-  
+  // Controle de Permissão Admin
+  const [isInterno, setIsInterno] = useState(false);
+  const [operador, setOperador] = useState('');
+
+  // Estados de Dados (Documentos)
+  const [docsRecebidos, setDocsRecebidos] = useState([]);
+  const [docsEnviados, setDocsEnviados] = useState([]);
   const [subindoArquivo, setSubindoArquivo] = useState(false);
   const [toasts, setToasts] = useState([]);
   
-  // Estado para formulário de envio
+  // Formulários
   const [descricaoDoc, setDescricaoDoc] = useState('');
   const [arquivoDoc, setArquivoDoc] = useState(null);
 
-  function mostrarToast(mensagem, tipo = 'sucesso') {
-    const toastId = Date.now();
-    setToasts(prev => [...prev, { id: toastId, mensagem, tipo }]);
-    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== toastId)); }, 4000);
-  }
+  // Modais do Admin
+  const [modalProcesso, setModalProcesso] = useState({ aberto: false, tipo: 'novo', processo: null });
+  const [formProcesso, setFormProcesso] = useState({ titulo: '', passo: 1 });
+  
+  const [modalDocs, setModalDocs] = useState(false);
+  const [textoDocs, setTextoDocs] = useState('');
+  
+  const [modalPagamentos, setModalPagamentos] = useState(false);
+  const [textoPagamentos, setTextoPagamentos] = useState('');
 
-  // Função para enviar dados para a futura planilha do Google Sheets
+  // Notificação do Google Sheets
   async function notificarGoogleSheets(acao, detalhes) {
-    // ATENÇÃO: Substitua esta URL pela URL do seu Google Apps Script quando criarmos ele
     const URL_WEBHOOK_SHEETS = "SUA_URL_DO_GOOGLE_APPS_SCRIPT_AQUI"; 
-    
-    if (URL_WEBHOOK_SHEETS === "SUA_URL_DO_GOOGLE_APPS_SCRIPT_AQUI") return; // Ignora se não estiver configurado
+    if (URL_WEBHOOK_SHEETS === "SUA_URL_DO_GOOGLE_APPS_SCRIPT_AQUI") return;
 
     try {
       await fetch(URL_WEBHOOK_SHEETS, {
@@ -72,27 +79,121 @@ export default function EspecialView({ params: paramsPromise }) {
     }
   }
 
+  function mostrarToast(mensagem, tipo = 'sucesso') {
+    const toastId = Date.now();
+    setToasts(prev => [...prev, { id: toastId, mensagem, tipo }]);
+    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== toastId)); }, 4000);
+  }
+
+  async function carregarDados() {
+    // 1. Carrega Cliente
+    const { data: cli } = await supabase.from('clientes').select('*').eq('id', id).single();
+    if (!cli) { router.push('/login'); return; }
+    setCliente(cli);
+
+    // 2. Carrega Processos Ativos
+    const { data: procs } = await supabase.from('processos_societarios').select('*').eq('cliente_id', id).order('criado_em', { ascending: true });
+    if (procs) setProcessos(procs);
+
+    // 3. Carrega Docs
+    const { data: recebidos } = await supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', 'societario').order('criado_em', { ascending: false });
+    if (recebidos) setDocsRecebidos(recebidos);
+
+    const { data: enviados } = await supabase.from('envios_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
+    if (enviados) setDocsEnviados(enviados);
+  }
+
   useEffect(() => {
-    async function carregarDados() {
-      // 1. Carrega Cliente
-      const { data: cli } = await supabase.from('clientes').select('*').eq('id', id).single();
-      if (!cli) {
-        router.push('/login');
-        return;
-      }
-      setCliente(cli);
-
-      // 2. Carrega Docs enviados pela contabilidade (Arquivos Portal - Setor Societário)
-      const { data: recebidos } = await supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', 'societario').order('criado_em', { ascending: false });
-      if (recebidos) setDocsRecebidos(recebidos);
-
-      // 3. Carrega Docs enviados pelo cliente (Envios Cliente - Societário e Financeiro)
-      const { data: enviados } = await supabase.from('envios_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
-      if (enviados) setDocsEnviados(enviados);
+    const tipo = localStorage.getItem('usuario_tipo');
+    if (tipo === 'interno') {
+      setIsInterno(true);
+      setOperador(localStorage.getItem('usuario_nome') || 'Admin');
     }
     carregarDados();
   }, [id, router]);
 
+  // ==========================================
+  // FUNÇÕES DO ADMIN (GERENCIAR PROCESSOS)
+  // ==========================================
+  async function salvarProcesso(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+
+    if (modalProcesso.tipo === 'novo') {
+      const { error } = await supabase.from('processos_societarios').insert([{
+        cliente_id: id,
+        titulo: formProcesso.titulo,
+        passo: 1
+      }]);
+      if (!error) {
+        mostrarToast('Novo processo iniciado!', 'sucesso');
+        await carregarDados();
+        setModalProcesso({ aberto: false, tipo: 'novo', processo: null });
+      } else mostrarToast('Erro: ' + error.message, 'erro');
+    } else {
+      const { error } = await supabase.from('processos_societarios').update({
+        passo: formProcesso.passo
+      }).eq('id', modalProcesso.processo.id);
+      
+      if (!error) {
+        mostrarToast('Processo avançado!', 'sucesso');
+        
+        // Avisa a Maria
+        const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(formProcesso.passo))?.nome;
+        enviarEmailDemanda({
+           to: 'societario@innovbusiness.com.br',
+           nomeDestinatario: 'Maria (Societário)',
+           nomeRemetente: operador,
+           tituloDemanda: `Avanço de Processo: ${cliente.nome_empresa || cliente.nome_contato}`,
+           descricao: `O processo "${modalProcesso.processo.titulo}" avançou para o PASSO ${formProcesso.passo}: ${passoNome}.`,
+           prazo: 'Acompanhamento Interno'
+        }).catch(()=>{});
+
+        await carregarDados();
+        setModalProcesso({ aberto: false, tipo: 'novo', processo: null });
+      } else mostrarToast('Erro: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
+  async function deletarProcesso(procId) {
+    if(!window.confirm('Tem certeza que deseja apagar este processo?')) return;
+    setSubindoArquivo(true);
+    const { error } = await supabase.from('processos_societarios').delete().eq('id', procId);
+    if (!error) {
+      mostrarToast('Processo excluído.', 'aviso');
+      await carregarDados();
+    }
+    setSubindoArquivo(false);
+  }
+
+  async function salvarDocsSolicitados(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    const { error } = await supabase.from('clientes').update({ docs_solicitados: textoDocs }).eq('id', id);
+    if (!error) {
+      mostrarToast('Lista de documentos atualizada!', 'sucesso');
+      await carregarDados();
+      setModalDocs(false);
+    } else mostrarToast('Erro: ' + error.message, 'erro');
+    setSubindoArquivo(false);
+  }
+
+  async function salvarPagamentosPendentes(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    const { error } = await supabase.from('clientes').update({ pagamentos_pendentes: textoPagamentos }).eq('id', id);
+    if (!error) {
+      mostrarToast('Lista de pagamentos atualizada!', 'sucesso');
+      await carregarDados();
+      setModalPagamentos(false);
+    } else mostrarToast('Erro: ' + error.message, 'erro');
+    setSubindoArquivo(false);
+  }
+
+  // ==========================================
+  // UPLOADS DE CLIENTES E ADMINS
+  // ==========================================
   async function handleEnviarDocumento(e, departamentoDestino) {
     e.preventDefault();
     if (!arquivoDoc || !descricaoDoc.trim()) return mostrarToast('Preencha a descrição e selecione o arquivo.', 'erro');
@@ -110,24 +211,20 @@ export default function EspecialView({ params: paramsPromise }) {
       return;
     }
 
-    const { data: novoEnvio, error: dbError } = await supabase.from('envios_cliente').insert([{
+    const { error: dbError } = await supabase.from('envios_cliente').insert([{
       cliente_id: id,
       nome_documento: descricaoDoc.trim(),
       nome_original: arquivoDoc.name,
       caminho_storage: caminhoArquivo,
       departamento: departamentoDestino,
       status: 'pendente'
-    }]).select().single();
+    }]);
 
     if (!dbError) {
-      mostrarToast('Documento enviado com sucesso para análise!', 'sucesso');
-      setDocsEnviados([novoEnvio, ...docsEnviados]);
-      setDescricaoDoc('');
-      setArquivoDoc(null);
-      
-      // Notifica o Google Sheets!
+      mostrarToast('Documento enviado com sucesso!', 'sucesso');
+      setDescricaoDoc(''); setArquivoDoc(null);
+      await carregarDados();
       await notificarGoogleSheets('NOVO_DOCUMENTO', `O cliente enviou o documento: ${descricaoDoc.trim()} para o setor ${departamentoDestino}`);
-      
     } else {
       mostrarToast('Erro ao registrar documento.', 'erro');
     }
@@ -152,13 +249,27 @@ export default function EspecialView({ params: paramsPromise }) {
     </div>
   );
 
-  const passoAtual = cliente.passo_societario || 1;
-  const porcentagemProgresso = Math.round((passoAtual / 8) * 100);
-
   return (
     <div className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative">
       <div className="max-w-5xl mx-auto">
         
+        {/* BARRA SUPERIOR COMPACTA IGUAL MENSALISTA */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 bg-[#1b263b]/30 p-4 rounded-xl border border-zinc-800/60 gap-4 shadow-sm">
+          <div className="flex items-center gap-4">
+            {isInterno ? (
+              <button onClick={() => router.push('/')} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para o Painel Admin</button>
+            ) : (
+              <span className="text-xs text-zinc-500 font-bold tracking-wider uppercase">Portal de Processos</span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 relative">
+            <span className="text-sm text-zinc-400 hidden sm:inline">
+              Conectado como: <strong className="text-purple-400 font-extrabold">{operador || cliente.nome_contato}</strong>
+            </span>
+            <button onClick={() => { localStorage.clear(); router.push('/login'); }} className="text-xs bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-4 py-2 rounded-lg transition-all font-bold">Sair</button>
+          </div>
+        </div>
+
         {/* CABEÇALHO */}
         <header className="mb-10 bg-[#1b263b] p-6 sm:p-8 rounded-xl border border-purple-500/30 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -168,13 +279,12 @@ export default function EspecialView({ params: paramsPromise }) {
               <span className="text-xs text-zinc-400 font-mono">{cliente.cnpj ? `CNPJ: ${cliente.cnpj}` : `CPF: ${cliente.cpf}`}</span>
             </div>
           </div>
-          <button onClick={() => { localStorage.clear(); router.push('/login'); }} className="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 transition px-5 py-2.5 rounded-lg font-bold border border-red-500/20 text-sm w-full sm:w-auto">Sair do Portal</button>
         </header>
 
         {/* NAVEGAÇÃO DE ABAS */}
         <div className="flex flex-wrap gap-4 mb-8 border-b border-zinc-800 pb-px">
           <button onClick={() => setAbaAtiva('status')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaAtiva === 'status' ? 'border-purple-500 text-purple-400' : 'border-transparent text-zinc-400 hover:text-white'}`}>
-            <IconStatus /> Status do Processo
+            <IconStatus /> Status dos Processos
           </button>
           <button onClick={() => setAbaAtiva('documentos')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaAtiva === 'documentos' ? 'border-purple-500 text-purple-400' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconDoc /> Documentação
@@ -187,56 +297,82 @@ export default function EspecialView({ params: paramsPromise }) {
         {/* ABA 1: STATUS DO PROCESSO */}
         {abaAtiva === 'status' && (
           <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
-            <h2 className="text-xl font-bold text-white mb-2">Acompanhamento em Tempo Real</h2>
-            <p className="text-sm text-zinc-400 mb-8">Acompanhe a evolução da sua empresa passo a passo.</p>
-
-            {/* BARRA DE PROGRESSO GLOBAL */}
-            <div className="mb-12 bg-[#0d1b2a] p-5 rounded-xl border border-purple-500/20">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Progresso Total</span>
-                <span className="text-sm font-black text-purple-400">{porcentagemProgresso}% Concluído</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 border-b border-zinc-800 pb-6">
+              <div>
+                <h2 className="text-xl font-bold text-white mb-2">Acompanhamento em Tempo Real</h2>
+                <p className="text-sm text-zinc-400">Acompanhe a evolução da sua empresa passo a passo.</p>
               </div>
-              <div className="w-full bg-[#1b263b] rounded-full h-3 border border-zinc-700 overflow-hidden">
-                <div className="bg-gradient-to-r from-purple-700 via-purple-500 to-[#d4af37] h-3 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${porcentagemProgresso}%` }}>
-                  <div className="absolute top-0 right-0 bottom-0 left-0 bg-white/20 animate-pulse"></div>
-                </div>
-              </div>
+              {isInterno && (
+                <button onClick={() => { setFormProcesso({ titulo: '', passo: 1 }); setModalProcesso({ aberto: true, tipo: 'novo', processo: null }); }} className="bg-purple-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg w-full sm:w-auto">
+                  + Novo Processo
+                </button>
+              )}
             </div>
 
-            {/* TIMELINE VERTICAL */}
-            <div className="relative border-l-2 border-zinc-700 ml-4 sm:ml-8 space-y-8 pb-4">
-              {PASSOS_SOCIETARIO.map((passo) => {
-                const isCompleted = passoAtual > passo.id;
-                const isCurrent = passoAtual === passo.id;
-                const isFuture = passoAtual < passo.id;
+            {processos.length === 0 ? (
+               <div className="text-center py-12 bg-[#0d1b2a] rounded-xl border border-zinc-800">
+                 <p className="text-zinc-500">Nenhum processo societário ativo no momento.</p>
+               </div>
+            ) : (
+               <div className="space-y-10">
+                 {processos.map(proc => {
+                    const porcentagem = Math.round((proc.passo / 8) * 100);
+                    return (
+                      <div key={proc.id} className="bg-[#0d1b2a] p-6 rounded-xl border border-purple-500/20 relative overflow-hidden shadow-lg">
+                         {/* Header do Card do Processo */}
+                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 border-b border-zinc-800 pb-4 gap-4">
+                            <h3 className="text-lg font-bold text-[#d4af37] flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                              {proc.titulo}
+                            </h3>
+                            {isInterno && (
+                              <div className="flex gap-2 w-full sm:w-auto">
+                                <button onClick={() => { setFormProcesso({ titulo: proc.titulo, passo: proc.passo }); setModalProcesso({ aberto: true, tipo: 'editar', processo: proc }); }} className="flex-1 sm:flex-none text-xs bg-purple-500/10 text-purple-300 border border-purple-500/30 px-4 py-2 rounded font-bold hover:bg-purple-500 hover:text-white transition">Avançar Passo</button>
+                                <button onClick={() => deletarProcesso(proc.id)} className="flex-1 sm:flex-none text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-2 rounded font-bold hover:bg-red-500 hover:text-white transition">Excluir</button>
+                              </div>
+                            )}
+                         </div>
 
-                let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; // Futuro
-                if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
-                if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
+                         {/* BARRA DE PROGRESSO GLOBAL DESTE PROCESSO */}
+                          <div className="mb-10 bg-[#1b263b] p-4 rounded-xl border border-zinc-700">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Progresso</span>
+                              <span className="text-sm font-black text-purple-400">{porcentagem}% Concluído</span>
+                            </div>
+                            <div className="w-full bg-[#0d1b2a] rounded-full h-2 border border-zinc-800 overflow-hidden">
+                              <div className="bg-gradient-to-r from-purple-700 to-purple-400 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${porcentagem}%` }}></div>
+                            </div>
+                          </div>
 
-                return (
-                  <div key={passo.id} className={`relative pl-8 sm:pl-12 transition-all duration-500 ${isCurrent ? 'scale-[1.02]' : isFuture ? 'opacity-50 grayscale' : ''}`}>
-                    {/* Bolinha da Timeline */}
-                    <div className={`absolute -left-[17px] top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
-                      {isCompleted ? '✓' : passo.id}
-                    </div>
+                          {/* TIMELINE VERTICAL DESTE PROCESSO */}
+                          <div className="relative border-l-2 border-zinc-700 ml-4 sm:ml-8 space-y-6 pb-2">
+                            {PASSOS_SOCIETARIO.map((passo) => {
+                              const isCompleted = proc.passo > passo.id;
+                              const isCurrent = proc.passo === passo.id;
+                              const isFuture = proc.passo < passo.id;
 
-                    <div className={`p-5 rounded-xl border transition-all ${isCurrent ? 'bg-[#0d1b2a] border-purple-500/50 shadow-lg' : 'bg-[#0d1b2a]/50 border-zinc-800'}`}>
-                      <h3 className={`text-base font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>
-                        {passo.nome}
-                      </h3>
-                      <p className="text-sm text-zinc-400 leading-relaxed">{passo.desc}</p>
-                      
-                      {isCurrent && (
-                        <span className="inline-block mt-3 text-[10px] uppercase font-bold tracking-widest text-purple-300 bg-purple-500/20 px-3 py-1 rounded">
-                          Fase Atual (Em Análise)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                              let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
+                              if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
+                              if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
+
+                              return (
+                                <div key={passo.id} className={`relative pl-8 sm:pl-12 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
+                                  <div className={`absolute -left-[17px] top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
+                                    {isCompleted ? '✓' : passo.id}
+                                  </div>
+                                  <div className={`p-4 rounded-xl border transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
+                                    <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>{passo.nome}</h3>
+                                    <p className="text-xs text-zinc-400 leading-relaxed">{passo.desc}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                      </div>
+                    )
+                 })}
+               </div>
+            )}
           </div>
         )}
 
@@ -244,18 +380,41 @@ export default function EspecialView({ params: paramsPromise }) {
         {abaAtiva === 'documentos' && (
           <div className="space-y-8">
             
+            {/* BANNER DINÂMICO DE DOCUMENTOS SOLICITADOS */}
+            {(cliente.docs_solicitados || isInterno) && (
+              <div className="bg-purple-500/10 p-6 rounded-xl border border-purple-500/30 flex flex-col sm:flex-row justify-between items-start gap-4 shadow-md">
+                 <div className="flex-1 w-full">
+                   <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                     <IconDoc /> Documentos Necessários
+                   </h3>
+                   {cliente.docs_solicitados ? (
+                     <div className="bg-[#0d1b2a]/50 p-4 rounded-lg border border-purple-500/20">
+                       <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{cliente.docs_solicitados}</p>
+                     </div>
+                   ) : (
+                     <p className="text-sm text-zinc-500 italic">Escreva aqui a lista de documentos que o cliente precisa enviar...</p>
+                   )}
+                 </div>
+                 {isInterno && (
+                   <button onClick={() => { setTextoDocs(cliente.docs_solicitados || ''); setModalDocs(true); }} className="w-full sm:w-auto text-xs bg-purple-500 text-white px-4 py-2.5 rounded-lg font-bold hover:bg-purple-400 transition whitespace-nowrap shadow-sm mt-1">
+                     {cliente.docs_solicitados ? 'Editar Pedido' : '+ Solicitar Docs'}
+                   </button>
+                 )}
+              </div>
+            )}
+
             {/* FORMULÁRIO DE ENVIO */}
             <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl">
-              <h3 className="text-lg font-bold text-white mb-2">Enviar Documento Solicitado</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Enviar Documento</h3>
               <p className="text-xs text-zinc-400 mb-6">A nossa equipa solicitou um documento? Anexe-o abaixo.</p>
               
               <form onSubmit={(e) => handleEnviarDocumento(e, 'Societário')} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-[#0d1b2a] p-5 rounded-lg border border-zinc-800/60">
                 <div className="md:col-span-5">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Qual é o documento?</label>
-                  <input type="text" required placeholder="Ex: CNH do Sócio, Comprovante de Residência..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500" />
+                  <input type="text" required placeholder="Ex: CNH do Sócio, Comprovante..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500" />
                 </div>
                 <div className="md:col-span-4">
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo (PDF ou Imagem)</label>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
                   <input type="file" required accept=".pdf,image/*" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                 </div>
                 <div className="md:col-span-3">
@@ -319,8 +478,35 @@ export default function EspecialView({ params: paramsPromise }) {
         {/* ABA 3: FINANCEIRO E TAXAS */}
         {abaAtiva === 'financeiro' && (
           <div className="bg-[#1b263b] p-8 rounded-xl border border-[#d4af37]/30 shadow-xl mb-10">
-            <h2 className="text-xl font-bold text-[#d4af37] mb-2">Financeiro e Taxas Governamentais</h2>
-            <p className="text-sm text-zinc-400 mb-8">Anexe aqui os comprovantes das guias pagas e honorários do processo.</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-800 pb-4 mb-6 gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#d4af37] mb-1">Financeiro e Taxas Governamentais</h2>
+                <p className="text-sm text-zinc-400">Acompanhe os seus pagamentos pendentes e envie os comprovantes.</p>
+              </div>
+            </div>
+
+            {/* BANNER DINÂMICO DE PAGAMENTOS PENDENTES */}
+            {(cliente.pagamentos_pendentes || isInterno) && (
+              <div className="bg-[#d4af37]/10 p-6 rounded-xl border border-[#d4af37]/30 flex flex-col sm:flex-row justify-between items-start gap-4 shadow-md mb-8">
+                 <div className="flex-1 w-full">
+                   <h3 className="text-sm font-bold text-[#d4af37] uppercase tracking-wider mb-3 flex items-center gap-2">
+                     <IconFinanceiro /> Pagamentos Pendentes
+                   </h3>
+                   {cliente.pagamentos_pendentes ? (
+                     <div className="bg-[#0d1b2a]/50 p-4 rounded-lg border border-[#d4af37]/20">
+                       <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{cliente.pagamentos_pendentes}</p>
+                     </div>
+                   ) : (
+                     <p className="text-sm text-zinc-500 italic">Escreva aqui os pagamentos e taxas pendentes para o cliente...</p>
+                   )}
+                 </div>
+                 {isInterno && (
+                   <button onClick={() => { setTextoPagamentos(cliente.pagamentos_pendentes || ''); setModalPagamentos(true); }} className="w-full sm:w-auto text-xs bg-[#d4af37] text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition whitespace-nowrap shadow-sm mt-1">
+                     {cliente.pagamentos_pendentes ? 'Editar Pagamentos' : '+ Lançar Pendência'}
+                   </button>
+                 )}
+              </div>
+            )}
 
             <form onSubmit={(e) => handleEnviarDocumento(e, 'Financeiro')} className="bg-[#0d1b2a] p-6 rounded-xl border border-zinc-800 shadow-inner mb-8 max-w-2xl">
               <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Enviar Comprovante de Pagamento</h3>
@@ -359,6 +545,107 @@ export default function EspecialView({ params: paramsPromise }) {
         )}
 
       </div>
+
+      {/* MODAIS ADMIN */}
+      {isInterno && modalProcesso.aberto && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-purple-400">{modalProcesso.tipo === 'novo' ? 'Novo Processo Societário' : 'Avançar Passo'}</h3>
+              <button onClick={() => setModalProcesso({ aberto: false, tipo: 'novo', processo: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={salvarProcesso} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-2">Título do Processo</label>
+                <input 
+                  type="text" 
+                  required 
+                  disabled={modalProcesso.tipo !== 'novo'}
+                  placeholder="Ex: Abertura de Filial SP..." 
+                  value={formProcesso.titulo} 
+                  onChange={e => setFormProcesso({...formProcesso, titulo: e.target.value})} 
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                />
+              </div>
+              
+              {modalProcesso.tipo === 'editar' && (
+                <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-3">Selecione a fase atual:</label>
+                  <div className="space-y-2 max-h-[30vh] overflow-y-auto hide-scrollbar">
+                    {PASSOS_SOCIETARIO.map(passo => (
+                      <label key={passo.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${formProcesso.passo === passo.id ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[#1b263b] border-zinc-700 text-zinc-300'}`}>
+                        <input type="radio" name="passo_proc" className="accent-purple-500 w-4 h-4 cursor-pointer" checked={formProcesso.passo === passo.id} onChange={() => setFormProcesso({...formProcesso, passo: passo.id})} />
+                        <span className="text-sm font-bold">Passo {passo.id}: {passo.nome}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
+                <button type="button" onClick={() => setModalProcesso({ aberto: false, tipo: 'novo', processo: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-[0_0_15px_rgba(168,85,247,0.4)] disabled:opacity-50">
+                  {subindoArquivo ? 'Salvando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isInterno && modalDocs && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-purple-400">Documentos Solicitados</h3>
+              <button onClick={() => setModalDocs(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={salvarDocsSolicitados} className="p-5 space-y-4">
+              <p className="text-xs text-zinc-400">Liste abaixo os documentos que o cliente precisa anexar na plataforma. Ao deixar em branco, o banner desaparecerá para o cliente.</p>
+              <textarea 
+                rows="6" 
+                placeholder="- RG e CPF dos sócios&#10;- Comprovante de Residência..." 
+                value={textoDocs} 
+                onChange={e => setTextoDocs(e.target.value)} 
+                className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 resize-none"
+              ></textarea>
+              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
+                <button type="button" onClick={() => setModalDocs(false)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-[0_0_15px_rgba(168,85,247,0.4)] disabled:opacity-50">
+                  {subindoArquivo ? 'Salvando...' : 'Salvar Lista'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isInterno && modalPagamentos && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-[#d4af37]">Pagamentos Pendentes</h3>
+              <button onClick={() => setModalPagamentos(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={salvarPagamentosPendentes} className="p-5 space-y-4">
+              <p className="text-xs text-zinc-400">Liste abaixo as taxas ou honorários que o cliente precisa pagar. Ao deixar em branco, o aviso desaparecerá para o cliente.</p>
+              <textarea 
+                rows="6" 
+                placeholder="- DARE SP (R$ 150,00)&#10;- Honorários Parcela 1..." 
+                value={textoPagamentos} 
+                onChange={e => setTextoPagamentos(e.target.value)} 
+                className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
+              ></textarea>
+              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
+                <button type="button" onClick={() => setModalPagamentos(false)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
+                  {subindoArquivo ? 'Salvando...' : 'Salvar Lista'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* SISTEMA DE TOASTS */}
       <div className="fixed bottom-6 right-6 z-[9999999] flex flex-col gap-3 pointer-events-none">
