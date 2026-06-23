@@ -631,22 +631,22 @@ export default function EspecialView({ params }) {
               </div>
             </div>
 
-            {/* BANNER PIX PREMIUM */}
-            <div className="bg-[#0d1b2a] p-6 rounded-xl border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-5 mb-8 shadow-md">
-              <div className="flex items-center gap-4 w-full sm:w-auto">
-                 <div className="bg-emerald-500/10 p-3.5 rounded-full text-emerald-400 border border-emerald-500/20">
-                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 4v16m8-8H4"/></svg>
+            {/* BANNER PIX DISCRETO */}
+            <div className="bg-[#1b263b] p-4 sm:p-5 rounded-xl border border-emerald-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                 <div className="text-emerald-400">
+                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
                  </div>
                  <div>
-                   <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Pagamento Rápido via PIX</h3>
-                   <p className="text-xs text-zinc-400">Chave CNPJ: <strong className="text-emerald-400 text-sm tracking-widest ml-1">52.305.552/0001-01</strong></p>
+                   <h3 className="text-sm font-bold text-white mb-0.5">Pagamento via PIX</h3>
+                   <p className="text-xs text-zinc-400">Chave CNPJ: <strong className="text-emerald-400">52.305.552/0001-01</strong></p>
                  </div>
               </div>
               <button 
-                onClick={() => { navigator.clipboard.writeText('52.305.552/0001-01'); mostrarToast('Chave PIX copiada para a área de transferência!', 'sucesso'); }} 
-                className="bg-emerald-500 text-[#0d1b2a] font-extrabold px-6 py-3 rounded-lg text-xs hover:bg-emerald-400 transition w-full sm:w-auto shadow-[0_0_15px_rgba(16,185,129,0.3)] whitespace-nowrap"
+                onClick={() => { navigator.clipboard.writeText('52.305.552/0001-01'); mostrarToast('Chave PIX copiada!', 'sucesso'); }} 
+                className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold px-4 py-2 rounded-lg text-xs hover:bg-emerald-500 hover:text-[#0d1b2a] transition w-full sm:w-auto whitespace-nowrap"
               >
-                Copiar Chave PIX
+                Copiar Chave
               </button>
             </div>
 
