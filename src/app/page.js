@@ -240,9 +240,6 @@ export default function AdminPage() {
   }, [abaAtiva, autenticando]);
 
   async function carregarDadosDaAba(pagina = 0, recarregar = false) {
-    if (recarregar) setCarregandoDados(true);
-
-    // Atualiza os contadores só na primeira página para otimizar a velocidade
     if (pagina === 0) {
       supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).then(r => {
         supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).then(e => {
