@@ -92,10 +92,27 @@ export default function AdminPage() {
   const [pedidosCliente, setPedidosCliente] = useState([]);
   const [alertas, setAlertas] = useState([]);
   
-  const [abaAtiva, setAbaAtiva] = useState('ativos');
+ const [abaAtiva, setAbaAtiva] = useState('ativos');
+  const [subAbaAtivos, setSubAbaAtivos] = useState('mensalistas'); // NOVO: Filtro de Especiais
   const [subAbaDemanda, setSubAbaDemanda] = useState('pendentes'); 
   const [subAbaAlerta, setSubAbaAlerta] = useState('historico_geral'); 
-  
+
+  // CONSTANTES DO PROCESSO SOCIETÁRIO (8 PASSOS)
+  const PASSOS_SOCIETARIO = [
+    { id: 1, nome: 'Viabilidade' },
+    { id: 2, nome: 'DBE (Documento Básico de Entrada)' },
+    { id: 3, nome: 'Pagamento da Taxa DARE' },
+    { id: 4, nome: 'Emissão de Documentos e Contrato Social' },
+    { id: 5, nome: 'Assinatura de Documentos' },
+    { id: 6, nome: 'Registro na Junta Comercial' },
+    { id: 7, nome: 'Protocolar Processo' },
+    { id: 8, nome: 'Deferido (Concluído)' }
+  ];
+
+  // ESTADOS DO MODAL SOCIETÁRIO
+  const [modalPasso, setModalPasso] = useState({ aberto: false, cliente: null });
+  const [novoPassoSelecionado, setNovoPassoSelecionado] = useState(1);
+
   // ESTADO DE SELEÇÃO DE DOCS RECEBIDOS
   const [selecionadosRecebidos, setSelecionadosRecebidos] = useState([]);
 
@@ -406,6 +423,40 @@ export default function AdminPage() {
       await carregarDados();
     } else {
       mostrarToast('Erro ao atualizar dados: ' + error.message, 'erro');
+    }
+    setSubindo(false);
+  }
+
+  async function handleAtualizarPassoSocietario(e) {
+    e.preventDefault();
+    setSubindo(true);
+    
+    const { cliente } = modalPasso;
+    
+    const { error } = await supabase
+      .from('clientes')
+      .update({ passo_societario: novoPassoSelecionado })
+      .eq('id', cliente.id);
+
+    if (!error) {
+      mostrarToast('Processo societário atualizado com sucesso!', 'sucesso');
+      
+      // MÁGICA: Avisa a Maria por e-mail
+      const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(novoPassoSelecionado))?.nome;
+      
+      enviarEmailDemanda({
+         to: OBTER_EMAIL_FUNCIONARIO['Maria (Societário)'],
+         nomeDestinatario: 'Maria (Societário)',
+         nomeRemetente: operador,
+         tituloDemanda: `Atualização de Processo: ${cliente.nome_empresa || cliente.nome_contato}`,
+         descricao: `O processo do cliente foi avançado para o PASSO ${novoPassoSelecionado}: ${passoNome}.`,
+         prazo: 'Acompanhamento Interno'
+      }).catch(()=>{});
+
+      setModalPasso({ aberto: false, cliente: null });
+      await carregarDados(); 
+    } else {
+      mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
     }
     setSubindo(false);
   }
@@ -1496,70 +1547,99 @@ export default function AdminPage() {
         
         {abaAtiva === 'ativos' && (
           <div className="space-y-6">
-            <div className="bg-[#1b263b] p-4 rounded-xl border border-zinc-800 shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div className="w-full sm:w-1/2 relative">
-                <input type="text" placeholder="Pesquisar por nome, CNPJ ou e-mail..." value={buscaCliente} onChange={(e) => setBuscaCliente(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37] transition-colors" />
+            <div className="bg-[#1b263b] p-4 rounded-xl border border-zinc-800 shadow-lg flex flex-col gap-4">
+              
+              {/* AS NOVAS SUB-ABAS (MENSALISTAS VS ESPECIAIS) */}
+              <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-800 w-full sm:w-max">
+                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-6 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}>
+                  Mensalistas (Ativos)
+                </button>
+                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-6 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}>
+                  Processos Societários
+                </button>
               </div>
-              <label className="w-full sm:w-auto bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2.5 rounded-lg font-bold text-sm transition shadow-lg cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap">
-                <IconDocument /> Importar Planilha CSV
-                <input type="file" accept=".csv" className="hidden" onChange={handleUploadCSV} />
-              </label>
+
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="w-full sm:w-1/2 relative">
+                  <input type="text" placeholder="Pesquisar por nome, CNPJ/CPF ou e-mail..." value={buscaCliente} onChange={(e) => setBuscaCliente(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37] transition-colors" />
+                </div>
+                <label className="w-full sm:w-auto bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2.5 rounded-lg font-bold text-sm transition shadow-lg cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap">
+                  <IconDocument /> Importar Planilha CSV
+                  <input type="file" accept=".csv" className="hidden" onChange={handleUploadCSV} />
+                </label>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {clientesFiltrados.length === 0 ? (
-                <p className="text-zinc-500 col-span-full py-8 text-center">Nenhum cliente encontrado.</p>
-              ) : (
-                clientesFiltrados.map((cli) => (
-                  <div key={cli.id} className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl flex flex-col justify-between hover:border-zinc-700 transition">
-                    <div>
-                      {/* NOVO: EXIBIÇÃO DO SELO AZUL SE ELE TIVER LOGADO (ULTIMO_LOGIN DIFERENTE DE NULL) */}
-                      <div className="flex justify-between items-start mb-4 gap-3">
-                        <h3 className="text-lg font-bold text-white leading-tight break-words" title={cli.nome_empresa}>
-                          {cli.nome_empresa}
-                          {cli.ultimo_login && <IconVerified />}
-                        </h3>
-                        <div className="flex-shrink-0 pt-0.5">
-                          <span className="text-[10px] font-bold text-[#d4af37] border border-[#d4af37]/30 bg-[#0d1b2a] px-2 py-0.5 rounded whitespace-nowrap">{cli.regime_tributario}</span>
+              {(() => {
+                // FILTRAGEM INTELIGENTE
+                const listaExibicao = subAbaAtivos === 'especiais' 
+                  ? clientesFiltrados.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial')
+                  : clientesFiltrados.filter(c => c.tipo_conta === 'mensalista' || !c.tipo_conta);
+
+                if (listaExibicao.length === 0) return <p className="text-zinc-500 col-span-full py-8 text-center">Nenhum cliente encontrado nesta categoria.</p>;
+
+                return listaExibicao.map((cli) => {
+                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial';
+                  const passoAtual = cli.passo_societario || 1;
+                  const porcentagemProgresso = Math.round((passoAtual / 8) * 100);
+
+                  return (
+                    <div key={cli.id} className={`p-6 rounded-xl border shadow-xl flex flex-col justify-between transition ${isEspecial ? 'bg-[#0d1b2a] border-purple-500/30 hover:border-purple-500/60' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+                      <div>
+                        <div className="flex justify-between items-start mb-4 gap-3">
+                          <h3 className="text-lg font-bold text-white leading-tight break-words" title={cli.nome_empresa || cli.nome_contato}>
+                            {cli.nome_empresa || cli.nome_contato}
+                            {cli.ultimo_login && <IconVerified />}
+                          </h3>
+                          <div className="flex-shrink-0 pt-0.5">
+                            <span className={`text-[10px] font-bold border px-2 py-0.5 rounded whitespace-nowrap ${isEspecial ? 'text-purple-400 border-purple-400/30 bg-purple-500/10' : 'text-[#d4af37] border-[#d4af37]/30 bg-[#0d1b2a]'}`}>
+                              {isEspecial ? 'Societário' : cli.regime_tributario}
+                            </span>
+                          </div>
                         </div>
+                        
+                        <p className="text-xs text-zinc-400 mb-1">{cli.cnpj ? 'CNPJ:' : 'CPF:'} <span className="text-zinc-300">{cli.cnpj || cli.cpf || 'Não informado'}</span></p>
+                        <p className="text-xs text-zinc-400 mb-1">E-mail: <span className="text-zinc-300 truncate inline-block max-w-[200px] align-bottom">{cli.email || 'Não informado'}</span></p>
+                        <p className="text-xs text-zinc-400">Contato: <span className="text-zinc-300">{cli.nome_contato || 'Não informado'}</span></p>
+                        
+                        {/* 🚀 A BARRA DE PROGRESSO SOCIETÁRIA */}
+                        {isEspecial && (
+                          <div className="mt-5 p-3 bg-[#1b263b] rounded-lg border border-zinc-800/80">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Status do Processo</span>
+                              <span className="text-[10px] font-black text-purple-400">{porcentagemProgresso}%</span>
+                            </div>
+                            <div className="w-full bg-[#0d1b2a] rounded-full h-2 mb-2 border border-zinc-800">
+                              <div className="bg-gradient-to-r from-purple-600 to-purple-400 h-2 rounded-full transition-all duration-500" style={{ width: `${porcentagemProgresso}%` }}></div>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <p className="text-[10px] text-zinc-300 truncate mr-2">Passo {passoAtual}: {PASSOS_SOCIETARIO.find(p => p.id === passoAtual)?.nome}</p>
+                              <button onClick={() => { setModalPasso({ aberto: true, cliente: cli }); setNovoPassoSelecionado(passoAtual); }} className="text-[10px] bg-purple-500/20 text-purple-300 hover:bg-purple-500 hover:text-white px-2 py-1 rounded font-bold transition">
+                                Atualizar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {cli.ultimo_login && (
+                          <p className="text-[10px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/40">
+                            Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
+                            {cli.ultima_cidade && (
+                              <span className="ml-1 text-zinc-400">em <strong className="text-zinc-300">{cli.ultima_cidade}</strong></span>
+                            )}
+                          </p>
+                        )}
                       </div>
-                      <p className="text-xs text-zinc-400 mb-1">CNPJ: <span className="text-zinc-300">{cli.cnpj}</span></p>
-                      <p className="text-xs text-zinc-400 mb-1">E-mail: <span className="text-zinc-300 truncate inline-block max-w-[200px] align-bottom">{cli.email || 'Não informado'}</span></p>
-                      <p className="text-xs text-zinc-400">Contato: <span className="text-zinc-300">{cli.nome_contato || 'Não informado'}</span></p>
-                      
-                      {/* CARIMBO PEQUENO DE ÚLTIMO LOGIN + CIDADE */}
-                      {cli.ultimo_login && (
-                        <p className="text-[10px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/40">
-                          Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
-                          {cli.ultima_cidade && (
-                            <span className="ml-1 text-zinc-400">em <strong className="text-zinc-300">{cli.ultima_cidade}</strong></span>
-                          )}
-                        </p>
-                      )}
+                      <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-2">
+                        <Link href={`/cliente/${cli.id}`} className={`flex-1 border text-center py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm ${isEspecial ? 'border-purple-500/50 text-purple-400 hover:bg-purple-500 hover:text-white' : 'border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a]'}`}>Perfil</Link>
+                        <button type="button" onClick={() => { setModalEditarCliente({ aberto: true, cliente: cli }); setFormEditar({ nome_empresa: cli.nome_empresa || '', nome_contato: cli.nome_contato || '', email: cli.email || '', celular: cli.celular || '', regime_tributario: cli.regime_tributario || 'Simples Nacional' }); }} className="px-3 bg-zinc-800 border border-zinc-700 hover:border-white text-zinc-300 rounded-lg text-xs font-bold transition">Editar</button>
+                        <button onClick={() => deletarCliente(cli.id)} className="px-3 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs transition font-bold">Excluir</button>
+                      </div>
                     </div>
-                    <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-2">
-                      <Link href={`/cliente/${cli.id}`} className="flex-1 border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] text-center py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm">Perfil</Link>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setModalEditarCliente({ aberto: true, cliente: cli });
-                          setFormEditar({ 
-                            nome_empresa: cli.nome_empresa || '', 
-                            nome_contato: cli.nome_contato || '', 
-                            email: cli.email || '', 
-                            celular: cli.celular || '', 
-                            regime_tributario: cli.regime_tributario || 'Simples Nacional' 
-                          });
-                        }} 
-                        className="px-3 bg-zinc-800 border border-zinc-700 hover:border-[#d4af37] text-zinc-300 rounded-lg text-xs font-bold transition"
-                      >
-                        Editar
-                      </button>
-                      <button onClick={() => deletarCliente(cli.id)} className="px-3 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs transition font-bold">Excluir</button>
-                    </div>
-                  </div>
-                ))
-              )}
+                  );
+                });
+              })()}
             </div>
           </div>
         )}
@@ -2538,6 +2618,52 @@ export default function AdminPage() {
                 <button type="button" onClick={() => setModalEditarCliente({ aberto: false, cliente: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-5 py-2 rounded-lg text-xs font-extrabold transition shadow-lg">
                   {subindo ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ATUALIZAR STATUS DO PROCESSO SOCIETÁRIO */}
+      {modalPasso.aberto && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999999]">
+          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold text-purple-400">Avançar Processo</h3>
+                <p className="text-[10px] text-zinc-400 mt-0.5">{modalPasso.cliente?.nome_empresa || modalPasso.cliente?.nome_contato}</p>
+              </div>
+              <button type="button" onClick={() => setModalPasso({ aberto: false, cliente: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            
+            <form onSubmit={handleAtualizarPassoSocietario} className="p-5 space-y-4">
+              <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-3">Selecione a fase atual do processo:</label>
+                <div className="space-y-2 max-h-[40vh] overflow-y-auto hide-scrollbar">
+                  {PASSOS_SOCIETARIO.map(passo => (
+                    <label key={passo.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${novoPassoSelecionado === passo.id ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[#1b263b] border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="passo_processo"
+                        className="accent-purple-500 w-4 h-4 cursor-pointer"
+                        checked={novoPassoSelecionado === passo.id} 
+                        onChange={() => setNovoPassoSelecionado(passo.id)}
+                      />
+                      <span className="text-sm font-bold">Passo {passo.id}: {passo.nome}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[10px] text-zinc-500 text-center italic">
+                Ao salvar, a Maria (Societário) receberá um e-mail e o cliente verá o avanço no portal.
+              </p>
+
+              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
+                <button type="button" onClick={() => setModalPasso({ aberto: false, cliente: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-[0_0_15px_rgba(168,85,247,0.4)] disabled:opacity-50">
+                  {subindo ? 'Salvando...' : 'Avançar Etapa'}
                 </button>
               </div>
             </form>
