@@ -975,12 +975,16 @@ export default function AdminPage() {
 
     } else {
       // 2. É uma Conta Nova ou um "Novo Vínculo" (Cria a conta do zero)
-      const senhaGerada = solicitacao.cnpj.replace(/\D/g, '').substring(0, 6);
+      const documentoSeguro = solicitacao.cnpj || solicitacao.cpf || '';
+      const senhaGerada = documentoSeguro.replace(/\D/g, '').substring(0, 6);
+      
       const { data: novoCliente, error } = await supabase.from('clientes').insert([{ 
         nome_empresa: solicitacao.nome_empresa, 
         cnpj: solicitacao.cnpj, 
+        cpf: solicitacao.cpf, // <-- MÁGICA 1: Agora salva o CPF corretamente
+        tipo_conta: solicitacao.tipo_conta || 'mensalista', // <-- MÁGICA 2: Define se é Mensalista ou Societário
         nome_contato: solicitacao.nome_contato, 
-        email: solicitacao.email, 
+        email: solicitacao.email ? solicitacao.email.trim().toLowerCase() : '', // <-- MÁGICA 3: Limpa espaços e letras maiúsculas para o login não falhar
         celular: solicitacao.celular, 
         regime_tributario: solicitacao.regime_tributario, 
         senha: encriptarSenha(senhaGerada), 
