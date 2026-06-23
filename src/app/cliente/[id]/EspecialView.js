@@ -32,6 +32,7 @@ export default function EspecialView({ params }) {
   const [cliente, setCliente] = useState(null);
   const [processos, setProcessos] = useState([]);
   const [abaAtiva, setAbaAtiva] = useState('status');
+  const [expandidos, setExpandidos] = useState({}); // NOVO: Controle de abrir/fechar os cards
   
   // Controle de Permissão Admin
   const [isInterno, setIsInterno] = useState(false);
@@ -317,57 +318,75 @@ export default function EspecialView({ params }) {
                <div className="space-y-10">
                  {processos.map(proc => {
                     const porcentagem = Math.round((proc.passo / 8) * 100);
+                    // MÁGICA: Se só tem 1 processo, fica aberto. Se tem vários, lê do estado 'expandidos'.
+                    const isExpanded = processos.length === 1 || expandidos[proc.id];
+
                     return (
-                      <div key={proc.id} className="bg-[#0d1b2a] p-6 rounded-xl border border-purple-500/20 relative overflow-hidden shadow-lg">
+                      <div key={proc.id} className="bg-[#0d1b2a] p-6 rounded-xl border border-purple-500/20 relative overflow-hidden shadow-lg transition-all duration-300">
                          {/* Header do Card do Processo */}
-                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 border-b border-zinc-800 pb-4 gap-4">
-                            <h3 className="text-lg font-bold text-[#d4af37] flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-                              {proc.titulo}
-                            </h3>
-                            {isInterno && (
-                              <div className="flex gap-2 w-full sm:w-auto">
-                                <button onClick={() => { setFormProcesso({ titulo: proc.titulo, passo: proc.passo }); setModalProcesso({ aberto: true, tipo: 'editar', processo: proc }); }} className="flex-1 sm:flex-none text-xs bg-purple-500/10 text-purple-300 border border-purple-500/30 px-4 py-2 rounded font-bold hover:bg-purple-500 hover:text-white transition">Avançar Passo</button>
-                                <button onClick={() => deletarProcesso(proc.id)} className="flex-1 sm:flex-none text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-2 rounded font-bold hover:bg-red-500 hover:text-white transition">Excluir</button>
+                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-zinc-800 pb-4 gap-4">
+                            <div className="flex-1 w-full sm:w-auto">
+                              <h3 className="text-lg font-bold text-[#d4af37] flex items-center gap-2 mb-2">
+                                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                                {proc.titulo}
+                              </h3>
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Status:</span>
+                                <span className="text-xs font-black text-purple-400">{porcentagem}% Concluído</span>
                               </div>
-                            )}
+                            </div>
+
+                            <div className="flex gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center">
+                              {/* Botão de Expandir/Minimizar (só aparece se tiver > 1 processo) */}
+                              {processos.length > 1 && (
+                                <button 
+                                  onClick={() => setExpandidos(prev => ({ ...prev, [proc.id]: !prev[proc.id] }))} 
+                                  className="flex-1 sm:flex-none text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 px-4 py-2 rounded font-bold hover:bg-zinc-700 hover:text-white transition"
+                                >
+                                  {isExpanded ? 'Ocultar Etapas ▲' : 'Ver Detalhes das Etapas ▼'}
+                                </button>
+                              )}
+
+                              {isInterno && (
+                                <>
+                                  <button onClick={() => { setFormProcesso({ titulo: proc.titulo, passo: proc.passo }); setModalProcesso({ aberto: true, tipo: 'editar', processo: proc }); }} className="flex-1 sm:flex-none text-xs bg-purple-500/10 text-purple-300 border border-purple-500/30 px-4 py-2 rounded font-bold hover:bg-purple-500 hover:text-white transition">Avançar Passo</button>
+                                  <button onClick={() => deletarProcesso(proc.id)} className="flex-1 sm:flex-none text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-2 rounded font-bold hover:bg-red-500 hover:text-white transition">Excluir</button>
+                                </>
+                              )}
+                            </div>
                          </div>
 
-                         {/* BARRA DE PROGRESSO GLOBAL DESTE PROCESSO */}
-                          <div className="mb-10 bg-[#1b263b] p-4 rounded-xl border border-zinc-700">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Progresso</span>
-                              <span className="text-sm font-black text-purple-400">{porcentagem}% Concluído</span>
-                            </div>
-                            <div className="w-full bg-[#0d1b2a] rounded-full h-2 border border-zinc-800 overflow-hidden">
-                              <div className="bg-gradient-to-r from-purple-700 to-purple-400 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${porcentagem}%` }}></div>
-                            </div>
+                         {/* BARRA DE PROGRESSO GLOBAL (Sempre visível) */}
+                          <div className={`w-full bg-[#1b263b] rounded-full h-2 border border-zinc-700 overflow-hidden ${isExpanded ? 'mb-8' : 'mb-2'}`}>
+                            <div className="bg-gradient-to-r from-purple-700 to-purple-400 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${porcentagem}%` }}></div>
                           </div>
 
-                          {/* TIMELINE VERTICAL DESTE PROCESSO */}
-                          <div className="relative border-l-2 border-zinc-700 ml-4 sm:ml-8 space-y-6 pb-2">
-                            {PASSOS_SOCIETARIO.map((passo) => {
-                              const isCompleted = proc.passo > passo.id;
-                              const isCurrent = proc.passo === passo.id;
-                              const isFuture = proc.passo < passo.id;
+                          {/* TIMELINE VERTICAL DESTE PROCESSO (Oculta se minimizado) */}
+                          {isExpanded && (
+                            <div className="relative border-l-2 border-zinc-700 ml-4 sm:ml-8 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                              {PASSOS_SOCIETARIO.map((passo) => {
+                                const isCompleted = proc.passo > passo.id;
+                                const isCurrent = proc.passo === passo.id;
+                                const isFuture = proc.passo < passo.id;
 
-                              let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
-                              if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
-                              if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
+                                let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
+                                if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
+                                if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
 
-                              return (
-                                <div key={passo.id} className={`relative pl-8 sm:pl-12 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
-                                  <div className={`absolute -left-[17px] top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
-                                    {isCompleted ? '✓' : passo.id}
+                                return (
+                                  <div key={passo.id} className={`relative pl-8 sm:pl-12 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
+                                    <div className={`absolute -left-[17px] top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
+                                      {isCompleted ? '✓' : passo.id}
+                                    </div>
+                                    <div className={`p-4 rounded-xl border transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
+                                      <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>{passo.nome}</h3>
+                                      <p className="text-xs text-zinc-400 leading-relaxed">{passo.desc}</p>
+                                    </div>
                                   </div>
-                                  <div className={`p-4 rounded-xl border transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
-                                    <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>{passo.nome}</h3>
-                                    <p className="text-xs text-zinc-400 leading-relaxed">{passo.desc}</p>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                );
+                              })}
+                            </div>
+                          )}
                       </div>
                     )
                  })}
