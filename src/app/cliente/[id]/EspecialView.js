@@ -470,21 +470,31 @@ export default function EspecialView({ params }) {
               </div>
             )}
 
-            {/* FORMULÁRIO DE ENVIO */}
-            <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl">
+            {/* FORMULÁRIO DE ENVIO GERAL (Cliente) */}
+            <div className="bg-[#1b263b] p-5 sm:p-6 rounded-xl border border-zinc-800 shadow-xl overflow-hidden">
               <h3 className="text-lg font-bold text-white mb-2">Enviar Documento</h3>
               <p className="text-xs text-zinc-400 mb-6">A nossa equipa solicitou um documento? Anexe-o abaixo.</p>
               
-              <form onSubmit={(e) => handleEnviarDocumento(e, 'Societário')} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-[#0d1b2a] p-5 rounded-lg border border-zinc-800/60">
-                <div className="md:col-span-5">
+              <form onSubmit={(e) => handleEnviarDocumento(e, 'Societário')} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-[#0d1b2a] p-4 sm:p-5 rounded-lg border border-zinc-800/60 w-full">
+                {processos.length > 1 && (
+                  <div className="md:col-span-12 mb-1 border-b border-zinc-800 pb-3 w-full">
+                    <label className="block text-xs font-bold text-purple-400 uppercase mb-2">Para qual processo é este documento?</label>
+                    <select required value={processoSelecionadoDoc} onChange={e => setProcessoSelecionadoDoc(e.target.value)} className="w-full max-w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-purple-500 cursor-pointer truncate">
+                      <option value="">Selecione um processo...</option>
+                      {processos.map(p => <option key={p.id} value={p.id}>{p.titulo}</option>)}
+                    </select>
+                  </div>
+                )}
+                
+                <div className="md:col-span-5 w-full">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Qual é o documento?</label>
-                  <input type="text" required placeholder="Ex: CNH do Sócio, Comprovante..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500" />
+                  <input type="text" required placeholder="Ex: CNH do Sócio..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full max-w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500" />
                 </div>
-                <div className="md:col-span-4">
+                <div className="md:col-span-4 w-full">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
-                  <input type="file" required accept=".pdf,image/*" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
+                  <input type="file" required accept=".pdf,image/*" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full max-w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-3 w-full mt-2 md:mt-0">
                   <button type="submit" disabled={subindoArquivo} className="w-full bg-purple-500 text-white font-extrabold px-4 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg disabled:opacity-50">
                     {subindoArquivo ? 'A enviar...' : 'Enviar Arquivo'}
                   </button>
@@ -492,53 +502,122 @@ export default function EspecialView({ params }) {
               </form>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* HISTÓRICO DE ENVIOS DO CLIENTE */}
-              <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl">
-                <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Você Enviou</h3>
-                <div className="space-y-3">
-                  {docsEnviados.filter(d => d.departamento === 'Societário').length === 0 ? (
-                    <p className="text-zinc-500 text-sm text-center py-4 bg-[#0d1b2a] rounded-lg">Você ainda não enviou documentos.</p>
-                  ) : (
-                    docsEnviados.filter(d => d.departamento === 'Societário').map(doc => (
-                      <div key={doc.id} className="p-3 bg-[#0d1b2a] rounded-lg border border-zinc-800 flex justify-between items-center gap-3">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <IconFileMini />
-                          <div className="truncate">
-                            <p className="text-sm font-bold text-zinc-200 truncate">{doc.nome_documento}</p>
-                            <p className="text-[10px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')} • {doc.status}</p>
+            {/* RENDERIZAÇÃO DOS DOCUMENTOS (Agrupados se houver > 1 processo) */}
+            {processos.length <= 1 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Lado 1: Você Enviou */}
+                <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl">
+                  <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Você Enviou</h3>
+                  <div className="space-y-3">
+                    {docsEnviados.filter(d => d.departamento === 'Societário').length === 0 ? (
+                      <p className="text-zinc-500 text-sm text-center py-4 bg-[#0d1b2a] rounded-lg">Você ainda não enviou documentos.</p>
+                    ) : (
+                      docsEnviados.filter(d => d.departamento === 'Societário').map(doc => (
+                        <div key={doc.id} className="p-3 bg-[#0d1b2a] rounded-lg border border-zinc-800 flex justify-between items-center gap-3">
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <IconFileMini />
+                            <div className="truncate">
+                              <p className="text-sm font-bold text-zinc-200 truncate">{doc.nome_documento}</p>
+                              <p className="text-[10px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')} • {doc.status}</p>
+                            </div>
                           </div>
+                          <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded transition font-bold">Baixar</button>
                         </div>
-                        <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded transition font-bold">Baixar</button>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* DOCUMENTOS DISPONIBILIZADOS PELA EQUIPA */}
-              <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl">
-                <h3 className="text-sm font-bold text-purple-400 mb-4 uppercase tracking-wider">A Equipa Disponibilizou</h3>
-                <div className="space-y-3">
-                  {docsRecebidos.length === 0 ? (
-                    <p className="text-zinc-500 text-sm text-center py-4 bg-[#0d1b2a] rounded-lg">Nenhum documento liberado pela equipe ainda.</p>
-                  ) : (
-                    docsRecebidos.map(doc => (
-                      <div key={doc.id} className="p-3 bg-purple-500/5 rounded-lg border border-purple-500/20 flex justify-between items-center gap-3 hover:border-purple-500/40 transition">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <IconFileMini />
-                          <div className="truncate">
-                            <p className="text-sm font-bold text-zinc-200 truncate">{doc.nome_original}</p>
-                            <p className="text-[10px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
+                {/* Lado 2: Equipe Disponibilizou */}
+                <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider">A Equipa Disponibilizou</h3>
+                    {isInterno && (
+                      <label className="text-[10px] bg-purple-500 hover:bg-purple-400 text-white px-3 py-1.5 rounded transition font-bold cursor-pointer shadow-sm">
+                        + Publicar Doc
+                        <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleUploadAdminDoc(e, processos[0]?.id || null)} disabled={subindoArquivo} />
+                      </label>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {docsRecebidos.length === 0 ? (
+                      <p className="text-zinc-500 text-sm text-center py-4 bg-[#0d1b2a] rounded-lg">Nenhum documento liberado pela equipe ainda.</p>
+                    ) : (
+                      docsRecebidos.map(doc => (
+                        <div key={doc.id} className="p-3 bg-purple-500/5 rounded-lg border border-purple-500/20 flex justify-between items-center gap-3 hover:border-purple-500/40 transition">
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <IconFileMini />
+                            <div className="truncate">
+                              <p className="text-sm font-bold text-zinc-200 truncate">{doc.nome_original}</p>
+                              <p className="text-[10px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
+                            </div>
                           </div>
+                          <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] flex-shrink-0 bg-purple-500 text-white hover:bg-purple-400 px-3 py-1.5 rounded transition font-bold shadow-sm">Baixar</button>
                         </div>
-                        <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] flex-shrink-0 bg-purple-500 text-white hover:bg-purple-400 px-3 py-1.5 rounded transition font-bold shadow-sm">Baixar</button>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              // SE TIVER MAIS DE 1 PROCESSO, AGRUPA EM BLOCOS!
+              <div className="space-y-8">
+                {processos.map(proc => {
+                  const enviadosDeste = docsEnviados.filter(d => d.departamento === 'Societário' && d.processo_id === proc.id);
+                  const recebidosDeste = docsRecebidos.filter(d => d.processo_id === proc.id);
+                  
+                  return (
+                    <div key={proc.id} className="bg-[#1b263b] p-6 rounded-xl border border-purple-500/20 shadow-lg">
+                      <h3 className="text-lg font-bold text-[#d4af37] mb-5 border-b border-zinc-800 pb-3 flex items-center gap-2">
+                         <span className="w-2 h-2 rounded-full bg-purple-500"></span> {proc.titulo}
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Lado 1: Enviado pelo cliente */}
+                        <div>
+                          <p className="text-[11px] font-bold text-white mb-3 uppercase tracking-wider">Você Enviou</p>
+                          <div className="space-y-2">
+                            {enviadosDeste.length === 0 ? <p className="text-zinc-500 text-xs italic">Nenhum documento.</p> : enviadosDeste.map(doc => (
+                              <div key={doc.id} className="p-2.5 bg-[#0d1b2a] rounded-lg border border-zinc-800 flex justify-between items-center gap-2">
+                                <div className="truncate flex-1">
+                                  <p className="text-xs font-bold text-zinc-200 truncate">{doc.nome_documento}</p>
+                                  <p className="text-[9px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
+                                </div>
+                                <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] bg-zinc-800 text-white px-2 py-1 rounded font-bold">Baixar</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Lado 2: Enviado pela Equipe (Admin) */}
+                        <div className="w-full overflow-hidden">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2 w-full">
+                            <p className="text-[11px] font-bold text-purple-400 uppercase tracking-wider">A Equipa Disponibilizou</p>
+                            {isInterno && (
+                              <label className="text-[9px] bg-purple-500 hover:bg-purple-400 text-white px-3 py-1.5 rounded transition font-bold cursor-pointer whitespace-nowrap shadow-sm">
+                                + Publicar Doc
+                                <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleUploadAdminDoc(e, proc.id)} disabled={subindoArquivo} />
+                              </label>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {recebidosDeste.length === 0 ? <p className="text-zinc-500 text-xs italic">Nenhum documento.</p> : recebidosDeste.map(doc => (
+                              <div key={doc.id} className="p-2.5 bg-purple-500/5 rounded-lg border border-purple-500/20 flex justify-between items-center gap-2">
+                                <div className="truncate flex-1">
+                                  <p className="text-xs font-bold text-zinc-200 truncate">{doc.nome_original}</p>
+                                  <p className="text-[9px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
+                                </div>
+                                <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] bg-purple-500 text-white px-2 py-1 rounded font-bold">Baixar</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
