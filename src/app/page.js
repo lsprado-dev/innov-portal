@@ -1336,7 +1336,7 @@ export default function AdminPage() {
               <IconUsers />
               <span className={`text-[11px] px-2 py-0.5 rounded font-bold ${abaAtiva === 'ativos' ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[#0d1b2a] text-zinc-400'}`}>{clientes.length}</span>
             </div>
-            <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Clientes Ativos</h3></div>
+            <div><h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Clientes</h3></div>
           </button>
 
           <button onClick={() => { setAbaAtiva('pendentes'); rolarPara('conteudo-admin'); }} className={`p-4 rounded-xl border transition-all text-left flex flex-col justify-between h-28 shadow-xl ${abaAtiva === 'pendentes' ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800/80 hover:border-zinc-700'}`}>
