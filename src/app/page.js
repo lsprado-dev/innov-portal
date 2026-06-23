@@ -803,7 +803,7 @@ export default function AdminPage() {
       nome_contato: formManual.nome_contato,
       email: formManual.email,
       celular: formManual.celular,
-      regime_tributario: formManual.regime_tributario,
+      regime_tributario: isEspecial ? 'Pessoa Física' : formManual.regime_tributario,
       tipo_conta: isEspecial ? 'especiais' : 'mensalista',
       senha: encriptarSenha(docNumeros.substring(0, 6)),
       senha_alterada: false
@@ -2648,21 +2648,23 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className={`grid grid-cols-1 ${tipoAdicionar === 'mensalista' ? 'sm:grid-cols-2' : ''} gap-3`}>
                     <div>
                       <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Telefone / Celular</label>
                       <input type="text" value={formManual.celular} onChange={e => setFormManual({...formManual, celular: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
                     </div>
-                    <div>
-                      <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Regime Tributário</label>
-                      <select value={formManual.regime_tributario} onChange={e => setFormManual({...formManual, regime_tributario: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none cursor-pointer">
-                        <option value="Simples Nacional">Simples Nacional</option>
-                        <option value="Lucro Presumido">Lucro Presumido</option>
-                        <option value="Lucro Real">Lucro Real</option>
-                        <option value="MEI">MEI</option>
-                        <option value="Pessoa Física">Pessoa Física</option>
-                      </select>
-                    </div>
+                    {tipoAdicionar === 'mensalista' && (
+                      <div>
+                        <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Regime Tributário</label>
+                        <select value={formManual.regime_tributario} onChange={e => setFormManual({...formManual, regime_tributario: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none cursor-pointer">
+                          <option value="Simples Nacional">Simples Nacional</option>
+                          <option value="Lucro Presumido">Lucro Presumido</option>
+                          <option value="Lucro Real">Lucro Real</option>
+                          <option value="MEI">MEI</option>
+                          <option value="Pessoa Física">Pessoa Física</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 flex justify-end gap-2 border-t border-zinc-800">
