@@ -1084,11 +1084,10 @@ export default function AdminPage() {
 
   const clientesFiltrados = clientes.filter(c => {
     const termo = buscaCliente.toLowerCase();
+    // Agora ( || '') para impedir que o Javascript quebre se o campo estiver vazio!
     return (
       (c.nome_empresa?.toLowerCase() || '').includes(termo) || 
-      (c.nome_contato?.toLowerCase() || '').includes(termo) || 
       (c.cnpj || '').includes(termo) || 
-      (c.cpf || '').includes(termo) || 
       (c.email?.toLowerCase() || '').includes(termo) ||
       (c.regime_tributario?.toLowerCase() || '').includes(termo)
     );
@@ -1356,17 +1355,16 @@ export default function AdminPage() {
                 clientesFiltrados.map(cli => (
                   <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-center gap-4 hover:bg-zinc-800/20 transition">
                     <div className="flex-1 w-full">
-                      <h3 className="font-bold text-white text-sm">{cli.nome_empresa || cli.nome_contato}</h3>
-                      <p className="text-xs text-zinc-400">{cli.cnpj ? `CNPJ: ${cli.cnpj}` : `CPF: ${cli.cpf || 'Não informado'}`} | Contato: {cli.nome_contato}</p>
+                      <h3 className="font-bold text-white text-sm">{cli.nome_empresa}</h3>
+                      <p className="text-xs text-zinc-400">CNPJ: {cli.cnpj} | Contato: {cli.nome_contato}</p>
                     </div>
                     <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-4 min-w-[200px] bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
                       <span className="text-xs font-bold text-zinc-500 uppercase">Senha Atual:</span>
                       <div className="relative flex items-center">
                         <span 
                           onClick={() => {
-                            // Pega o documento que estiver disponível
-                            const documento = cli.cnpj || cli.cpf || '';
-                            const senhaBruta = cli.senha || (documento ? documento.replace(/\D/g, '').substring(0, 6) : '');
+                            // Descriptografa antes de mandar para a área de transferência
+                            const senhaBruta = cli.senha || (cli.cnpj ? cli.cnpj.replace(/\D/g, '').substring(0, 6) : '');
                             const senhaCopiada = decriptarSenha(senhaBruta);
                             if (senhaCopiada && senhaCopiada !== 'Não Definida') {
                               navigator.clipboard.writeText(senhaCopiada);
@@ -1377,8 +1375,8 @@ export default function AdminPage() {
                           title="Clique para copiar"
                           className={`cursor-pointer hover:scale-105 active:scale-95 font-mono font-bold tracking-widest text-sm px-2 py-1 rounded transition-all shadow-sm ${cli.senha_alterada ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30' : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'}`}
                         >
-                          {/* Exibe decriptada na tela do Admin usando o documento que estiver disponível */}
-                          {decriptarSenha(cli.senha || ((cli.cnpj || cli.cpf) ? (cli.cnpj || cli.cpf).replace(/\D/g, '').substring(0, 6) : 'Não Definida'))}
+                          {/* Exibe decriptada na tela do Admin */}
+                          {decriptarSenha(cli.senha || (cli.cnpj ? cli.cnpj.replace(/\D/g, '').substring(0, 6) : 'Não Definida'))}
                         </span>
                         
                         {/* BALÃO FLUTUANTE DE SUCESSO */}
@@ -1510,11 +1508,11 @@ export default function AdminPage() {
             <div className="bg-[#1b263b] p-4 rounded-xl border border-zinc-800 shadow-lg flex flex-col gap-4">
               
               {/* AS NOVAS SUB-ABAS (MENSALISTAS VS ESPECIAIS) */}
-              <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-800 w-full sm:w-max overflow-x-auto hide-scrollbar">
-                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+              <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-800 w-full sm:w-max">
+                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-6 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}>
                   Mensalistas (Ativos)
                 </button>
-                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-6 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}>
                   Processos Societários
                 </button>
               </div>
@@ -1590,10 +1588,10 @@ export default function AdminPage() {
                           </p>
                         )}
                       </div>
-                      <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-2 flex-wrap sm:flex-nowrap">
-                        <Link href={`/cliente/${cli.id}`} className={`flex-1 min-w-[100px] border text-center py-2.5 sm:py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${isEspecial ? 'border-purple-500/50 text-purple-400 hover:bg-purple-500 hover:text-white' : 'border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a]'}`}>Perfil</Link>
-                        <button type="button" onClick={() => { setModalEditarCliente({ aberto: true, cliente: cli }); setFormEditar({ nome_empresa: cli.nome_empresa || '', nome_contato: cli.nome_contato || '', email: cli.email || '', celular: cli.celular || '', regime_tributario: cli.regime_tributario || 'Simples Nacional' }); }} className="flex-1 sm:flex-none min-w-[80px] px-3 py-2.5 sm:py-2 bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-300 rounded-lg text-xs font-bold transition">Editar</button>
-                        <button onClick={() => deletarCliente(cli.id)} className="flex-1 sm:flex-none min-w-[80px] px-3 py-2.5 sm:py-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs transition font-bold">Excluir</button>
+                      <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-2">
+                        <Link href={`/cliente/${cli.id}`} className={`flex-1 border text-center py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm ${isEspecial ? 'border-purple-500/50 text-purple-400 hover:bg-purple-500 hover:text-white' : 'border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a]'}`}>Perfil</Link>
+                        <button type="button" onClick={() => { setModalEditarCliente({ aberto: true, cliente: cli }); setFormEditar({ nome_empresa: cli.nome_empresa || '', nome_contato: cli.nome_contato || '', email: cli.email || '', celular: cli.celular || '', regime_tributario: cli.regime_tributario || 'Simples Nacional' }); }} className="px-3 bg-zinc-800 border border-zinc-700 hover:border-white text-zinc-300 rounded-lg text-xs font-bold transition">Editar</button>
+                        <button onClick={() => deletarCliente(cli.id)} className="px-3 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs transition font-bold">Excluir</button>
                       </div>
                     </div>
                   );
