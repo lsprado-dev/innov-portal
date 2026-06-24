@@ -511,18 +511,21 @@ export default function EspecialView({ params }) {
                           {/* TIMELINE VERTICAL DESTE PROCESSO (Oculta se minimizado) */}
                           {isExpanded && (
                             <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                              {/* Linha vertical 100% centralizada */}
-                              <div className="absolute top-2 bottom-2 left-[15px] w-[2px] bg-zinc-700"></div>
+                              {/* Linha vertical exata (posicionada matematicamente para cortar o centro exato da bolinha) */}
+                              <div className="absolute top-[20px] bottom-[20px] left-[15px] w-[2px] bg-zinc-700"></div>
                               
                               {PASSOS_SOCIETARIO.map((passo) => {
                                 let isCompleted = proc.passo > passo.id;
                                 let isCurrent = proc.passo === passo.id;
                                 const isFuture = proc.passo < passo.id;
 
-                                // MÁGICA: Se for o Passo 8 e os honorários já estiverem pagos, a bolinha fica Verde!
-                                if (passo.id === 8 && proc.passo === 8 && proc.honorario_pago) {
-                                  isCompleted = true;
-                                  isCurrent = false;
+                                // MÁGICA: Passo 8 verde se pago ou se o cliente/admin enviar o comprovante!
+                                if (passo.id === 8 && proc.passo === 8) {
+                                  const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                                  if (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]) {
+                                    isCompleted = true;
+                                    isCurrent = false;
+                                  }
                                 }
 
                                 let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
@@ -882,7 +885,32 @@ export default function EspecialView({ params }) {
                                 R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}
                               </p>
                               {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
-                              {finalizado && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full mt-2 font-bold inline-block animate-pulse">Liberado para Pagamento!</span>}
+                              
+                              {finalizado && isInterno && (
+                                <div className="mt-4 border-t border-zinc-700/50 pt-4 flex flex-col items-center gap-3 w-full">
+                                  {clientEnviouComprovante ? (
+                                    <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
+                                      O Cliente enviou o comprovante na plataforma!
+                                    </div>
+                                  ) : (
+                                    <div className="bg-orange-500/10 text-orange-400 border border-orange-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
+                                      Aguardando cliente anexar comprovante (ou dê baixa manual).
+                                    </div>
+                                  )}
+                                  
+                                  <button 
+                                    type="button" 
+                                    onClick={() => toggleHonorarioPago(proc.id, proc.honorario_pago)} 
+                                    className={`w-full py-2.5 rounded-lg text-[11px] font-extrabold uppercase tracking-wider transition shadow-sm ${
+                                      proc.honorario_pago 
+                                      ? 'bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20' 
+                                      : 'bg-emerald-500 text-[#0d1b2a] hover:bg-emerald-400'
+                                    }`}
+                                  >
+                                    {proc.honorario_pago ? 'Reverter Baixa' : 'Dar Baixa Manual (Recebido via Whats)'}
+                                  </button>
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
@@ -945,8 +973,8 @@ export default function EspecialView({ params }) {
       {/* MODAIS ADMIN */}
       {isInterno && modalProcesso.aberto && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className={`bg-[#1b263b] border border-purple-500/50 rounded-xl w-full ${modalProcesso.tipo === 'editar' ? 'max-w-4xl' : 'max-w-md'} flex flex-col shadow-2xl`}>
-            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+          <div className={`bg-[#1b263b] border border-purple-500/50 rounded-xl w-full ${modalProcesso.tipo === 'editar' ? 'max-w-5xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto hide-scrollbar flex flex-col shadow-2xl`}>
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl sticky top-0 z-10">
               <h3 className="text-lg font-bold text-purple-400">{modalProcesso.tipo === 'novo' ? 'Novo Processo Societário' : 'Gerenciar Processo'}</h3>
               <button onClick={() => setModalProcesso({ aberto: false, tipo: 'novo', processo: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
@@ -1077,8 +1105,8 @@ export default function EspecialView({ params }) {
 
       {isInterno && modalDocs && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl">
-            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto hide-scrollbar flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl sticky top-0 z-10">
               <h3 className="text-lg font-bold text-purple-400">Documentos Solicitados</h3>
               <button onClick={() => setModalDocs(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
