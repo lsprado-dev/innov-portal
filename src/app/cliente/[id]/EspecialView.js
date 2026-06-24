@@ -261,10 +261,11 @@ export default function EspecialView({ params }) {
       status: 'pendente'
     };
     
-    // Se for Societário, amarra ao processo (se houver 1 ou se o cliente selecionou no dropdown)
-    if (departamentoDestino === 'Societário') {
-       if (processos.length === 1) payloadEnvio.processo_id = processos[0].id;
-       else if (processoSelecionadoDoc) payloadEnvio.processo_id = processoSelecionadoDoc;
+    // Amarra o documento ou comprovante ao processo correto automaticamente
+    if (processos.length === 1) {
+      payloadEnvio.processo_id = processos[0].id;
+    } else if (processoSelecionadoDoc) {
+      payloadEnvio.processo_id = processoSelecionadoDoc;
     }
 
     const { error: dbError } = await supabase.from('envios_cliente').insert([payloadEnvio]);
@@ -708,6 +709,17 @@ export default function EspecialView({ params }) {
             <form onSubmit={(e) => handleEnviarDocumento(e, 'Financeiro')} className="bg-[#0d1b2a] p-5 sm:p-6 rounded-xl border border-zinc-800 shadow-inner mb-8 max-w-2xl overflow-hidden w-full">
               <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Enviar Comprovante de Pagamento</h3>
               <div className="space-y-4 w-full">
+                
+                {processos.length > 1 && (
+                  <div className="w-full mb-2">
+                    <label className="block text-xs font-bold text-[#d4af37] uppercase mb-1">Referente a qual processo?</label>
+                    <select required value={processoSelecionadoDoc} onChange={e => setProcessoSelecionadoDoc(e.target.value)} className="w-full max-w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-[#d4af37] cursor-pointer truncate">
+                      <option value="">Selecione um processo...</option>
+                      {processos.map(p => <option key={p.id} value={p.id}>{p.titulo}</option>)}
+                    </select>
+                  </div>
+                )}
+
                 <div className="w-full">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Do que se trata este comprovante?</label>
                   <input type="text" required placeholder="Ex: Taxa DARE..." value={descricaoDoc} onChange={e => setDescricaoDoc(e.target.value)} className="w-full max-w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
