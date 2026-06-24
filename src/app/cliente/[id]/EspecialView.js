@@ -738,58 +738,66 @@ export default function EspecialView({ params }) {
       {/* MODAIS ADMIN */}
       {isInterno && modalProcesso.aberto && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl">
+          <div className={`bg-[#1b263b] border border-purple-500/50 rounded-xl w-full ${modalProcesso.tipo === 'editar' ? 'max-w-4xl' : 'max-w-md'} flex flex-col shadow-2xl`}>
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
-              <h3 className="text-lg font-bold text-purple-400">{modalProcesso.tipo === 'novo' ? 'Novo Processo Societário' : 'Avançar Passo'}</h3>
+              <h3 className="text-lg font-bold text-purple-400">{modalProcesso.tipo === 'novo' ? 'Novo Processo Societário' : 'Gerenciar Processo'}</h3>
               <button onClick={() => setModalProcesso({ aberto: false, tipo: 'novo', processo: null })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
-            <form onSubmit={salvarProcesso} className="p-5 space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-purple-400 uppercase mb-2">Título do Processo</label>
-                <input 
-                  type="text" 
-                  required 
-                  placeholder="Ex: Abertura de Filial SP..." 
-                  value={formProcesso.titulo} 
-                  onChange={e => setFormProcesso({...formProcesso, titulo: e.target.value})} 
-                  className="w-full bg-[#0d1b2a] border border-purple-500/50 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-400"
-                />
+            <form onSubmit={salvarProcesso} className="p-5">
+              <div className={`grid grid-cols-1 ${modalProcesso.tipo === 'editar' ? 'md:grid-cols-2' : ''} gap-5`}>
+                
+                {/* LADO ESQUERDO: Dados e Financeiro */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-purple-400 uppercase mb-2">Título do Processo</label>
+                    <input 
+                      type="text" 
+                      required 
+                      placeholder="Ex: Abertura de Filial SP..." 
+                      value={formProcesso.titulo} 
+                      onChange={e => setFormProcesso({...formProcesso, titulo: e.target.value})} 
+                      className="w-full bg-[#0d1b2a] border border-purple-500/50 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-400"
+                    />
+                  </div>
+
+                  {/* CAMPOS FINANCEIROS */}
+                  <div className="bg-[#0d1b2a] p-4 rounded-lg border border-[#d4af37]/30 space-y-4 shadow-inner">
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Honorários Totais (R$)</label>
+                      <p className="text-[9px] text-zinc-500 mb-2">Ficará oculto para o cliente até o Passo 8 ser atingido.</p>
+                      <input type="number" step="0.01" placeholder="Ex: 1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Taxas a Pagar</label>
+                        <textarea rows="3" placeholder="- DARE: R$ 150,00" value={formProcesso.taxas_pendentes} onChange={e => setFormProcesso({...formProcesso, taxas_pendentes: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37] resize-none"></textarea>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-400 uppercase mb-1">Taxas Já Pagas</label>
+                        <textarea rows="3" placeholder="- Viabilidade OK" value={formProcesso.taxas_pagas} onChange={e => setFormProcesso({...formProcesso, taxas_pagas: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LADO DIREITO: Fases do Processo (Só no Editar) */}
+                {modalProcesso.tipo === 'editar' && (
+                  <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80 flex flex-col h-full">
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-3">Selecione a fase atual:</label>
+                    <div className="space-y-2 overflow-y-auto hide-scrollbar flex-1 pr-1" style={{ maxHeight: '380px' }}>
+                      {PASSOS_SOCIETARIO.map(passo => (
+                        <label key={passo.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${formProcesso.passo === passo.id ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[#1b263b] border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
+                          <input type="radio" name="passo_proc" className="accent-purple-500 w-4 h-4 cursor-pointer" checked={formProcesso.passo === passo.id} onChange={() => setFormProcesso({...formProcesso, passo: passo.id})} />
+                          <span className="text-sm font-bold">Passo {passo.id}: {passo.nome}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               </div>
 
-              {/* NOVOS CAMPOS FINANCEIROS */}
-              <div className="bg-[#0d1b2a] p-4 rounded-lg border border-[#d4af37]/30 space-y-4 shadow-inner">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Honorários Totais (R$)</label>
-                  <p className="text-[9px] text-zinc-500 mb-2">Ficará oculto para o cliente até o Passo 8 ser atingido.</p>
-                  <input type="number" step="0.01" placeholder="Ex: 1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Taxas a Pagar</label>
-                    <textarea rows="3" placeholder="- DARE: R$ 150,00" value={formProcesso.taxas_pendentes} onChange={e => setFormProcesso({...formProcesso, taxas_pendentes: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37] resize-none"></textarea>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-400 uppercase mb-1">Taxas Já Pagas</label>
-                    <textarea rows="3" placeholder="- Viabilidade OK" value={formProcesso.taxas_pagas} onChange={e => setFormProcesso({...formProcesso, taxas_pagas: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"></textarea>
-                  </div>
-                </div>
-              </div>
-              
-              {modalProcesso.tipo === 'editar' && (
-                <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-3">Selecione a fase atual:</label>
-                  <div className="space-y-2 max-h-[30vh] overflow-y-auto hide-scrollbar">
-                    {PASSOS_SOCIETARIO.map(passo => (
-                      <label key={passo.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${formProcesso.passo === passo.id ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[#1b263b] border-zinc-700 text-zinc-300'}`}>
-                        <input type="radio" name="passo_proc" className="accent-purple-500 w-4 h-4 cursor-pointer" checked={formProcesso.passo === passo.id} onChange={() => setFormProcesso({...formProcesso, passo: passo.id})} />
-                        <span className="text-sm font-bold">Passo {passo.id}: {passo.nome}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
+              <div className="pt-5 mt-5 flex justify-end gap-3 border-t border-zinc-800">
                 <button type="button" onClick={() => setModalProcesso({ aberto: false, tipo: 'novo', processo: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-[0_0_15px_rgba(168,85,247,0.4)] disabled:opacity-50">
                   {subindoArquivo ? 'Salvando...' : 'Confirmar'}
