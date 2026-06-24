@@ -975,12 +975,16 @@ export default function AdminPage() {
 
     } else {
       // 2. É uma Conta Nova ou um "Novo Vínculo" (Cria a conta do zero)
-      const senhaGerada = solicitacao.cnpj.replace(/\D/g, '').substring(0, 6);
+      const documentoSeguro = solicitacao.cnpj || solicitacao.cpf || '';
+      const senhaGerada = documentoSeguro.replace(/\D/g, '').substring(0, 6);
+      
       const { data: novoCliente, error } = await supabase.from('clientes').insert([{ 
         nome_empresa: solicitacao.nome_empresa, 
         cnpj: solicitacao.cnpj, 
+        cpf: solicitacao.cpf, // <-- MÁGICA 1: Agora salva o CPF corretamente
+        tipo_conta: solicitacao.tipo_conta || 'mensalista', // <-- MÁGICA 2: Define se é Mensalista ou Societário
         nome_contato: solicitacao.nome_contato, 
-        email: solicitacao.email, 
+        email: solicitacao.email ? solicitacao.email.trim().toLowerCase() : '', // <-- MÁGICA 3: Limpa espaços e letras maiúsculas para o login não falhar
         celular: solicitacao.celular, 
         regime_tributario: solicitacao.regime_tributario, 
         senha: encriptarSenha(senhaGerada), 
@@ -1583,12 +1587,14 @@ export default function AdminPage() {
             <div className="bg-[#1b263b] p-4 rounded-xl border border-zinc-800 shadow-lg flex flex-col gap-4">
               
               {/* AS NOVAS SUB-ABAS (MENSALISTAS VS ESPECIAIS) */}
-              <div className="flex bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full sm:w-max overflow-x-auto hide-scrollbar gap-1">
-                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
-                  Mensalistas (Ativos)
+              <div className="grid grid-cols-2 sm:flex bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full sm:w-max gap-1">
+                <button onClick={() => setSubAbaAtivos('mensalistas')} className={`flex items-center justify-center gap-2 px-2 sm:px-6 py-2.5 sm:py-2 rounded-md text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'mensalistas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                  <span className="hidden sm:inline">Mensalistas (Ativos)</span>
+                  <span className="sm:hidden">Mensalistas</span>
                 </button>
-                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
-                  Processos Societários
+                <button onClick={() => setSubAbaAtivos('especiais')} className={`flex items-center justify-center gap-2 px-2 sm:px-6 py-2.5 sm:py-2 rounded-md text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap ${subAbaAtivos === 'especiais' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                  <span className="hidden sm:inline">Processos Societários</span>
+                  <span className="sm:hidden">Societários</span>
                 </button>
               </div>
 
@@ -2648,13 +2654,13 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  <div className={`grid grid-cols-1 ${tipoAdicionar === 'mensalista' ? 'sm:grid-cols-2' : ''} gap-3`}>
-                    <div>
+                  <div className={`grid gap-3 ${tipoAdicionar === 'mensalista' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className="w-full">
                       <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Telefone / Celular</label>
                       <input type="text" value={formManual.celular} onChange={e => setFormManual({...formManual, celular: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#d4af37] outline-none" />
                     </div>
                     {tipoAdicionar === 'mensalista' && (
-                      <div>
+                      <div className="w-full">
                         <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Regime Tributário</label>
                         <select value={formManual.regime_tributario} onChange={e => setFormManual({...formManual, regime_tributario: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none cursor-pointer">
                           <option value="Simples Nacional">Simples Nacional</option>

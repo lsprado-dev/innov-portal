@@ -220,18 +220,6 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(false);
   }
 
-  async function salvarPagamentosPendentes(e) {
-    e.preventDefault();
-    setSubindoArquivo(true);
-    const { error } = await supabase.from('clientes').update({ pagamentos_pendentes: textoPagamentos }).eq('id', id);
-    if (!error) {
-      mostrarToast('Lista de pagamentos atualizada!', 'sucesso');
-      await carregarDados();
-      setModalPagamentos(false);
-    } else mostrarToast('Erro: ' + error.message, 'erro');
-    setSubindoArquivo(false);
-  }
-
   // ==========================================
   // UPLOADS DE CLIENTES E ADMINS
   // ==========================================
@@ -670,7 +658,7 @@ export default function EspecialView({ params }) {
                       <IconFinanceiro /> {proc.titulo} {finalizado && '✅'}
                     </h3>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className={`grid grid-cols-1 gap-6 ${(finalizado || isInterno) ? 'md:grid-cols-2' : ''}`}>
                       <div className="space-y-4">
                         <div className="bg-[#1b263b] p-4 rounded-lg border border-zinc-700/50">
                           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Taxas Governamentais (Pendentes)</p>
@@ -682,24 +670,16 @@ export default function EspecialView({ params }) {
                         </div>
                       </div>
 
-                      <div className="flex flex-col justify-center bg-[#1b263b] p-6 rounded-lg border border-zinc-700/50 text-center">
-                        <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Honorários do Escritório</p>
-                        
-                        {(finalizado || isInterno) ? (
-                          <>
-                            <p className={`text-3xl font-black ${finalizado ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                              R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}
-                            </p>
-                            {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
-                            {finalizado && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full mt-2 font-bold inline-block animate-pulse">Liberado para Pagamento!</span>}
-                          </>
-                        ) : (
-                          <div className="py-4">
-                            <span className="text-xl">🔒</span>
-                            <p className="text-xs text-zinc-500 mt-2">O valor final será exibido aqui assim que o processo for concluído (Passo 8).</p>
-                          </div>
-                        )}
-                      </div>
+                      {(finalizado || isInterno) && (
+                        <div className="flex flex-col justify-center bg-[#1b263b] p-6 rounded-lg border border-zinc-700/50 text-center">
+                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Honorários do Escritório</p>
+                          <p className={`text-3xl font-black ${finalizado ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                            R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}
+                          </p>
+                          {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
+                          {finalizado && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full mt-2 font-bold inline-block animate-pulse">Liberado para Pagamento!</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -839,33 +819,6 @@ export default function EspecialView({ params }) {
               <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
                 <button type="button" onClick={() => setModalDocs(false)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-[0_0_15px_rgba(168,85,247,0.4)] disabled:opacity-50">
-                  {subindoArquivo ? 'Salvando...' : 'Salvar Lista'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isInterno && modalPagamentos && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl">
-            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
-              <h3 className="text-lg font-bold text-[#d4af37]">Pagamentos Pendentes</h3>
-              <button onClick={() => setModalPagamentos(false)} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
-            </div>
-            <form onSubmit={salvarPagamentosPendentes} className="p-5 space-y-4">
-              <p className="text-xs text-zinc-400">Liste abaixo as taxas ou honorários que o cliente precisa pagar. Ao deixar em branco, o aviso desaparecerá para o cliente.</p>
-              <textarea 
-                rows="6" 
-                placeholder="- DARE SP (R$ 150,00)&#10;- Honorários Parcela 1..." 
-                value={textoPagamentos} 
-                onChange={e => setTextoPagamentos(e.target.value)} 
-                className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
-              ></textarea>
-              <div className="pt-2 flex justify-end gap-3 border-t border-zinc-800">
-                <button type="button" onClick={() => setModalPagamentos(false)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
-                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
                   {subindoArquivo ? 'Salvando...' : 'Salvar Lista'}
                 </button>
               </div>
