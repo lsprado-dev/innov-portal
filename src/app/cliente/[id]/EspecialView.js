@@ -244,7 +244,8 @@ export default function EspecialView({ params }) {
       passo: formProcesso.passo,
       valor_honorarios: formProcesso.valor_honorarios ? parseFloat(formProcesso.valor_honorarios) : 0,
       taxas_pendentes: JSON.stringify(listaTaxas),
-      taxas_pagas: null
+      taxas_pagas: null,
+      honorario_pago: formProcesso.honorario_pago || false
     };
 
     if (modalProcesso.tipo === 'novo') {
@@ -478,7 +479,8 @@ export default function EspecialView({ params }) {
                                     setFormProcesso({ 
                                       titulo: proc.titulo, 
                                       passo: proc.passo, 
-                                      valor_honorarios: proc.valor_honorarios || '' 
+                                      valor_honorarios: proc.valor_honorarios || '',
+                                      honorario_pago: proc.honorario_pago || false
                                     }); 
                                     setModalProcesso({ aberto: true, tipo: 'editar', processo: proc }); 
                                   }} className="flex-1 sm:flex-none text-xs bg-purple-500/10 text-purple-300 border border-purple-500/30 px-4 py-2 rounded font-bold hover:bg-purple-500 hover:text-white transition">Gerenciar & Avançar</button>
@@ -948,6 +950,15 @@ export default function EspecialView({ params }) {
                       <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Honorários Totais (R$)</label>
                       <p className="text-[9px] text-zinc-500 mb-2">Ficará oculto para o cliente até o Passo 8 ser atingido.</p>
                       <input type="number" step="0.01" placeholder="Ex: 1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                      
+                      {/* NOVO: CHECKBOX DE HONORÁRIOS PAGOS (APENAS ADMIN) */}
+                      <div className="mt-3 flex items-center justify-between bg-emerald-500/5 p-3 rounded-lg border border-emerald-500/20">
+                         <span className="text-[10px] font-bold text-emerald-400 uppercase">Honorários já foram pagos?</span>
+                         <label className="flex items-center gap-2 cursor-pointer">
+                           <span className={`text-[10px] font-bold ${formProcesso.honorario_pago ? 'text-emerald-400' : 'text-zinc-500'}`}>{formProcesso.honorario_pago ? 'Sim, recebido' : 'Não'}</span>
+                           <input type="checkbox" checked={!!formProcesso.honorario_pago} onChange={e => setFormProcesso({...formProcesso, honorario_pago: e.target.checked})} className="accent-emerald-500 w-4 h-4 cursor-pointer" />
+                         </label>
+                      </div>
                     </div>
                     
                     <div className="space-y-3 border-t border-zinc-800 pt-3">
