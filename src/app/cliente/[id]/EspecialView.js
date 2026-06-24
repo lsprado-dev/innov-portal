@@ -828,14 +828,14 @@ export default function EspecialView({ params }) {
 
                               <div className="flex flex-col items-center gap-3 border-t border-zinc-800 pt-4 mt-2">
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`w-2 h-2 rounded-full ${honorarioPagoManual[proc.id] ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}></span>
-                                  <span className={`text-[11px] font-bold ${honorarioPagoManual[proc.id] ? 'text-emerald-400' : 'text-orange-400'}`}>
-                                    {honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Aguardando Pagamento'}
+                                  <span className={`w-2 h-2 rounded-full ${proc.honorario_pago ? 'bg-emerald-500' : honorarioPagoManual[proc.id] ? 'bg-orange-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                  <span className={`text-[11px] font-bold ${proc.honorario_pago ? 'text-emerald-400' : honorarioPagoManual[proc.id] ? 'text-orange-400' : 'text-red-400'}`}>
+                                    {proc.honorario_pago ? 'Pago & Confirmado' : honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Aguardando Pagamento'}
                                   </span>
                                 </div>
                                 
-                                {!honorarioPagoManual[proc.id] && (
-                                  <label className="block w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2.5 rounded-lg text-[10px] uppercase tracking-wider hover:bg-yellow-500 transition shadow-sm">
+                                {!proc.honorario_pago && !honorarioPagoManual[proc.id] && (
+                                  <label className="block w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2.5 rounded-lg text-[10px] uppercase tracking-wider hover:bg-yellow-500 transition shadow-sm text-center">
                                     {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante PIX'}
                                     <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async (e) => {
                                       const file = e.target.files[0];
