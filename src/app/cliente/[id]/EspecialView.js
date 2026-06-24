@@ -511,10 +511,8 @@ export default function EspecialView({ params }) {
                           {/* TIMELINE VERTICAL DESTE PROCESSO (Oculta se minimizado) */}
                           {isExpanded && (
                             <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                              {/* Linha vertical exata (posicionada matematicamente para cortar o centro exato da bolinha) */}
-                              <div className="absolute top-[20px] bottom-[20px] left-[15px] w-[2px] bg-zinc-700"></div>
                               
-                              {PASSOS_SOCIETARIO.map((passo) => {
+                              {PASSOS_SOCIETARIO.map((passo, index) => {
                                 let isCompleted = proc.passo > passo.id;
                                 let isCurrent = proc.passo === passo.id;
                                 const isFuture = proc.passo < passo.id;
@@ -534,6 +532,12 @@ export default function EspecialView({ params }) {
 
                                 return (
                                   <div key={passo.id} className={`relative pl-12 sm:pl-16 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
+                                    
+                                    {/* Linha de conexão cirúrgica (NÃO renderiza no último passo!) */}
+                                    {index !== PASSOS_SOCIETARIO.length - 1 && (
+                                      <div className={`absolute left-4 -ml-[1px] top-[36px] w-[2px] ${isCompleted ? 'bg-emerald-500/50' : 'bg-zinc-700'} z-0`} style={{ bottom: '-28px' }}></div>
+                                    )}
+
                                     <div className={`absolute left-0 top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
                                       {isCompleted ? '✓' : passo.id}
                                     </div>
