@@ -196,6 +196,36 @@ export default function EspecialView({ params }) {
     }
     setSubindoArquivo(false);
   }
+      if (!error) {
+        mostrarToast('Novo processo iniciado!', 'sucesso');
+        await carregarDados();
+        setModalProcesso({ aberto: false, tipo: 'novo', processo: null });
+      } else mostrarToast('Erro: ' + error.message, 'erro');
+    } else {
+      const { error } = await supabase.from('processos_societarios').update({
+        passo: formProcesso.passo
+      }).eq('id', modalProcesso.processo.id);
+      
+      if (!error) {
+        mostrarToast('Processo avançado!', 'sucesso');
+        
+        // Avisa a Maria
+        const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(formProcesso.passo))?.nome;
+        enviarEmailDemanda({
+           to: 'societario@innovbusiness.com.br',
+           nomeDestinatario: 'Maria (Societário)',
+           nomeRemetente: operador,
+           tituloDemanda: `Avanço de Processo: ${cliente.nome_empresa || cliente.nome_contato}`,
+           descricao: `O processo "${modalProcesso.processo.titulo}" avançou para o PASSO ${formProcesso.passo}: ${passoNome}.`,
+           prazo: 'Acompanhamento Interno'
+        }).catch(()=>{});
+
+        await carregarDados();
+        setModalProcesso({ aberto: false, tipo: 'novo', processo: null });
+      } else mostrarToast('Erro: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
 
   async function deletarProcesso(procId) {
     if(!window.confirm('Tem certeza que deseja apagar este processo?')) return;
