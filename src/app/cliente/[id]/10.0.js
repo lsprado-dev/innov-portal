@@ -824,30 +824,17 @@ export default function EspecialView({ params }) {
                                 <p className="text-2xl font-black text-white">R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}</p>
                               </div>
 
-                              <div className="flex flex-col items-center gap-3 border-t border-zinc-800 pt-4 mt-2">
+                              <div className="flex flex-col items-center gap-2 border-t border-zinc-800 pt-3">
                                 <div className="flex items-center gap-1.5">
                                   <span className={`w-2 h-2 rounded-full ${honorarioPagoManual[proc.id] ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}></span>
                                   <span className={`text-[11px] font-bold ${honorarioPagoManual[proc.id] ? 'text-emerald-400' : 'text-orange-400'}`}>
-                                    {honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Aguardando Pagamento'}
+                                    {honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Pendente'}
                                   </span>
                                 </div>
-                                
-                                {!honorarioPagoManual[proc.id] && (
-                                  <label className="block w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2.5 rounded-lg text-[10px] uppercase tracking-wider hover:bg-yellow-500 transition shadow-sm">
-                                    {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante PIX'}
-                                    <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async (e) => {
-                                      const file = e.target.files[0];
-                                      if(!file) return;
-                                      setSubindoArquivo(true);
-                                      const caminho = `${id}/recebidos_societario/${Date.now()}_Honorario_${file.name.replace(/[^a-zA-Z0-9.\-]/g, '_')}`;
-                                      await supabase.storage.from('documentos').upload(caminho, file);
-                                      await supabase.from('envios_cliente').insert([{ cliente_id: id, processo_id: proc.id, nome_documento: `Comprovante Honorários - ${proc.titulo}`, nome_original: file.name, caminho_storage: caminho, departamento: 'Financeiro', status: 'pendente' }]);
-                                      setHonorarioPagoManual({...honorarioPagoManual, [proc.id]: true});
-                                      mostrarToast('Comprovante de Honorários enviado!', 'sucesso');
-                                      setSubindoArquivo(false);
-                                    }} disabled={subindoArquivo} />
-                                  </label>
-                                )}
+                                <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                                  <input type="checkbox" checked={!!honorarioPagoManual[proc.id]} onChange={e => setHonorarioPagoManual({...honorarioPagoManual, [proc.id]: e.target.checked})} className="w-4 h-4 accent-emerald-500 cursor-pointer" />
+                                  <span className="text-[11px] text-zinc-400 select-none">Marcar como Pago</span>
+                                </label>
                               </div>
                             </div>
                           ) : (
@@ -950,66 +937,33 @@ export default function EspecialView({ params }) {
                       <input type="number" step="0.01" placeholder="Ex: 1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                     </div>
                     
-                    <div className="space-y-3 border-t border-zinc-800 pt-3">
-                      <label className="block text-[10px] font-bold text-zinc-400 uppercase pb-1 border-b border-zinc-800">Nova Taxa Governamental</label>
-                      
+                    <div className="space-y-2 border-t border-zinc-800 pt-3">
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase pb-1 border-b border-zinc-800">Taxas Governamentais (Estruturada)</label>
                       <div>
                         <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Nome da Taxa</label>
-                        <input type="text" placeholder="Ex: DARE JUCESP" value={taxaNome} onChange={e => setTaxaNome(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                        <input type="text" placeholder="Ex: DARE JUCESP" value={taxaNome} onChange={e => setTaxaNome(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
                       </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Valor da Taxa</label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1.5 text-xs text-zinc-500 font-bold">R$</span>
-                            <input type="text" placeholder="150,00" value={taxaValor} onChange={e => setTaxaValor(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded pl-7 pr-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                            <span className="absolute left-2 top-1 text-xs text-zinc-500 font-bold">R$</span>
+                            <input type="text" placeholder="150,00" value={taxaValor} onChange={e => setTaxaValor(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded pl-7 pr-2 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
                           </div>
                         </div>
-                        <div className="flex items-end pb-1">
-                          <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300 font-bold">
-                            <input type="checkbox" checked={isPix} onChange={e => setIsPix(e.target.checked)} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
-                            Pagamento via PIX
-                          </label>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Anexar Guia/Boleto</label>
+                          <input type="file" accept="application/pdf,image/*" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-0.5 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
                         </div>
                       </div>
-
-                      {isPix ? (
-                        <div>
-                          <label className="block text-[9px] text-emerald-400 font-bold uppercase mb-0.5">Chave PIX (Copia e Cola)</label>
-                          <input type="text" placeholder="Cole a chave PIX aqui..." value={chavePix} onChange={e => setChavePix(e.target.value)} className="w-full bg-[#1b263b] border border-emerald-500/50 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500" />
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Anexar Guia/Boleto (PDF ou Imagem)</label>
-                          <input type="file" accept="application/pdf,image/*" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-1 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
-                        </div>
-                      )}
-                      
-                      <button type="button" onClick={handleAdicionarTaxa} disabled={subindoArquivo} className="w-full text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded font-bold uppercase tracking-wider transition border border-zinc-700">
-                        + Adicionar à Lista
-                      </button>
+                      <p className="text-[9px] text-zinc-500 italic mt-2">Para usar texto livre legado, limpe os campos estruturados acima e use este:</p>
+                      <textarea rows="1" placeholder="Texto livre complementar..." value={formProcesso.taxas_pendentes} onChange={e => setFormProcesso({...formProcesso, taxas_pendentes: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37] resize-none"></textarea>
                     </div>
 
-                    {listaTaxas.length > 0 && (
-                      <div className="space-y-2 mt-4 pt-3 border-t border-zinc-800">
-                        <label className="block text-[10px] font-bold text-[#d4af37] uppercase">Taxas do Processo</label>
-                        {listaTaxas.map(taxa => (
-                          <div key={taxa.id} className={`p-2 rounded border flex justify-between items-center ${taxa.status === 'pago' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-zinc-800/50 border-zinc-700'}`}>
-                            <div className="flex-1 min-w-0 pr-2">
-                              <p className={`text-xs font-bold truncate ${taxa.status === 'pago' ? 'text-emerald-400' : 'text-zinc-200'}`}>{taxa.nome}</p>
-                              <p className="text-[10px] text-zinc-400 font-mono">R$ {taxa.valor} {taxa.isPix ? '(PIX)' : '(Boleto)'}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button type="button" onClick={() => toggleStatusTaxa(taxa.id)} className={`text-[10px] px-2 py-1 rounded font-bold transition ${taxa.status === 'pago' ? 'bg-emerald-500 text-black' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}>
-                                {taxa.status === 'pago' ? 'Paga' : 'Pendente'}
-                              </button>
-                              <button type="button" onClick={() => removerTaxa(taxa.id)} className="text-[10px] bg-red-500/20 text-red-500 px-2 py-1 rounded font-bold hover:bg-red-500 hover:text-white transition">X</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div>
+                      <label className="block text-[10px] font-bold text-emerald-400 uppercase mb-1">Taxas Já Pagas</label>
+                      <textarea rows="2" placeholder="- Viabilidade OK" value={formProcesso.taxas_pagas} onChange={e => setFormProcesso({...formProcesso, taxas_pagas: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"></textarea>
+                    </div>
                   </div>
                 </div>
 
