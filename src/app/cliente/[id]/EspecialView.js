@@ -21,7 +21,7 @@ const PASSOS_SOCIETARIO = [
   { id: 5, nome: 'Assinatura de Documentos', desc: 'Aguardando a sua assinatura digital ou física.' },
   { id: 6, nome: 'Registro na Junta Comercial', desc: 'Envio do processo para análise final da Junta Comercial.' },
   { id: 7, nome: 'Protocolar Processo', desc: 'Acompanhamento do protocolo nos órgãos competentes.' },
-  { id: 8, nome: 'Deferido (Concluído)', desc: 'Processo finalizado com sucesso! A sua empresa está pronta.' }
+  { id: 8, nome: 'Deferido (Concluído)', desc: 'Processo finalizado com sucesso!' }
 ];
 
 export default function EspecialView({ params }) {
@@ -48,6 +48,14 @@ export default function EspecialView({ params }) {
   const [descricaoDoc, setDescricaoDoc] = useState('');
   const [arquivoDoc, setArquivoDoc] = useState(null);
   const [processoSelecionadoDoc, setProcessoSelecionadoDoc] = useState(''); // NOVO: Para múltiplos processos
+
+  // Estados para Taxas Governamentais Estruturadas (Admin)
+  const [taxaNome, setTaxaNome] = useState('');
+  const [taxaValor, setTaxaValor] = useState('');
+  const [taxaBoleto, setTaxaBoleto] = useState(null);
+
+  // Estado para controle de pagamento de honorários (Cliente)
+  const [honorarioPagoManual, setHonorarioPagoManual] = useState({});
 
   // FUNÇÃO NOVA: Upload do Admin direto para o Processo (Aba Documentação)
   async function handleUploadAdminDoc(e, procId = null) {
@@ -153,15 +161,33 @@ export default function EspecialView({ params }) {
   // ==========================================
   // FUNÇÕES DO ADMIN (GERENCIAR PROCESSOS)
   // ==========================================
-  async function salvarProcesso(e) {
+ async function salvarProcesso(e) {
     e.preventDefault();
     setSubindoArquivo(true);
+
+    let taxasPendentesFinal = formProcesso.taxas_pendentes;
+
+    // Se a equipe preencheu os novos campos estruturados, gera um JSON robusto
+    if (taxaNome.trim() && taxaValor.trim()) {
+      let caminhoBoleto = null;
+      if (taxaBoleto) {
+        const timestamp = Date.now();
+        const nomeSeguro = taxaBoleto.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
+        caminhoBoleto = `${id}/boletos_taxas/${timestamp}_${nomeSeguro}`;
+        await supabase.storage.from('documentos').upload(caminhoBoleto, taxaBoleto);
+      }
+      taxasPendentesFinal = JSON.stringify({
+        nome: taxaNome.trim(),
+        valor: taxaValor.trim(),
+        boleto: caminhoBoleto
+      });
+    }
 
     const payloadProc = {
       titulo: formProcesso.titulo,
       passo: formProcesso.passo,
       valor_honorarios: formProcesso.valor_honorarios ? parseFloat(formProcesso.valor_honorarios) : 0,
-      taxas_pendentes: formProcesso.taxas_pendentes,
+      taxas_pendentes: taxasPendentesFinal,
       taxas_pagas: formProcesso.taxas_pagas
     };
 
@@ -170,6 +196,7 @@ export default function EspecialView({ params }) {
       const { error } = await supabase.from('processos_societarios').insert([payloadProc]);
       if (!error) {
         mostrarToast('Novo processo iniciado!', 'sucesso');
+        setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null);
         await carregarDados();
         setModalProcesso({ aberto: false, tipo: 'novo', processo: null });
       } else mostrarToast('Erro: ' + error.message, 'erro');
@@ -178,6 +205,7 @@ export default function EspecialView({ params }) {
       
       if (!error) {
         mostrarToast('Processo atualizado!', 'sucesso');
+        setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null);
         
         // Avisa a Maria
         const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(formProcesso.passo))?.nome;
@@ -196,7 +224,6 @@ export default function EspecialView({ params }) {
     }
     setSubindoArquivo(false);
   }
-
   async function deletarProcesso(procId) {
     if(!window.confirm('Tem certeza que deseja apagar este processo?')) return;
     setSubindoArquivo(true);
@@ -662,7 +689,26 @@ export default function EspecialView({ params }) {
                       <div className="space-y-4">
                         <div className="bg-[#1b263b] p-4 rounded-lg border border-zinc-700/50">
                           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Taxas Governamentais (Pendentes)</p>
-                          {proc.taxas_pendentes ? <p className="text-sm text-zinc-200 whitespace-pre-wrap">{proc.taxas_pendentes}</p> : <p className="text-xs text-zinc-600 italic">Tudo limpo.</p>}
+                          {(() => {
+                            if (!proc.taxas_pendentes) return <p className="text-xs text-zinc-600 italic">Tudo limpo.</p>;
+                            try {
+                              const dadosTaxa = JSON.parse(proc.taxas_pendentes);
+                              return (
+                                <div className="space-y-2 mt-1">
+                                  <p className="text-sm font-bold text-white">{dadosTaxa.nome}</p>
+                                  <p className="text-xs text-[#d4af37] font-extrabold">Valor: R$ {dadosTaxa.valor}</p>
+                                  {dadosTaxa.boleto && (
+                                    <div className="flex gap-2 mt-2 pt-2 border-t border-zinc-800">
+                                      <button type="button" onClick={() => { const { data } = supabase.storage.from('documentos').getPublicUrl(dadosTaxa.boleto); window.open(data.publicUrl, '_blank'); }} className="flex-1 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white py-1.5 rounded font-bold transition">Ver Boleto</button>
+                                      <button type="button" onClick={() => baixarDocumento(dadosTaxa.boleto, `Boleto_${dadosTaxa.nome}.pdf`)} className="flex-1 text-[10px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition">Baixar Boleto</button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            } catch (e) {
+                              return <p className="text-sm text-zinc-200 whitespace-pre-wrap">{proc.taxas_pendentes}</p>;
+                            }
+                          })()}
                         </div>
                         <div className="bg-[#1b263b] p-4 rounded-lg border border-emerald-500/20">
                           <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Taxas Já Pagas</p>
@@ -672,12 +718,44 @@ export default function EspecialView({ params }) {
 
                       {(finalizado || isInterno) && (
                         <div className="flex flex-col justify-center bg-[#1b263b] p-6 rounded-lg border border-zinc-700/50 text-center">
-                          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Honorários do Escritório</p>
-                          <p className={`text-3xl font-black ${finalizado ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                            R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}
-                          </p>
-                          {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
-                          {finalizado && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full mt-2 font-bold inline-block animate-pulse">Liberado para Pagamento!</span>}
+                          {finalizado && !isInterno ? (
+                            <div className="space-y-4 text-center">
+                              <h4 className="text-emerald-400 font-black text-sm uppercase tracking-wider">🎉 Processo Finalizado</h4>
+                              <p className="text-xs text-zinc-300">Realize o pagamento dos honorários via PIX:</p>
+                              
+                              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 text-center">
+                                <p className="text-xs font-mono font-bold text-zinc-300 select-all">CNPJ: 52.305.552/0001-01</p>
+                                <button type="button" onClick={() => { navigator.clipboard.writeText('52.305.552/0001-01'); mostrarToast('Chave PIX de Honorários copiada!', 'sucesso'); }} className="mt-2 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded font-bold hover:bg-emerald-500 hover:text-black transition">Copiar Chave PIX</button>
+                              </div>
+
+                              <div className="py-1">
+                                <p className="text-[10px] text-zinc-400 uppercase tracking-widest">Valor dos Honorários</p>
+                                <p className="text-2xl font-black text-white">R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}</p>
+                              </div>
+
+                              <div className="flex flex-col items-center gap-2 border-t border-zinc-800 pt-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${honorarioPagoManual[proc.id] ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}></span>
+                                  <span className={`text-[11px] font-bold ${honorarioPagoManual[proc.id] ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                    {honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Pendente'}
+                                  </span>
+                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                                  <input type="checkbox" checked={!!honorarioPagoManual[proc.id]} onChange={e => setHonorarioPagoManual({...honorarioPagoManual, [proc.id]: e.target.checked})} className="w-4 h-4 accent-emerald-500 cursor-pointer" />
+                                  <span className="text-[11px] text-zinc-400 select-none">Marcar como Pago</span>
+                                </label>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Honorários do Escritório</p>
+                              <p className={`text-3xl font-black ${finalizado ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}
+                              </p>
+                              {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
+                              {finalizado && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full mt-2 font-bold inline-block animate-pulse">Liberado para Pagamento!</span>}
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -767,15 +845,33 @@ export default function EspecialView({ params }) {
                       <p className="text-[9px] text-zinc-500 mb-2">Ficará oculto para o cliente até o Passo 8 ser atingido.</p>
                       <input type="number" step="0.01" placeholder="Ex: 1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    
+                    <div className="space-y-2 border-t border-zinc-800 pt-3">
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase pb-1 border-b border-zinc-800">Taxas Governamentais (Estruturada)</label>
                       <div>
-                        <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Taxas a Pagar</label>
-                        <textarea rows="3" placeholder="- DARE: R$ 150,00" value={formProcesso.taxas_pendentes} onChange={e => setFormProcesso({...formProcesso, taxas_pendentes: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37] resize-none"></textarea>
+                        <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Nome da Taxa</label>
+                        <input type="text" placeholder="Ex: DARE JUCESP" value={taxaNome} onChange={e => setTaxaNome(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-emerald-400 uppercase mb-1">Taxas Já Pagas</label>
-                        <textarea rows="3" placeholder="- Viabilidade OK" value={formProcesso.taxas_pagas} onChange={e => setFormProcesso({...formProcesso, taxas_pagas: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"></textarea>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Valor da Taxa</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1 text-xs text-zinc-500 font-bold">R$</span>
+                            <input type="text" placeholder="150,00" value={taxaValor} onChange={e => setTaxaValor(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded pl-7 pr-2 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Anexar Guia/Boleto</label>
+                          <input type="file" accept="application/pdf,image/*" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-0.5 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
+                        </div>
                       </div>
+                      <p className="text-[9px] text-zinc-500 italic mt-2">Para usar texto livre legado, limpe os campos estruturados acima e use este:</p>
+                      <textarea rows="1" placeholder="Texto livre complementar..." value={formProcesso.taxas_pendentes} onChange={e => setFormProcesso({...formProcesso, taxas_pendentes: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-1 text-xs text-white focus:outline-none focus:border-[#d4af37] resize-none"></textarea>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-emerald-400 uppercase mb-1">Taxas Já Pagas</label>
+                      <textarea rows="2" placeholder="- Viabilidade OK" value={formProcesso.taxas_pagas} onChange={e => setFormProcesso({...formProcesso, taxas_pagas: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"></textarea>
                     </div>
                   </div>
                 </div>
