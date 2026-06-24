@@ -235,6 +235,19 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(false);
   }
 
+  async function toggleHonorarioPago(procId, statusAtual) {
+    setSubindoArquivo(true);
+    const novoStatus = !statusAtual;
+    const { error } = await supabase.from('processos_societarios').update({ honorario_pago: novoStatus }).eq('id', procId);
+    if (!error) {
+      mostrarToast(novoStatus ? 'Processo 100% finalizado com sucesso!' : 'Pagamento revertido para pendente.', 'sucesso');
+      await carregarDados();
+    } else {
+      mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
   async function salvarProcesso(e) {
     e.preventDefault();
     setSubindoArquivo(true);
@@ -497,19 +510,28 @@ export default function EspecialView({ params }) {
 
                           {/* TIMELINE VERTICAL DESTE PROCESSO (Oculta se minimizado) */}
                           {isExpanded && (
-                            <div className="relative border-l-2 border-zinc-700 ml-4 sm:ml-8 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                            <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                              {/* Linha vertical 100% centralizada */}
+                              <div className="absolute top-2 bottom-2 left-[15px] w-[2px] bg-zinc-700"></div>
+                              
                               {PASSOS_SOCIETARIO.map((passo) => {
-                                const isCompleted = proc.passo > passo.id;
-                                const isCurrent = proc.passo === passo.id;
+                                let isCompleted = proc.passo > passo.id;
+                                let isCurrent = proc.passo === passo.id;
                                 const isFuture = proc.passo < passo.id;
+
+                                // MÁGICA: Se for o Passo 8 e os honorários já estiverem pagos, a bolinha fica Verde!
+                                if (passo.id === 8 && proc.passo === 8 && proc.honorario_pago) {
+                                  isCompleted = true;
+                                  isCurrent = false;
+                                }
 
                                 let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
                                 if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
                                 if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
 
                                 return (
-                                  <div key={passo.id} className={`relative pl-8 sm:pl-12 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
-                                    <div className={`absolute -left-[17px] top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
+                                  <div key={passo.id} className={`relative pl-12 sm:pl-16 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
+                                    <div className={`absolute left-0 top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
                                       {isCompleted ? '✓' : passo.id}
                                     </div>
                                     <div className={`p-4 rounded-xl border transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
@@ -740,6 +762,7 @@ export default function EspecialView({ params }) {
             <div className="space-y-6 mb-8">
               {processos.map(proc => {
                 const finalizado = proc.passo === 8;
+                const clientEnviouComprovante = docsEnviados.find(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
                 
                 let taxasArray = [];
                 try {
