@@ -37,12 +37,6 @@ function notificarEquipaDepto(depto, nomeEmpresa, assunto) {
   }
 }
 
-// Função de Criptografia Reversível para salvar de forma segura no Supabase
-const encriptarSenha = (text) => {
-  if (!text) return '';
-  return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
-};
-
 // ==========================================
 // ÍCONES PREMIUM (SVG) DA MARCA
 // ==========================================
@@ -975,26 +969,32 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (novaSenha.trim().length < 6) return mostrarToast('A nova senha deve possuir no mínimo 6 caracteres.', 'erro');
     setSalvandoSenha(true);
 
-    if (contaSelecionadaSenha === 'principal') {
-      // Altera a senha do dono da empresa
-      const { error } = await supabase.from('clientes').update({ senha: encriptarSenha(novaSenha.trim()), senha_alterada: true }).eq('id', id);
-      if (!error) {
-        mostrarToast('Senha principal atualizada com sucesso!', 'sucesso');
+    try {
+      const res = await fetch('/api/alterar-senha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteId: id,
+          novaSenha: novaSenha.trim(),
+          contaSelecionada: contaSelecionadaSenha
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        mostrarToast('Senha atualizada com sucesso e protegida!', 'sucesso');
         setNovaSenha('');
         setMostrarModalPerfil(false);
-      } else mostrarToast('Erro ao atualizar a senha: ' + error.message, 'erro');
-    } else {
-      // Altera a senha do sócio específico no JSON
-      const sociosAtualizados = (cliente.socios || []).map(s => 
-        s.id === contaSelecionadaSenha ? { ...s, senha: encriptarSenha(novaSenha.trim()) } : s
-      );
-      const { error } = await supabase.from('clientes').update({ socios: sociosAtualizados }).eq('id', id);
-      if (!error) {
-        mostrarToast('Senha do sócio atualizada com sucesso!', 'sucesso');
-        setCliente({ ...cliente, socios: sociosAtualizados });
-        setNovaSenha('');
-        setMostrarModalPerfil(false);
-      } else mostrarToast('Erro ao atualizar a senha: ' + error.message, 'erro');
+        if (contaSelecionadaSenha !== 'principal') {
+          const sociosAtualizados = (cliente.socios || []).map(s => s.id === contaSelecionadaSenha ? { ...s, senha: '***' } : s);
+          setCliente({ ...cliente, socios: sociosAtualizados });
+        }
+      } else {
+        mostrarToast('Erro ao atualizar a senha: ' + data.error, 'erro');
+      }
+    } catch (err) {
+      mostrarToast('Erro de conexão com o servidor.', 'erro');
     }
     setSalvandoSenha(false);
   }

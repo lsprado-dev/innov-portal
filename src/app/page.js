@@ -24,17 +24,7 @@ const encriptarSenha = (text) => {
   return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
 };
 
-const decriptarSenha = (cipher) => {
-  if (!cipher || cipher === 'Não Definida') return cipher;
-  try {
-    const decoded = atob(cipher);
-    const plain = decoded.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join('');
-    if (/[\x00-\x1F\x7F]/.test(plain)) return cipher; // Evita quebra se a senha antiga for texto puro
-    return plain;
-  } catch (e) {
-    return cipher; // Retorna o texto puro caso seja um cliente antigo pré-criptografia
-  }
-};
+
 
 const LISTA_COLABORADORES = [
   'Victor (Admin)',
@@ -1439,31 +1429,35 @@ export default function AdminPage() {
                     <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-4 min-w-[200px] bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
                       <span className="text-xs font-bold text-zinc-500 uppercase">Senha Atual:</span>
                       <div className="relative flex items-center">
-                        <span 
-                          onClick={() => {
-                            // Pega o documento que estiver disponível
-                            const documento = cli.cnpj || cli.cpf || '';
-                            const senhaBruta = cli.senha || (documento ? documento.replace(/\D/g, '').substring(0, 6) : '');
-                            const senhaCopiada = decriptarSenha(senhaBruta);
-                            if (senhaCopiada && senhaCopiada !== 'Não Definida') {
-                              navigator.clipboard.writeText(senhaCopiada);
-                              setSenhaCopiadaId(cli.id); 
-                              setTimeout(() => setSenhaCopiadaId(null), 2000); 
-                            }
-                          }}
-                          title="Clique para copiar"
-                          className={`cursor-pointer hover:scale-105 active:scale-95 font-mono font-bold tracking-widest text-sm px-2 py-1 rounded transition-all shadow-sm ${cli.senha_alterada ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30' : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'}`}
-                        >
-                          {/* Exibe decriptada na tela do Admin usando o documento que estiver disponível */}
-                          {decriptarSenha(cli.senha || ((cli.cnpj || cli.cpf) ? (cli.cnpj || cli.cpf).replace(/\D/g, '').substring(0, 6) : 'Não Definida'))}
-                        </span>
-                        
-                        {/* BALÃO FLUTUANTE DE SUCESSO */}
-                        {senhaCopiadaId === cli.id && (
-                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-extrabold px-2.5 py-1 rounded shadow-[0_0_10px_rgba(16,185,129,0.5)] pointer-events-none whitespace-nowrap animate-in fade-in slide-in-from-bottom-2">
-                            Copiada! ✓
-                            <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-emerald-500"></span>
+                        {cli.senha_alterada ? (
+                          <span className="font-mono font-bold tracking-widest text-xs px-3 py-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 select-none">
+                            🔒 Personalizada
                           </span>
+                        ) : (
+                          <>
+                            <span 
+                              onClick={() => {
+                                const documento = cli.cnpj || cli.cpf || '';
+                                const senhaPadrao = documento.replace(/\D/g, '').substring(0, 6);
+                                if (senhaPadrao) {
+                                  navigator.clipboard.writeText(senhaPadrao);
+                                  setSenhaCopiadaId(cli.id); 
+                                  setTimeout(() => setSenhaCopiadaId(null), 2000); 
+                                }
+                              }}
+                              title="Clique para copiar a senha Padrão"
+                              className="cursor-pointer hover:scale-105 active:scale-95 font-mono font-bold tracking-widest text-sm px-2 py-1 rounded transition-all shadow-sm bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700"
+                            >
+                              {(cli.cnpj || cli.cpf) ? (cli.cnpj || cli.cpf).replace(/\D/g, '').substring(0, 6) : 'Não Definida'}
+                            </span>
+                            
+                            {senhaCopiadaId === cli.id && (
+                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-extrabold px-2.5 py-1 rounded shadow-[0_0_10px_rgba(16,185,129,0.5)] pointer-events-none whitespace-nowrap animate-in fade-in slide-in-from-bottom-2">
+                                Copiada! ✓
+                                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-emerald-500"></span>
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

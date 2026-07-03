@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs'; // <-- NOVO
 
-// 🔑 CHAVE MESTRA: Usamos o Service Role para o login poder ler o banco trancado
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// E-mails reais e atualizados da sua equipe
 const EQUIPE_INTERNA = {
   'victor@innovbusiness.com.br': 'Victor (Admin)',
   'societario@innovbusiness.com.br': 'Maria (Societário)',
@@ -21,7 +20,8 @@ const EQUIPE_INTERNA = {
   'lucas@innovbusiness.com.br': 'Lucas (Financeiro)'
 };
 
-const encriptarSenha = (text) => {
+// Mantemos a velha só para a migração silenciosa
+const encriptarSenhaAntiga = (text) => {
   if (!text) return '';
   return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
 };
@@ -36,9 +36,7 @@ export async function POST(request) {
       emailFinal = `${emailTratado}@innovbusiness.com.br`;
     }
 
-    // ========================================================
     // 1. Validação da Equipe Interna (Admin)
-    // ========================================================
     if (EQUIPE_INTERNA[emailFinal]) {
       const { data: authData } = await supabaseAdmin.auth.signInWithPassword({
         email: emailFinal,
@@ -47,43 +45,29 @@ export async function POST(request) {
 
       if (authData?.user) {
         const nomeAdmin = authData.user.user_metadata?.nome || EQUIPE_INTERNA[emailFinal];
-        
-        // 🔥 NOVO: Geramos o Passe VIP pro Admin com a tag is_admin: true
         const tokenAdmin = jwt.sign(
           { aud: 'authenticated', role: 'authenticated', sub: authData.user.id, email: emailFinal, is_admin: true },
           process.env.SUPABASE_JWT_SECRET,
           { expiresIn: '7d' }
         );
-
         return NextResponse.json({ success: true, tipo: 'interno', nome: nomeAdmin, id: authData.user.id, token: tokenAdmin });
       } else {
         return NextResponse.json({ success: false, error: 'Senha incorreta para este membro da equipe.' }, { status: 401 });
       }
     }
 
-    // ========================================================
-    // 2. Validação do Cliente (Usando Supabase Admin)
-    // ========================================================
+    // 2. Validação do Cliente
     let clienteFinal = null;
     let isSocio = false;
     let socioDados = null;
 
-    const { data: clienteTitular } = await supabaseAdmin
-      .from('clientes')
-      .select('*')
-      .eq('email', emailFinal)
-      .maybeSingle();
+    // Busca otimizada com JSONB (Mais rápido que o loop antigo)
+    const { data: clienteTitular } = await supabaseAdmin.from('clientes').select('*').eq('email', emailFinal).maybeSingle();
 
     if (clienteTitular) {
       clienteFinal = clienteTitular;
     } else {
-      // Busca direto no banco usando JSONB, baixando apenas 1 cliente em vez de todos!
-      const { data: clienteSocio } = await supabaseAdmin
-        .from('clientes')
-        .select('*')
-        .contains('socios', `[{"email": "${emailFinal}"}]`)
-        .maybeSingle();
-
+      const { data: clienteSocio } = await supabaseAdmin.from('clientes').select('*').contains('socios', `[{"email": "${emailFinal}"}]`).maybeSingle();
       if (clienteSocio && clienteSocio.socios) {
         const socioEncontrado = clienteSocio.socios.find(s => s.email && s.email.trim().toLowerCase() === emailFinal);
         if (socioEncontrado) {
@@ -98,24 +82,44 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: 'Usuário ou e-mail não encontrado no sistema.' }, { status: 404 });
     }
 
-    const senhaCriptografadaDigitada = encriptarSenha(password);
-    
-    // NOVO: Pega o CNPJ, se não tiver, pega o CPF. Se não tiver nenhum, usa vazio para não quebrar o código.
     const documentoPrincipal = clienteFinal.cnpj || clienteFinal.cpf || '';
     const apenasNumeros = documentoPrincipal.replace(/\D/g, '');
     const senhaPadrao = apenasNumeros.substring(0, 6);
-
+    
+    const senhaDoBanco = isSocio ? socioDados.senha : clienteFinal.senha;
     let loginAprovado = false;
-    if (isSocio) {
-      if (socioDados.senha === senhaCriptografadaDigitada || password === senhaPadrao) loginAprovado = true;
-    } else {
-      if (clienteFinal.senha === senhaCriptografadaDigitada || password === senhaPadrao) loginAprovado = true;
+    let precisaAtualizarParaBcrypt = false;
+
+    // ==========================================
+    // LÓGICA DE MIGRAÇÃO SILENCIOSA
+    // ==========================================
+    
+    // Testa se a senha no banco já é o hash novo (Bcrypt começa com $2a$ ou $2b$)
+    if (senhaDoBanco && senhaDoBanco.startsWith('$2')) {
+      loginAprovado = await bcrypt.compare(password, senhaDoBanco);
+    } 
+    // Se não for, testa a regra antiga (XOR) OU a senha padrão (CNPJ)
+    else if (senhaDoBanco === encriptarSenhaAntiga(password) || password === senhaPadrao) {
+      loginAprovado = true;
+      precisaAtualizarParaBcrypt = true; // O cliente logou com o velho, vamos atualizar!
     }
 
     if (loginAprovado) {
       const nomePainel = isSocio ? socioDados.nome : (clienteFinal.nome_contato || clienteFinal.nome_empresa || 'Cliente');
 
-      // 🔐 Gerando o Passe VIP do Cliente
+      // Atualiza o banco sem o cliente perceber!
+      if (precisaAtualizarParaBcrypt) {
+        const salt = await bcrypt.genSalt(10);
+        const hashNovo = await bcrypt.hash(password, salt);
+
+        if (isSocio) {
+          const sociosAtualizados = clienteFinal.socios.map(s => s.email === socioDados.email ? { ...s, senha: hashNovo } : s);
+          await supabaseAdmin.from('clientes').update({ socios: sociosAtualizados }).eq('id', clienteFinal.id);
+        } else {
+          await supabaseAdmin.from('clientes').update({ senha: hashNovo }).eq('id', clienteFinal.id);
+        }
+      }
+
       const token = jwt.sign(
         { aud: 'authenticated', role: 'authenticated', sub: clienteFinal.id, email: emailFinal },
         process.env.SUPABASE_JWT_SECRET,
@@ -128,7 +132,7 @@ export async function POST(request) {
     }
     
   } catch (err) {
-    console.error('Erro crítico na rota de autenticação:', err.message);
-    return NextResponse.json({ success: false, error: 'Erro interno no servidor de login.' }, { status: 500 });
+    console.error('Erro na rota de auth:', err.message);
+    return NextResponse.json({ success: false, error: 'Erro interno.' }, { status: 500 });
   }
 }
