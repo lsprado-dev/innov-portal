@@ -232,6 +232,14 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (!error) {
       mostrarToast('Solicitação respondida e finalizada com sucesso!', 'sucesso');
+      
+      // Apita o celular do Cliente
+      dispararPush(
+        id, 
+        'Resposta da Equipe 💬', 
+        `O seu chamado sobre "${pedido.descricao.substring(0, 25)}..." foi respondido!`
+      );
+
       setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null });
       await carregarDadosDaAba();
     } else {
@@ -714,6 +722,16 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (sucessoCount > 0) {
       mostrarToast(`${sucessoCount} documento(s) publicado(s) com sucesso!`, 'sucesso');
+      
+      // Se quem enviou foi a equipe, avisa o cliente
+      if (isInterno) {
+        dispararPush(
+          id, 
+          'Novo Documento Disponível 📄', 
+          `A equipe disponibilizou ${sucessoCount} arquivo(s) novo(s) na sua pasta.`
+        );
+      }
+      
       await carregarDadosDaAba();
     }
     setSubindoArquivo(false);
@@ -1230,6 +1248,14 @@ export default function MensalistaView({ params: paramsPromise }) {
     }]);
 
     notificarEquipaDepto(departamentoPedido, cliente?.nome_empresa, 'Novo Ticket Aberto');
+    
+    // Apita o celular de TODOS os Admins logados
+    dispararPush(
+      'interno', 
+      `Novo Ticket: ${cliente?.nome_empresa} 🚨`, 
+      `Departamento: ${departamentoPedido}. Acesse o painel para verificar a solicitação.`
+    );
+
     mostrarToast(`A sua solicitação foi enviada para o departamento ${departamentoPedido}!`, 'sucesso');
     setNovoPedido('');
     setArquivoPedido(null);

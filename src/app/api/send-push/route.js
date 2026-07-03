@@ -21,8 +21,10 @@ export async function POST(request) {
 
     let query = supabaseAdmin.from('push_subscriptions').select('subscription');
     
-    // Se for um array (envio em massa), atira para todos da lista
-    if (Array.isArray(usuarioId)) {
+    if (usuarioId === 'interno') {
+      // MÁGICA: Se o alvo for 'interno', atira para TODOS os Admins de uma vez!
+      query = query.eq('usuario_tipo', 'interno');
+    } else if (Array.isArray(usuarioId)) {
       query = query.in('usuario_id', usuarioId);
     } else {
       query = query.eq('usuario_id', usuarioId);

@@ -328,6 +328,13 @@ export default function EspecialView({ params }) {
       if (!error) {
         mostrarToast('Processo atualizado!', 'sucesso');
         
+        // Dispara o Push para o Celular do Cliente
+        dispararPush(
+          id, 
+          'Processo Atualizado!', 
+          `O seu processo de legalização avançou para a etapa: ${formProcesso.passo}.`
+        );
+        
         // Avisa a Maria
         const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(formProcesso.passo))?.nome;
         enviarEmailDemanda({
