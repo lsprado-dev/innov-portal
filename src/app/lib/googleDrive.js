@@ -1,15 +1,18 @@
 import { google } from 'googleapis';
 
-// Lógica à prova de balas para ler a chave privada (Remove aspas extras e converte as quebras de linha)
-const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
-  .replace(/\\n/g, '\n')
-  .replace(/^"|"$/g, ''); 
+const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+const key = process.env.GOOGLE_PRIVATE_KEY;
 
-const auth = new google.auth.JWT(
-  process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  null,
-  privateKey,
-  ['https://www.googleapis.com/auth/drive']
-);
+// Limpa a chave privada (Remove aspas extras da Vercel e conserta as quebras de linha)
+const privateKey = (key || '').replace(/\\n/g, '\n').replace(/^"|"$/g, '');
+
+// O GoogleAuth é o padrão ouro atual. Ele "força" o crachá a ser validado antes de enviar.
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: email,
+    private_key: privateKey,
+  },
+  scopes: ['https://www.googleapis.com/auth/drive'],
+});
 
 export const drive = google.drive({ version: 'v3', auth });
