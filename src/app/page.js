@@ -152,6 +152,7 @@ export default function AdminPage() {
 
   const [operador, setOperador] = useState('Administrador');
   const [subindo, setSubindo] = useState(false);
+  const [progressoSync, setProgressoSync] = useState(null); // <-- MÁGICA 1 AQUI
 
   const [formDemanda, setFormDemanda] = useState({
     descricao: '',
@@ -865,15 +866,21 @@ export default function AdminPage() {
           .is('id_drive_raiz', null);
 
         if (error || !clientesSemDrive || clientesSemDrive.length === 0) {
-          mostrarToast('Todos os clientes já possuem pastas no Drive!', 'aviso');
+          mostrarToast('Todos os clientes já possuem pastas no Drive ou não há clientes!', 'aviso');
           setSubindo(false);
           return;
         }
 
-        mostrarToast(`Iniciando sincronização de ${clientesSemDrive.length} cliente(s)...`, 'aviso');
+        const total = clientesSemDrive.length;
+        setProgressoSync({ atual: 0, total: total, empresa: 'Iniciando conexão...' }); // <-- MÁGICA 2 AQUI
+        
         let sucessoCount = 0;
+        let ultimoErro = null;
 
-        for (const cli of clientesSemDrive) {
+        for (let i = 0; i < total; i++) {
+          const cli = clientesSemDrive[i];
+          setProgressoSync({ atual: i, total: total, empresa: cli.nome_empresa }); // <-- MÁGICA 3 AQUI
+
           try {
             const resDrive = await fetch('/api/drive/criar', {
               method: 'POST',
@@ -892,14 +899,26 @@ export default function AdminPage() {
                   id_drive_lixeira: dataDrive.folders.pasta_lixeira
                }).eq('id', cli.id);
                sucessoCount++;
+            } else {
+               ultimoErro = dataDrive.error;
+               console.error(`Erro do Drive para ${cli.nome_empresa}:`, dataDrive.error);
             }
           } catch (e) {
-            console.error(`Erro ao criar pasta para ${cli.nome_empresa}:`, e);
+            ultimoErro = e.message;
+            console.error(`Erro de conexão para ${cli.nome_empresa}:`, e);
           }
         }
 
-        mostrarToast(`Sincronização concluída! ${sucessoCount} estrutura(s) gerada(s).`, 'sucesso');
+        setProgressoSync({ atual: total, total: total, empresa: 'Finalizando...' });
+
+        if (sucessoCount > 0) {
+          mostrarToast(`Sincronização concluída! ${sucessoCount} estrutura(s) gerada(s).`, 'sucesso');
+        } else if (ultimoErro) {
+          mostrarToast(`Falha na criação. Erro retornado: ${ultimoErro}`, 'erro');
+        }
+        
         await carregarDados();
+        setProgressoSync(null); // <-- RESETA A BARRA AO TERMINAR
         setSubindo(false);
       }, 
       'sucesso'
@@ -1780,9 +1799,11 @@ export default function AdminPage() {
               {/* CARD 3: ATALHOS PARA OS SERVIDORES */}
               {eGestor && (
                 <div className="grid grid-cols-1 gap-3">
-                  {/* NOVO BOTÃO DO DRIVE */}
+                  {/* NOVO BOTÃO DO DRIVE COM LOGO */}
                   <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
-                    <span className="text-[#d4af37] text-2xl group-hover:scale-110 transition-transform">📂</span>
+                    <svg className="w-8 h-8 group-hover:scale-110 transition-transform flex-shrink-0" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M339 314.9L175.4 32h-114L225 314.9h114zm-64.8 28H106.1L0 480h222.1l68.1-137.1zm115.6-28L281.3 129.2 168.1 314.9l59.4 102.5h222.1l-59.8-102.5z" fill="#d4af37"/>
+                    </svg>
                     <div>
                       <p className="text-[11px] font-bold text-[#d4af37] uppercase">Sincronizar G. Drive</p>
                       <p className="text-[10px] text-zinc-500">Gerar pastas antigas</p>
@@ -2975,10 +2996,34 @@ export default function AdminPage() {
 
       {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
       {subindo && (
-        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center">
-          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
-            <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
-            <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200 w-full max-w-sm">
+            
+            {progressoSync ? (
+              <div className="w-full flex flex-col items-center">
+                <div className="text-5xl mb-4 animate-bounce drop-shadow-lg">📂</div>
+                <h3 className="text-white font-black text-lg mb-1 tracking-wide">Sincronizando Google Drive</h3>
+                <p className="text-[#d4af37] font-black text-3xl mb-5">{Math.round((progressoSync.atual / progressoSync.total) * 100)}%</p>
+                
+                <div className="w-full bg-zinc-800 rounded-full h-3.5 mb-3 overflow-hidden border border-zinc-700 shadow-inner">
+                  <div 
+                    className="bg-gradient-to-r from-yellow-600 to-[#d4af37] h-full rounded-full transition-all duration-300 relative overflow-hidden" 
+                    style={{ width: `${(progressoSync.atual / progressoSync.total) * 100}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_linear_infinite]"></div>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-zinc-400 truncate w-full text-center">Processando: <strong className="text-zinc-200">{progressoSync.empresa}</strong></p>
+                <p className="text-[10px] text-zinc-500 mt-2 font-bold bg-[#0d1b2a] px-3 py-1 rounded-full border border-zinc-800">{progressoSync.atual} de {progressoSync.total} empresas</p>
+              </div>
+            ) : (
+              <>
+                <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
+                <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+              </>
+            )}
+            
           </div>
         </div>
       )}

@@ -1230,12 +1230,46 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
 
     setSubindoArquivo(true);
+    
+    // 1. Busca os IDs do Drive salvos neste cliente
+    const { data: dadosCliente } = await supabase.from('clientes').select('id_drive_recebidos').eq('id', id).single();
+    const pastaDestinoDrive = dadosCliente?.id_drive_recebidos;
+
     for (const item of validos) {
-      const timestamp = Date.now();
-      const caminhoArquivo = `${id}/recebidos/${timestamp}_${item.arquivo.name}`;
-      await supabase.storage.from('documentos').upload(caminhoArquivo, item.arquivo);
-      // NOVO: Adicionado departamento ao banco
-      await supabase.from('envios_cliente').insert([{ cliente_id: id, nome_documento: item.descricao.trim(), nome_original: item.arquivo.name, caminho_storage: caminhoArquivo, status: 'pendente', departamento: item.departamento }]);
+      let caminhoFinal = null;
+
+      // 2. Se o cliente tiver a pasta no Drive, joga pra lá! Se não tiver, joga pro Supabase como backup.
+      if (pastaDestinoDrive) {
+        const formData = new FormData();
+        formData.append('file', item.arquivo);
+        formData.append('folderId', pastaDestinoDrive);
+        
+        try {
+          const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
+          const resData = await res.json();
+          if (resData.success) {
+            caminhoFinal = `DRIVE:${resData.fileId}`; // Identificador mágico pra gente saber que tá no Drive
+          } else {
+            console.error("Falha no Drive, caindo para backup.");
+          }
+        } catch (err) { console.error("Erro no fetch do Drive:", err); }
+      }
+
+      // Fallback de segurança (se o Drive falhar, salva no Supabase para não perder o doc do cliente)
+      if (!caminhoFinal) {
+         const timestamp = Date.now();
+         caminhoFinal = `${id}/recebidos/${timestamp}_${item.arquivo.name}`;
+         await supabase.storage.from('documentos').upload(caminhoFinal, item.arquivo);
+      }
+
+      await supabase.from('envios_cliente').insert([{ 
+        cliente_id: id, 
+        nome_documento: item.descricao.trim(), 
+        nome_original: item.arquivo.name, 
+        caminho_storage: caminhoFinal, 
+        status: 'pendente', 
+        departamento: item.departamento 
+      }]);
     }
 
     mostrarToast('Documentos enviados com sucesso!', 'sucesso');

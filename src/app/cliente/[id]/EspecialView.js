@@ -35,7 +35,7 @@ export default function EspecialView({ params }) {
     window.addEventListener('sessao_expirada', handleSessaoExpirada);
     return () => window.removeEventListener('sessao_expirada', handleSessaoExpirada);
   }, []);
-  
+
   // ==========================================
   // RENOVAÇÃO SILENCIOSA DE SESSÃO (+30 DIAS)
   // ==========================================
@@ -413,27 +413,49 @@ export default function EspecialView({ params }) {
     if (arquivoDoc.size > 15 * 1024 * 1024) return mostrarToast('Arquivo excede 15MB.', 'erro');
 
     setSubindoArquivo(true);
-    const timestamp = Date.now();
-    const caminhoArquivo = `${id}/recebidos_societario/${timestamp}_${arquivoDoc.name}`;
     
-    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, arquivoDoc);
-    
-    if (storageError) {
-      mostrarToast('Erro ao subir arquivo: ' + storageError.message, 'erro');
-      setSubindoArquivo(false);
-      return;
+    // 1. Busca os IDs do Drive salvos neste cliente
+    const { data: dadosCliente } = await supabase.from('clientes').select('id_drive_recebidos').eq('id', id).single();
+    const pastaDestinoDrive = dadosCliente?.id_drive_recebidos;
+
+    let caminhoFinal = null;
+
+    // 2. Tenta fazer upload no Drive
+    if (pastaDestinoDrive) {
+       const formData = new FormData();
+       formData.append('file', arquivoDoc);
+       formData.append('folderId', pastaDestinoDrive);
+       
+       try {
+         const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
+         const resData = await res.json();
+         if (resData.success) {
+           caminhoFinal = `DRIVE:${resData.fileId}`;
+         }
+       } catch (err) { console.error("Erro no fetch do Drive:", err); }
+    }
+
+    // 3. Fallback de Segurança (Supabase)
+    if (!caminhoFinal) {
+      const timestamp = Date.now();
+      caminhoFinal = `${id}/recebidos_societario/${timestamp}_${arquivoDoc.name}`;
+      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoFinal, arquivoDoc);
+      if (storageError) {
+        mostrarToast('Erro ao subir arquivo: ' + storageError.message, 'erro');
+        setSubindoArquivo(false);
+        return;
+      }
     }
 
     const payloadEnvio = {
       cliente_id: id,
       nome_documento: descricaoDoc.trim(),
       nome_original: arquivoDoc.name,
-      caminho_storage: caminhoArquivo,
+      caminho_storage: caminhoFinal,
       departamento: departamentoDestino,
       status: 'pendente'
     };
     
-    // Amarra o documento ou comprovante ao processo correto automaticamente
     if (processos.length === 1) {
       payloadEnvio.processo_id = processos[0].id;
     } else if (processoSelecionadoDoc) {
