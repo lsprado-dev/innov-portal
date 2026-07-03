@@ -172,6 +172,25 @@ export default function EspecialView({ params }) {
     carregarDados();
   }, [id, router]);
 
+  // NOVO: Limpa as bolinhas de notificação assim que o Admin abre a respectiva aba
+  useEffect(() => {
+    if (!isInterno) return;
+    
+    let idsParaAtualizar = [];
+    if (abaAtiva === 'documentos') {
+      idsParaAtualizar = docsEnviados.filter(d => d.departamento === 'Societário' && d.status === 'pendente').map(d => d.id);
+    } else if (abaAtiva === 'financeiro') {
+      idsParaAtualizar = docsEnviados.filter(d => d.departamento === 'Financeiro' && d.status === 'pendente').map(d => d.id);
+    }
+    
+    if (idsParaAtualizar.length > 0) {
+      // 1. Apaga a bolinha na tela imediatamente (UX Otimista)
+      setDocsEnviados(prev => prev.map(d => idsParaAtualizar.includes(d.id) ? { ...d, status: 'visto' } : d));
+      // 2. Avisa o banco de dados em segundo plano
+      supabase.from('envios_cliente').update({ status: 'visto' }).in('id', idsParaAtualizar).then();
+    }
+  }, [abaAtiva, isInterno, docsEnviados]);
+
   // ==========================================
   // FUNÇÕES DO ADMIN E FLUXO DE TAXAS
   // ==========================================
