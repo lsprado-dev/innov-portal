@@ -75,6 +75,14 @@ function formatarDataHora(dataString) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const [sessaoExpirada, setSessaoExpirada] = useState(false);
+
+  useEffect(() => {
+    const handleSessaoExpirada = () => setSessaoExpirada(true);
+    window.addEventListener('sessao_expirada', handleSessaoExpirada);
+    return () => window.removeEventListener('sessao_expirada', handleSessaoExpirada);
+  }, []);
+
   const [clientes, setClientes] = useState([]);
   const [pendentes, setPendentes] = useState([]);
   const [recebidos, setRecebidos] = useState([]);
@@ -2791,6 +2799,27 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 MODAL DE SESSÃO EXPIRADA (BLOQUEIO TOTAL) */}
+      {sessaoExpirada && (
+        <div className="fixed inset-0 z-[999999999] bg-[#0d1b2a]/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-red-500/50 max-w-sm w-full shadow-[0_0_60px_rgba(239,68,68,0.2)] text-center flex flex-col items-center">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-5 border border-red-500/20">
+              <span className="text-3xl">⏳</span>
+            </div>
+            <h3 className="text-xl font-black text-white mb-2">Sessão Expirada</h3>
+            <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
+              Por questões de segurança, o seu tempo de acesso esgotou. Por favor, faça login novamente para continuar.
+            </p>
+            <button 
+              onClick={() => { localStorage.clear(); window.location.href = '/login'; }} 
+              className="w-full bg-[#d4af37] text-[#0d1b2a] font-black py-3.5 rounded-xl hover:bg-yellow-500 transition shadow-lg uppercase tracking-wider"
+            >
+              Fazer Login Novamente
+            </button>
           </div>
         </div>
       )}
