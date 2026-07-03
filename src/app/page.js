@@ -708,6 +708,13 @@ export default function AdminPage() {
               prazo: 'Aguardando Análise'
            }).catch(()=>{});
         }
+        
+        // MÁGICA: Notificação Push para a equipe
+        dispararPush(
+          'interno', 
+          `Ticket Atribuído: ${valor} 📌`, 
+          `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} de ${pedido.clientes?.nome_empresa || 'Cliente'} foi direcionado para você.`
+        );
       }
 
       await carregarDados();
@@ -757,6 +764,13 @@ export default function AdminPage() {
           prazo: new Date(formDemanda.data_entrega).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
         }).catch(err => console.error("Falha no disparo automágico:", err));
       }
+
+      // MÁGICA: Apita o celular da equipe avisando da nova demanda!
+      dispararPush(
+        'interno', 
+        `Nova Tarefa: ${formDemanda.atribuido_para} ⚡`, 
+        `Prioridade ${formDemanda.prioridade}: ${formDemanda.descricao.trim()}`
+      );
 
       setFormDemanda({ descricao: '', atribuido_para: 'Victor (Admin)', data_entrega: '', prioridade: 'Média' }); 
       await carregarDados(); 
