@@ -902,12 +902,14 @@ export default function AdminPage() {
                
                if (isSocietario) {
                  payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
+                 payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados; // <-- NOVO AQUI
                  payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
                } else {
                  payloadUpdate.id_drive_contabil = dataDrive.folders.pasta_cont_bil;
                  payloadUpdate.id_drive_fiscal = dataDrive.folders.pasta_fiscal;
                  payloadUpdate.id_drive_rh = dataDrive.folders.pasta_dp___rh;
                  payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
+                 payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados; // <-- NOVO AQUI
                  payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
                }
 
