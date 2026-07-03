@@ -5,11 +5,12 @@ const ROOT_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 /**
  * Cria a estrutura espelho perfeita para um cliente dentro do Drive Compartilhado
  * @param {string} nomeEmpresa Nome da empresa do cliente
+ * @param {string} tipoConta 'mensalista' ou 'especiais'
  * @returns {object} Objeto contendo os IDs de todas as pastas criadas
  */
-export async function criarEstruturaClienteDrive(nomeEmpresa) {
+export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensalista') {
   try {
-    // 1. Cria a pasta principal do cliente dentro do Drive Compartilhado
+    // 1. Cria a pasta principal do cliente
     const pastaClienteResponse = await drive.files.create({
       requestBody: {
         name: nomeEmpresa,
@@ -17,26 +18,27 @@ export async function criarEstruturaClienteDrive(nomeEmpresa) {
         parents: [ROOT_ID],
       },
       fields: 'id',
-      supportsAllDrives: true, // OBRIGATÓRIO para Drive Compartilhado
+      supportsAllDrives: true,
     });
 
     const pastaClienteId = pastaClienteResponse.data.id;
 
-    // Subpastas que você determinou como padrão
-    const subpastasPadrao = [
-      'Contábil',
-      'Fiscal',
-      'DP - RH',
-      'Documentos Recebidos',
-      'Lixeira'
-    ];
+    // 2. Define as subpastas dependendo do tipo de conta
+    let subpastas = [];
+    if (tipoConta === 'especiais' || tipoConta === 'especial') {
+      // Pastas do Societário (Pode alterar os nomes se quiser!)
+      subpastas = ['Documentos Recebidos', 'Processos', 'Taxas e Guias', 'Lixeira'];
+    } else {
+      // Pastas do Mensalista
+      subpastas = ['Contábil', 'Fiscal', 'DP - RH', 'Documentos Recebidos', 'Lixeira'];
+    }
 
     const mapeamentoIds = {
       pasta_raiz_cliente: pastaClienteId
     };
 
-    // 2. Cria as subpastas em lote dentro da pasta do cliente
-    for (const subpasta of subpastasPadrao) {
+    // 3. Cria as subpastas
+    for (const subpasta of subpastas) {
       const subResponse = await drive.files.create({
         requestBody: {
           name: subpasta,
@@ -47,12 +49,10 @@ export async function criarEstruturaClienteDrive(nomeEmpresa) {
         supportsAllDrives: true,
       });
 
-      // Transforma o nome da pasta em uma chave amigável (ex: 'Fiscal' vira 'pasta_fiscal')
       const chaveAmigavel = `pasta_${subpasta.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
       mapeamentoIds[chaveAmigavel] = subResponse.data.id;
     }
 
-    // Retorna todos os IDs gerados para salvarmos no banco de dados
     return { success: true, folders: mapeamentoIds };
 
   } catch (error) {

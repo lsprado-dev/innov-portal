@@ -7,13 +7,15 @@ import { criarEstruturaClienteDrive } from '../../../lib/driveUtils';
 
 export async function POST(req) {
   try {
-    const { nomeEmpresa } = await req.json();
+    // MÁGICA: Agora a API "pega" o tipoConta que o painel enviou
+    const { nomeEmpresa, tipoConta } = await req.json();
     
     if (!nomeEmpresa) {
       return NextResponse.json({ success: false, error: 'Nome da empresa não fornecido.' }, { status: 400 });
     }
 
-    const resultado = await criarEstruturaClienteDrive(nomeEmpresa);
+    // MÁGICA: E repassa esse tipoConta lá pra dentro da ferramenta do Drive!
+    const resultado = await criarEstruturaClienteDrive(nomeEmpresa, tipoConta);
 
     if (resultado.success) {
       return NextResponse.json(resultado);
