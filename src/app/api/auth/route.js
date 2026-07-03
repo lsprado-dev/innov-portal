@@ -77,18 +77,19 @@ export async function POST(request) {
     if (clienteTitular) {
       clienteFinal = clienteTitular;
     } else {
-      const { data: todosClientes } = await supabaseAdmin.from('clientes').select('*');
-      if (todosClientes) {
-        for (const cli of todosClientes) {
-          if (cli.socios && Array.isArray(cli.socios)) {
-            const socioEncontrado = cli.socios.find(s => s.email && s.email.trim().toLowerCase() === emailFinal);
-            if (socioEncontrado) {
-              clienteFinal = cli;
-              isSocio = true;
-              socioDados = socioEncontrado;
-              break; 
-            }
-          }
+      // Busca direto no banco usando JSONB, baixando apenas 1 cliente em vez de todos!
+      const { data: clienteSocio } = await supabaseAdmin
+        .from('clientes')
+        .select('*')
+        .contains('socios', `[{"email": "${emailFinal}"}]`)
+        .maybeSingle();
+
+      if (clienteSocio && clienteSocio.socios) {
+        const socioEncontrado = clienteSocio.socios.find(s => s.email && s.email.trim().toLowerCase() === emailFinal);
+        if (socioEncontrado) {
+          clienteFinal = clienteSocio;
+          isSocio = true;
+          socioDados = socioEncontrado;
         }
       }
     }
