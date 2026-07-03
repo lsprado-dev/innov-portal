@@ -475,16 +475,42 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(false);
   }
 
-  function baixarDocumento(caminhoStorage, nomeOriginal) {
-    supabase.storage.from('documentos').download(caminhoStorage).then(({ data, error }) => {
-      if (error) return mostrarToast('Erro ao baixar.', 'erro');
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = nomeOriginal || 'documento';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
+  function visualizarDocumento(caminhoStorage) {
+    if (caminhoStorage.startsWith('DRIVE:')) {
+      const fileId = caminhoStorage.split('DRIVE:')[1];
+      window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+      return;
+    }
+    const { data } = supabase.storage.from('documentos').getPublicUrl(caminhoStorage);
+    window.open(data.publicUrl, '_blank');
+  }
+
+  async function baixarDocumento(caminhoStorage, nomeOriginal) {
+    setSubindoArquivo(true);
+    
+    if (caminhoStorage.startsWith('DRIVE:')) {
+      const fileId = caminhoStorage.split('DRIVE:')[1];
+      window.open(`https://drive.google.com/uc?export=download&id=${fileId}`, '_blank');
+      setSubindoArquivo(false);
+      return;
+    }
+
+    const { data, error } = await supabase.storage.from('documentos').download(caminhoStorage);
+    if (error) {
+      mostrarToast('Erro ao baixar o arquivo: ' + error.message, 'erro');
+      setSubindoArquivo(false);
+      return;
+    }
+    const nomeFinal = nomeOriginal || caminhoStorage.split('/').pop();
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeFinal; 
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url); 
+    setSubindoArquivo(false);
   }
 
   if (!cliente) return (

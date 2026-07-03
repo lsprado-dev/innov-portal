@@ -949,20 +949,31 @@ export default function MensalistaView({ params: paramsPromise }) {
   }
 
   function visualizarDocumento(caminhoStorage) {
+    if (caminhoStorage.startsWith('DRIVE:')) {
+      const fileId = caminhoStorage.split('DRIVE:')[1];
+      window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+      return;
+    }
     const { data } = supabase.storage.from('documentos').getPublicUrl(caminhoStorage);
     window.open(data.publicUrl, '_blank');
   }
 
   async function baixarDocumento(caminhoStorage, nomeOriginal) {
     setSubindoArquivo(true);
-    const { data, error } = await supabase.storage.from('documentos').download(caminhoStorage);
     
+    if (caminhoStorage.startsWith('DRIVE:')) {
+      const fileId = caminhoStorage.split('DRIVE:')[1];
+      window.open(`https://drive.google.com/uc?export=download&id=${fileId}`, '_blank');
+      setSubindoArquivo(false);
+      return;
+    }
+
+    const { data, error } = await supabase.storage.from('documentos').download(caminhoStorage);
     if (error) {
       mostrarToast('Erro ao baixar o arquivo: ' + error.message, 'erro');
       setSubindoArquivo(false);
       return;
     }
-
     const nomeFinal = nomeOriginal || caminhoStorage.split('/').pop();
     const url = URL.createObjectURL(data);
     const a = document.createElement('a');
@@ -972,7 +983,6 @@ export default function MensalistaView({ params: paramsPromise }) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url); 
-    
     setSubindoArquivo(false);
   }
 

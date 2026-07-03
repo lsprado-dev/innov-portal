@@ -51,11 +51,11 @@ export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensa
     if (isSocietario) {
       pastaPaiSetorId = await obterOuCriarPastaPaiSetor('Societário');
       // No societário o cliente não tem pastas fixas de setores, os processos viram pastas depois!
-      subpastas = ['Documentos Recebidos', 'Lixeira']; 
+      subpastas = ['Documentos Recebidos', 'Documentos Enviados', 'Lixeira']; 
     } else {
       pastaPaiSetorId = await obterOuCriarPastaPaiSetor('Mensalistas');
       // Pastas fixas do Mensalista
-      subpastas = ['Contábil', 'Fiscal', 'DP - RH', 'Documentos Recebidos', 'Lixeira'];
+      subpastas = ['Contábil', 'Fiscal', 'DP - RH', 'Documentos Recebidos', 'Documentos Enviados', 'Lixeira'];
     }
 
     // 2. Cria a pasta da Empresa dentro da pasta pai correta (Mensalistas ou Societário)

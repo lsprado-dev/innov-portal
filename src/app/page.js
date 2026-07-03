@@ -856,13 +856,14 @@ export default function AdminPage() {
   async function sincronizarDriveClientesAntigos() {
     confirmarAcao(
       'Sincronizar Google Drive', 
-      'Deseja criar as pastas no Google Drive para todos os clientes antigos que ainda não possuem? Isso pode levar alguns minutos.', 
+      'Deseja gerar as pastas no Google Drive para os clientes que faltam? O sistema irá separar as pastas de Mensalistas e Societários automaticamente.', 
       async () => {
         setSubindo(true);
         
+        // MÁGICA 1: Agora puxamos CPF, CNPJ e Tipo de Conta do banco!
         const { data: clientesSemDrive, error } = await supabase
           .from('clientes')
-          .select('id, nome_empresa')
+          .select('id, nome_empresa, tipo_conta, cpf, cnpj')
           .is('id_drive_raiz', null);
 
         if (error || !clientesSemDrive || clientesSemDrive.length === 0) {
@@ -872,40 +873,58 @@ export default function AdminPage() {
         }
 
         const total = clientesSemDrive.length;
-        setProgressoSync({ atual: 0, total: total, empresa: 'Iniciando conexão...' }); // <-- MÁGICA 2 AQUI
+        setProgressoSync({ atual: 0, total: total, empresa: 'Validando conexão com o Google...' });
         
         let sucessoCount = 0;
         let ultimoErro = null;
 
         for (let i = 0; i < total; i++) {
           const cli = clientesSemDrive[i];
-          setProgressoSync({ atual: i, total: total, empresa: cli.nome_empresa }); // <-- MÁGICA 3 AQUI
+          setProgressoSync({ atual: i + 1, total: total, empresa: cli.nome_empresa });
+
+          // INTELIGÊNCIA: Se tem CPF ou se o tipo for especial, joga pro Societário!
+          const temCPF = cli.cpf && cli.cpf.trim() !== '';
+          const isSocietario = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || temCPF;
+          const tipoContaReal = isSocietario ? 'especiais' : 'mensalista';
 
           try {
             const resDrive = await fetch('/api/drive/criar', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nomeEmpresa: cli.nome_empresa })
+              // MÁGICA 2: Mandamos o tipo de conta para a API
+              body: JSON.stringify({ nomeEmpresa: cli.nome_empresa, tipoConta: tipoContaReal }) 
             });
             const dataDrive = await resDrive.json();
             
             if (dataDrive.success) {
-               await supabase.from('clientes').update({
-                  id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
-                  id_drive_contabil: dataDrive.folders.pasta_cont_bil,
-                  id_drive_fiscal: dataDrive.folders.pasta_fiscal,
-                  id_drive_rh: dataDrive.folders.pasta_dp___rh,
-                  id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
-                  id_drive_lixeira: dataDrive.folders.pasta_lixeira
-               }).eq('id', cli.id);
+               // Salvamos as pastas no banco de dados de acordo com o que foi gerado
+               const payloadUpdate = { id_drive_raiz: dataDrive.folders.pasta_raiz_cliente };
+               
+               if (isSocietario) {
+                 payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
+                 payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
+               } else {
+                 payloadUpdate.id_drive_contabil = dataDrive.folders.pasta_cont_bil;
+                 payloadUpdate.id_drive_fiscal = dataDrive.folders.pasta_fiscal;
+                 payloadUpdate.id_drive_rh = dataDrive.folders.pasta_dp___rh;
+                 payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
+                 payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
+               }
+
+               await supabase.from('clientes').update(payloadUpdate).eq('id', cli.id);
                sucessoCount++;
             } else {
                ultimoErro = dataDrive.error;
-               console.error(`Erro do Drive para ${cli.nome_empresa}:`, dataDrive.error);
+               console.error(`Erro do Drive para ${cli.nome_empresa}:`, ultimoErro);
+               if (ultimoErro.toLowerCase().includes('credential') || ultimoErro.toLowerCase().includes('auth') || ultimoErro.toLowerCase().includes('token')) {
+                 mostrarToast(`Erro Fatal de Conexão com o Google!`, 'erro');
+                 break; 
+               }
             }
           } catch (e) {
             ultimoErro = e.message;
-            console.error(`Erro de conexão para ${cli.nome_empresa}:`, e);
+            console.error(`Erro de sistema para ${cli.nome_empresa}:`, e);
+            break;
           }
         }
 
@@ -914,11 +933,11 @@ export default function AdminPage() {
         if (sucessoCount > 0) {
           mostrarToast(`Sincronização concluída! ${sucessoCount} estrutura(s) gerada(s).`, 'sucesso');
         } else if (ultimoErro) {
-          mostrarToast(`Falha na criação. Erro retornado: ${ultimoErro}`, 'erro');
+          mostrarToast(`Falha na criação. Erro: ${ultimoErro}`, 'erro');
         }
         
         await carregarDados();
-        setProgressoSync(null); // <-- RESETA A BARRA AO TERMINAR
+        setProgressoSync(null); 
         setSubindo(false);
       }, 
       'sucesso'
@@ -937,6 +956,11 @@ export default function AdminPage() {
 
   // Função para apenas abrir numa nova aba sem forçar download
   function visualizarDocumento(caminho) {
+    if (caminho.startsWith('DRIVE:')) {
+      const fileId = caminho.split('DRIVE:')[1];
+      window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+      return;
+    }
     const { data } = supabase.storage.from('documentos').getPublicUrl(caminho);
     window.open(data.publicUrl, '_blank');
   }
@@ -945,6 +969,13 @@ export default function AdminPage() {
   async function baixarDocumento(caminho, nomeOriginal) {
     setSubindo(true); // Trava a tela para ficheiros grandes
     
+    if (caminho.startsWith('DRIVE:')) {
+      const fileId = caminho.split('DRIVE:')[1];
+      window.open(`https://drive.google.com/uc?export=download&id=${fileId}`, '_blank');
+      setSubindo(false);
+      return;
+    }
+
     // 1. Faz o download do arquivo bruto (Blob) em vez de apenas pegar o link
     const { data, error } = await supabase.storage.from('documentos').download(caminho);
     
