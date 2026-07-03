@@ -455,9 +455,19 @@ export default function EspecialView({ params }) {
           </button>
           <button onClick={() => setAbaAtiva('documentos')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaAtiva === 'documentos' ? 'border-purple-500 text-purple-400' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconDoc /> Documentação
+            {isInterno && docsEnviados.filter(d => d.departamento === 'Societário' && d.status === 'pendente').length > 0 && (
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500 text-white font-black animate-pulse shadow-[0_0_10px_rgba(168,85,247,0.6)]">
+                {docsEnviados.filter(d => d.departamento === 'Societário' && d.status === 'pendente').length}
+              </span>
+            )}
           </button>
           <button onClick={() => setAbaAtiva('financeiro')} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaAtiva === 'financeiro' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
             <IconFinanceiro /> Financeiro & Taxas
+            {isInterno && docsEnviados.filter(d => d.departamento === 'Financeiro' && d.status === 'pendente').length > 0 && (
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-red-500 text-white font-black animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.6)]">
+                {docsEnviados.filter(d => d.departamento === 'Financeiro' && d.status === 'pendente').length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -973,8 +983,26 @@ export default function EspecialView({ params }) {
                               {finalizado && isInterno && (
                                 <div className="mt-2 flex flex-col items-center gap-3 w-full">
                                   {clientEnviouComprovante ? (
-                                    <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
-                                      O Cliente enviou o comprovante do saldo final!
+                                    <div className="w-full space-y-2">
+                                      <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
+                                        O Cliente enviou o comprovante do saldo final!
+                                      </div>
+                                      <div className="flex gap-2 w-full">
+                                        <button 
+                                          type="button" 
+                                          onClick={() => { const { data } = supabase.storage.from('documentos').getPublicUrl(clientEnviouComprovante.caminho_storage); window.open(data.publicUrl, '_blank'); }} 
+                                          className="flex-1 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white py-1.5 rounded font-bold transition"
+                                        >
+                                          Visualizar
+                                        </button>
+                                        <button 
+                                          type="button" 
+                                          onClick={() => baixarDocumento(clientEnviouComprovante.caminho_storage, clientEnviouComprovante.nome_original)} 
+                                          className="flex-1 text-[10px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition"
+                                        >
+                                          Baixar
+                                        </button>
+                                      </div>
                                     </div>
                                   ) : (
                                     <div className="bg-orange-500/10 text-orange-400 border border-orange-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
@@ -991,7 +1019,11 @@ export default function EspecialView({ params }) {
                                       : 'bg-emerald-500 text-[#0d1b2a] hover:bg-emerald-400'
                                     }`}
                                   >
-                                    {proc.honorario_pago ? 'Reverter Baixa' : 'Dar Baixa Manual (Saldo Recebido)'}
+                                    {proc.honorario_pago 
+                                      ? 'Reverter Baixa' 
+                                      : clientEnviouComprovante 
+                                        ? 'Dar Baixa (comprovante conferido)' 
+                                        : 'Dar Baixa Manual (Saldo Recebido)'}
                                   </button>
                                 </div>
                               )}
