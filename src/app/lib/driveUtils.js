@@ -3,17 +3,27 @@ import { drive } from './googleDrive';
 const ROOT_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 
 /**
- * Cria a estrutura espelho perfeita para um cliente dentro do Drive Compartilhado
- * @param {string} nomeEmpresa Nome da empresa do cliente
- * @param {string} tipoConta 'mensalista' ou 'especiais'
- * @returns {object} Objeto contendo os IDs de todas as pastas criadas
+ * Função auxiliar para buscar ou criar uma pasta organizadora (Mensalistas ou Societário)
  */
-export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensalista') {
+async function obterOuCriarPastaPaiSetor(nomeSetor) {
   try {
-    // 1. Cria a pasta principal do cliente
-    const pastaClienteResponse = await drive.files.create({
+    // 1. Procura se a pasta (ex: "Mensalistas") já existe dentro da Portal Innovative
+    const response = await drive.files.list({
+      q: `name = '${nomeSetor}' and '${ROOT_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id)',
+      spaces: 'drive',
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+    });
+
+    if (response.data.files && response.data.files.length > 0) {
+      return response.data.files[0].id;
+    }
+
+    // 2. Se não existir, cria ela na hora
+    const novaPastaSetor = await drive.files.create({
       requestBody: {
-        name: nomeEmpresa,
+        name: nomeSetor,
         mimeType: 'application/vnd.google-apps.folder',
         parents: [ROOT_ID],
       },
@@ -21,23 +31,51 @@ export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensa
       supportsAllDrives: true,
     });
 
-    const pastaClienteId = pastaClienteResponse.data.id;
+    return novaPastaSetor.data.id;
+  } catch (error) {
+    console.error(`Erro ao obter/criar pasta pai ${nomeSetor}:`, error);
+    throw error;
+  }
+}
 
-    // 2. Define as subpastas dependendo do tipo de conta
+/**
+ * Cria a estrutura espelho perfeita para um cliente dividindo em Mensalistas e Societário
+ */
+export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensalista') {
+  try {
+    let pastaPaiSetorId = null;
     let subpastas = [];
-    if (tipoConta === 'especiais' || tipoConta === 'especial') {
-      // Pastas do Societário (Pode alterar os nomes se quiser!)
-      subpastas = ['Documentos Recebidos', 'Processos', 'Taxas e Guias', 'Lixeira'];
+    const isSocietario = tipoConta === 'especiais' || tipoConta === 'especial';
+
+    // MÁGICA 1: Define a rota e o destino com base no tipo de conta
+    if (isSocietario) {
+      pastaPaiSetorId = await obterOuCriarPastaPaiSetor('Societário');
+      // No societário o cliente não tem pastas fixas de setores, os processos viram pastas depois!
+      subpastas = ['Documentos Recebidos', 'Lixeira']; 
     } else {
-      // Pastas do Mensalista
+      pastaPaiSetorId = await obterOuCriarPastaPaiSetor('Mensalistas');
+      // Pastas fixas do Mensalista
       subpastas = ['Contábil', 'Fiscal', 'DP - RH', 'Documentos Recebidos', 'Lixeira'];
     }
+
+    // 2. Cria a pasta da Empresa dentro da pasta pai correta (Mensalistas ou Societário)
+    const pastaClienteResponse = await drive.files.create({
+      requestBody: {
+        name: nomeEmpresa,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [pastaPaiSetorId], // ➔ JOGA DENTRO DA PASTA DO SETOR!
+      },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+
+    const pastaClienteId = pastaClienteResponse.data.id;
 
     const mapeamentoIds = {
       pasta_raiz_cliente: pastaClienteId
     };
 
-    // 3. Cria as subpastas
+    // 3. Cria as subpastas internas da empresa
     for (const subpasta of subpastas) {
       const subResponse = await drive.files.create({
         requestBody: {
@@ -49,7 +87,7 @@ export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensa
         supportsAllDrives: true,
       });
 
-      const chaveAmigavel = `pasta_${subpasta.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      const chaveAmigavel = `pasta_${subpasta.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}`;
       mapeamentoIds[chaveAmigavel] = subResponse.data.id;
     }
 
