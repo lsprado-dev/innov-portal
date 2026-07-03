@@ -2,18 +2,18 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { Readable } from 'stream';
 
-// Lógica à prova de balas para ler a chave privada (Remove aspas extras e converte as quebras de linha)
-const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
-  .replace(/\\n/g, '\n')
-  .replace(/^"|"$/g, ''); 
+// 🚀 BLINDAGEM MÁXIMA DA CHAVE PRIVADA
+let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+privateKey = privateKey.replace(/"/g, ''); // Arranca QUALQUER aspa que a Vercel colocar
+privateKey = privateKey.replace(/\\n/g, '\n'); // Transforma o texto \n em quebra de linha real
 
-// Autentica o nosso robô
-const auth = new google.auth.JWT(
-  process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  null,
-  privateKey,
-  ['https://www.googleapis.com/auth/drive']
-);
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: privateKey,
+  },
+  scopes: ['https://www.googleapis.com/auth/drive'],
+});
 const drive = google.drive({ version: 'v3', auth });
 
 export async function POST(req) {
