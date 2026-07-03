@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { enviarEmailDemanda } from './lib/email'; // Ajustado para a pasta real
+import { enviarEmailDemanda } from './lib/email';
+import { inscreverAparelho, dispararPush } from './lib/push'; // Ajustado para a pasta real
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -162,6 +163,14 @@ export default function AdminPage() {
 
   // ESTADO PARA O BALÃO DE COPIAR SENHA
   const [senhaCopiadaId, setSenhaCopiadaId] = useState(null);
+  const [notificacoesAtivas, setNotificacoesAtivas] = useState(true);
+  const [pedindoPush, setPedindoPush] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission !== 'granted') setNotificacoesAtivas(false);
+    }
+  }, []);
   
   // ESTADO DOS LOGS DE AUDITORIA
   const [logs, setLogs] = useState([]);
@@ -1384,6 +1393,21 @@ export default function AdminPage() {
                 <button onClick={() => salvarClientesCSV()} className="px-5 py-2 bg-[#d4af37] text-[#0d1b2a] rounded font-bold text-sm hover:bg-yellow-500">Salvar Tudo ({previewCSV.length} empresas)</button>
               </div>
             </div>
+          </div>
+        )}
+
+        {!notificacoesAtivas && (
+          <div className="mb-6 bg-blue-500/10 border border-blue-500/30 p-5 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg animate-in fade-in slide-in-from-top-4">
+             <div className="flex items-center gap-4">
+                <span className="text-4xl animate-bounce drop-shadow-lg">🔔</span>
+                <div>
+                   <h3 className="text-blue-400 font-black text-sm uppercase tracking-wide">Notificações Desativadas</h3>
+                   <p className="text-xs text-blue-200/80 mt-1">Ative para receber alertas sonoros e na tela sobre novas demandas e documentos dos clientes.</p>
+                </div>
+             </div>
+             <button onClick={async () => { setPedindoPush(true); const sucesso = await inscreverAparelho(localStorage.getItem('usuario_id'), 'interno'); if(sucesso){ setNotificacoesAtivas(true); mostrarToast('Notificações ativadas com sucesso!', 'sucesso'); } else { mostrarToast('Permissão negada. Verifique o cadeado na barra do navegador.', 'erro'); } setPedindoPush(false); }} disabled={pedindoPush} className="w-full sm:w-auto bg-blue-500 text-white font-black px-6 py-3.5 rounded-lg text-xs hover:bg-blue-400 transition shadow-[0_0_15px_rgba(59,130,246,0.4)] whitespace-nowrap">
+                {pedindoPush ? 'A aguardar permissão...' : 'Ativar Alertas'}
+             </button>
           </div>
         )}
 

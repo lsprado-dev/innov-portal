@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { enviarEmailDemanda } from '../../lib/email'; 
+import { inscreverAparelho, dispararPush } from '../../lib/push'; 
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -266,6 +267,14 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [mostrarSwitcher, setMostrarSwitcher] = useState(false);
 
   const [alertasSemArquivo, setAlertasSemArquivo] = useState({});
+  const [notificacoesAtivas, setNotificacoesAtivas] = useState(true);
+  const [pedindoPush, setPedindoPush] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission !== 'granted') setNotificacoesAtivas(false);
+    }
+  }, []);
   const [boletosSolicitados, setBoletosSolicitados] = useState([]); // Memória anti-spam
   const [mensalidadesPagas, setMensalidadesPagas] = useState([]); // Memória do checkbox
 
@@ -1453,6 +1462,22 @@ export default function MensalistaView({ params: paramsPromise }) {
             <button onClick={handleLogout} className="text-xs bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-4 py-2 rounded-lg transition-all font-bold">Sair</button>
           </div>
         </div>
+
+        {/* BANNER DE NOTIFICAÇÕES (PUSH) */}
+        {!notificacoesAtivas && !isInterno && (
+          <div className="mb-6 bg-blue-500/10 border border-blue-500/30 p-5 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg animate-in fade-in slide-in-from-top-4">
+             <div className="flex items-center gap-4">
+                <span className="text-4xl animate-bounce drop-shadow-lg">🔔</span>
+                <div>
+                   <h3 className="text-blue-400 font-black text-sm uppercase tracking-wide">Ative as Notificações no seu aparelho!</h3>
+                   <p className="text-xs text-blue-200/80 mt-1">Seja avisado em tempo real sobre novas guias de pagamento, documentos e respostas da nossa equipa.</p>
+                </div>
+             </div>
+             <button onClick={async () => { setPedindoPush(true); const sucesso = await inscreverAparelho(id, 'cliente'); if(sucesso){ setNotificacoesAtivas(true); mostrarToast('Notificações ativadas no seu aparelho!', 'sucesso'); } else { mostrarToast('Permissão negada. Verifique as configurações do navegador.', 'erro'); } setPedindoPush(false); }} disabled={pedindoPush} className="w-full sm:w-auto bg-blue-500 text-white font-black px-6 py-3.5 rounded-lg text-xs hover:bg-blue-400 transition shadow-[0_0_15px_rgba(59,130,246,0.4)] whitespace-nowrap">
+                {pedindoPush ? 'A aguardar permissão...' : 'Permitir Notificações'}
+             </button>
+          </div>
+        )}
 
         {/* CABEÇALHO DO CLIENTE COM LOGO */}
         {cliente && (
