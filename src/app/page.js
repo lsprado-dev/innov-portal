@@ -416,6 +416,30 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
+  async function handleResetarSenha(cliente) {
+    confirmarAcao('Resetar Senha', `Tem certeza que deseja resetar a senha de ${cliente.nome_empresa} para o padrão de fábrica?`, async () => {
+      setSubindo(true);
+      try {
+        const res = await fetch('/api/resetar-senha', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clienteId: cliente.id })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          mostrarToast(`Senha resetada! A nova senha é: ${data.senhaPadrao}`, 'sucesso');
+          await carregarDados(); // Recarrega para atualizar a tela
+        } else {
+          mostrarToast('Erro ao resetar: ' + data.error, 'erro');
+        }
+      } catch (err) {
+        mostrarToast('Erro de conexão.', 'erro');
+      }
+      setSubindo(false);
+    });
+  }
+
   async function handleCriarAlerta(e) {
     e.preventDefault();
     if (!formAlerta.titulo) return mostrarToast('O Título é obrigatório.', 'erro'); 
@@ -1428,11 +1452,20 @@ export default function AdminPage() {
                     </div>
                     <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-4 min-w-[200px] bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
                       <span className="text-xs font-bold text-zinc-500 uppercase">Senha Atual:</span>
-                      <div className="relative flex items-center">
+                      <div className="relative flex items-center gap-2">
                         {cli.senha_alterada ? (
-                          <span className="font-mono font-bold tracking-widest text-xs px-3 py-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 select-none">
-                            🔒 Personalizada
-                          </span>
+                          <>
+                            <span className="font-mono font-bold tracking-widest text-xs px-3 py-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 select-none">
+                              🔒 Personalizada
+                            </span>
+                            <button 
+                              onClick={() => handleResetarSenha(cli)}
+                              className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white px-2 py-1.5 rounded font-bold transition shadow-sm"
+                              title="Resetar para o Padrão de Fábrica"
+                            >
+                              Resetar
+                            </button>
+                          </>
                         ) : (
                           <>
                             <span 
