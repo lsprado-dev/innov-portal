@@ -2,12 +2,6 @@ import { NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
-
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -15,6 +9,14 @@ const supabaseAdmin = createClient(
 
 export async function POST(request) {
   try {
+    // MÁGICA: Configuração transferida para dentro da execução (Runtime)
+    // Usamos um fallback de e-mail genérico caso a variável do env falhe por algum motivo
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || 'mailto:sistema@innovbusiness.com.br',
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    );
+
     const { usuarioId, titulo, body, url } = await request.json();
 
     let query = supabaseAdmin.from('push_subscriptions').select('subscription');
