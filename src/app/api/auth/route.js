@@ -48,7 +48,7 @@ export async function POST(request) {
         const tokenAdmin = jwt.sign(
           { aud: 'authenticated', role: 'authenticated', sub: authData.user.id, email: emailFinal, is_admin: true },
           process.env.SUPABASE_JWT_SECRET,
-          { expiresIn: '7d' }
+          { expiresIn: '30d' }
         );
         return NextResponse.json({ success: true, tipo: 'interno', nome: nomeAdmin, id: authData.user.id, token: tokenAdmin });
       } else {
@@ -123,7 +123,7 @@ export async function POST(request) {
       const token = jwt.sign(
         { aud: 'authenticated', role: 'authenticated', sub: clienteFinal.id, email: emailFinal },
         process.env.SUPABASE_JWT_SECRET,
-        { expiresIn: '7d' }
+        { expiresIn: '30d' }
       );
 
       return NextResponse.json({ success: true, tipo: 'cliente', nome: nomePainel, id: clienteFinal.id, token: token });

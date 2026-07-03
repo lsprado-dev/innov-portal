@@ -125,6 +125,35 @@ export default function MensalistaView({ params: paramsPromise }) {
     return () => window.removeEventListener('sessao_expirada', handleSessaoExpirada);
   }, []);
 
+  // ==========================================
+  // RENOVAÇÃO SILENCIOSA DE SESSÃO (+30 DIAS)
+  // ==========================================
+  useEffect(() => {
+    async function renovarSessao() {
+      const tokenAtual = localStorage.getItem('supabase_token');
+      if (!tokenAtual) return;
+
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tokenAtual })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success && data.token) {
+          // Troca o passe velho pelo passe novo recém-carimbado!
+          localStorage.setItem('supabase_token', data.token);
+        }
+      } catch (e) {
+        console.error('Falha ao tentar renovar a sessão em background:', e);
+      }
+    }
+    
+    renovarSessao();
+  }, []);
+
   const params = use(paramsPromise);
   const { id } = params;
 
