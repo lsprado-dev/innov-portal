@@ -580,18 +580,13 @@ export default function AdminPage() {
 
     let alvosIds = [];
     if (formPush.alvo === 'interno') {
-      alvosIds = 'interno'; // O Servidor sabe que é para avisar todo o time!
-    } else if (formPush.alvo === 'todos') {
-      alvosIds = clientes.map(c => c.id);
-    } else if (formPush.alvo === 'selecionados') {
+      alvosIds = 'interno'; // Dispara para toda a equipe interna
+    } else {
       if (formAlerta.clientesSelecionados.length === 0) {
          setSubindo(false);
-         return mostrarToast('Selecione os clientes na aba Cobranças primeiro.', 'erro');
+         return mostrarToast('Selecione pelo menos um cliente ou mude para o modo Equipe Interna.', 'erro');
       }
       alvosIds = formAlerta.clientesSelecionados.map(c => c.id);
-    } else {
-      // Filtra por Regime (Simples, Presumido, Real)
-      alvosIds = clientes.filter(c => c.regime_tributario === formPush.alvo).map(c => c.id);
     }
 
     await dispararPush(alvosIds, formPush.titulo, formPush.mensagem);
@@ -2133,17 +2128,60 @@ export default function AdminPage() {
                 
                 <form onSubmit={handleDisparoPushMassa} className="space-y-6">
                   <div className="bg-[#0d1b2a] p-5 rounded-lg border border-blue-500/20 shadow-inner">
-                    <label className="block text-xs font-bold text-zinc-300 uppercase mb-4 border-b border-blue-500/20 pb-2">Destinatários da Notificação</label>
-                    <select value={formPush.alvo} onChange={e => setFormPush({...formPush, alvo: e.target.value})} className="w-full sm:w-1/2 bg-[#1b263b] border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-white focus:border-blue-400 focus:outline-none cursor-pointer">
-                      <option value="todos">Todos os Clientes Ativos</option>
-                      <option value="interno">🚨 Apenas a Equipe Interna (Admins)</option>
-                      <option value="selecionados">Apenas Clientes Selecionados (Usa a lista da aba de cobranças)</option>
-                      <optgroup label="Por Regime Tributário">
-                        <option value="Simples Nacional">Empresas do Simples Nacional</option>
-                        <option value="Lucro Presumido">Empresas do Lucro Presumido</option>
-                        <option value="Lucro Real">Empresas do Lucro Real</option>
-                      </optgroup>
-                    </select>
+                    <label className="block text-xs font-bold text-zinc-300 uppercase mb-4 border-b border-blue-500/20 pb-2">1. Selecionar Destinatários do Alerta</label>
+                    
+                    {/* BOTOES DE SELEÇÃO EM MASSA RÁPIDA */}
+                    <div className="flex flex-wrap gap-3 mb-5">
+                      <button type="button" onClick={() => { setFormPush({...formPush, alvo: 'interno'}); setFormAlerta({...formAlerta, clientesSelecionados: []}); }} className={`text-sm font-bold px-4 py-2 rounded-lg border transition-all ${formPush.alvo === 'interno' ? 'bg-red-500 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500 hover:text-white'}`}>🚨 Apenas Equipe Interna (Admins)</button>
+                      <button type="button" onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); setFormAlerta({...formAlerta, clientesSelecionados: []}); }} className="text-sm font-medium px-4 py-2 rounded-lg border transition-all text-white bg-zinc-800/50 border-zinc-700 hover:border-zinc-500">Limpar Seleção</button>
+                      <button type="button" onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); handleSelecionarMassa('todos'); }} className="text-sm font-medium px-4 py-2 rounded-lg border transition-all text-white bg-zinc-800/50 border-zinc-700 hover:border-zinc-500">Todos os Clientes</button>
+                      <button type="button" onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); handleSelecionarMassa('Simples Nacional'); }} className="text-sm font-medium px-4 py-2 rounded-lg border transition-all text-white bg-zinc-800/50 border-zinc-700 hover:border-zinc-500">Simples Nacional</button>
+                      <button type="button" onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); handleSelecionarMassa('Lucro Presumido'); }} className="text-sm font-medium px-4 py-2 rounded-lg border transition-all text-white bg-zinc-800/50 border-zinc-700 hover:border-zinc-500">Lucro Presumido</button>
+                      <button type="button" onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); handleSelecionarMassa('Lucro Real'); }} className="text-sm font-medium px-4 py-2 rounded-lg border transition-all text-white bg-zinc-800/50 border-zinc-700 hover:border-zinc-500">Lucro Real</button>
+                    </div>
+
+                    {formPush.alvo === 'interno' ? (
+                      <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-lg text-center text-xs font-bold text-red-400 uppercase tracking-widest animate-pulse shadow-inner">
+                        Modo Equipe Ativo: A mensagem será enviada instantaneamente para os celulares/PCs de TODOS os funcionários logados.
+                      </div>
+                    ) : (
+                      <div>
+                        {/* AUTOCOMPLETE DE PESQUISA */}
+                        <div className="relative">
+                          <input type="text" placeholder="Pesquise manualmente pelo nome da empresa..." value={buscaAlertaInput} onChange={(e) => { setBuscaAlertaInput(e.target.value); setMostrarAutoAlerta(true); }} onFocus={() => setMostrarAutoAlerta(true)} onBlur={() => setTimeout(() => setMostrarAutoAlerta(false), 200)} className="w-full bg-[#1b263b] border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-400 transition-colors" />
+                          {mostrarAutoAlerta && buscaAlertaInput.length > 0 && clientesParaAlerta.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-[#1b263b] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
+                              {clientesParaAlerta.map((cli) => (
+                                <div key={`auto-push-cli-${cli.id}`} onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); adicionarClienteAlerta(cli); }} className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between">
+                                  <span className="flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</span>
+                                  <span className="text-[10px] text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">{cli.regime_tributario}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* LISTAGEM DE ELEMENTOS EM CHIPS */}
+                        {formAlerta.clientesSelecionados.length > 0 && (
+                          <div className="mt-4 p-4 bg-[#1b263b] rounded-lg border border-blue-500/20 shadow-inner">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm font-bold text-blue-400">{formAlerta.clientesSelecionados.length} empresa(s) na fila do Push</span>
+                              <button type="button" onClick={() => setMostrarModalClientes(true)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded text-white font-bold transition border border-zinc-600 shadow-sm">Ver / Ajustar Lista</button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {formAlerta.clientesSelecionados.slice(0, 10).map(cli => (
+                                <span key={cli.id} className="flex items-center gap-1 bg-blue-500/10 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">
+                                  {cli.nome_empresa} <button type="button" onClick={() => removerClienteAlerta(cli.id)} className="ml-1 hover:text-white bg-black/20 rounded-full w-4 h-4 flex items-center justify-center transition">✕</button>
+                                </span>
+                              ))}
+                              {formAlerta.clientesSelecionados.length > 10 && (
+                                <span className="text-xs text-zinc-400 py-1.5 font-medium px-2">+ {formAlerta.clientesSelecionados.length - 10} ocultas...</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
