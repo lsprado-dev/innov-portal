@@ -620,6 +620,14 @@ export default function AdminPage() {
 
     await dispararPush(alvosIds, formPush.titulo, formPush.mensagem);
     
+    // MÁGICA: Grava no Histórico de Auditoria para sabermos quem enviou o Push!
+    await supabase.from('logs_auditoria').insert([{
+      usuario_nome: operador,
+      usuario_tipo: 'interno',
+      acao: 'DISPARO_PUSH',
+      detalhe: `Enviou alerta "${formPush.titulo}" para o grupo: ${formPush.alvo.toUpperCase()}`
+    }]);
+
     mostrarToast('Notificações push disparadas com sucesso!', 'sucesso');
     setFormPush({ ...formPush, titulo: '', mensagem: '' });
     setSubindo(false);
