@@ -2,11 +2,16 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { Readable } from 'stream';
 
+// Lógica à prova de balas para ler a chave privada (Remove aspas extras e converte as quebras de linha)
+const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
+  .replace(/\\n/g, '\n')
+  .replace(/^"|"$/g, ''); 
+
 // Autentica o nosso robô
 const auth = new google.auth.JWT(
   process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
   null,
-  process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  privateKey,
   ['https://www.googleapis.com/auth/drive']
 );
 const drive = google.drive({ version: 'v3', auth });
