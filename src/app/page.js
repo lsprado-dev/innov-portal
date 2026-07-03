@@ -856,86 +856,127 @@ export default function AdminPage() {
   async function sincronizarDriveClientesAntigos() {
     confirmarAcao(
       'Sincronizar Google Drive', 
-      'Deseja gerar as pastas no Google Drive para os clientes que faltam? O sistema irá separar as pastas de Mensalistas e Societários automaticamente.', 
+      'Deseja gerar as gavetas para clientes novos E sincronizar as subpastas antigas que ainda não estão no Drive?', 
       async () => {
         setSubindo(true);
+        let sucessoCount = 0;
+        let ultimoErro = null;
         
-        // MÁGICA 1: Agora puxamos CPF, CNPJ e Tipo de Conta do banco!
+        // --- 🚀 FASE 1: SINCRONIZAR CLIENTES NOVOS (RAIZ E SETORES) ---
         const { data: clientesSemDrive, error } = await supabase
           .from('clientes')
           .select('id, nome_empresa, tipo_conta, cpf, cnpj')
           .is('id_drive_raiz', null);
 
-        if (error || !clientesSemDrive || clientesSemDrive.length === 0) {
-          mostrarToast('Todos os clientes já possuem pastas no Drive ou não há clientes!', 'aviso');
-          setSubindo(false);
-          return;
-        }
+        if (!error && clientesSemDrive && clientesSemDrive.length > 0) {
+          const total = clientesSemDrive.length;
+          setProgressoSync({ atual: 0, total: total, empresa: 'Criando estruturas raiz...' });
+          
+          for (let i = 0; i < total; i++) {
+            const cli = clientesSemDrive[i];
+            setProgressoSync({ atual: i + 1, total: total, empresa: cli.nome_empresa });
 
-        const total = clientesSemDrive.length;
-        setProgressoSync({ atual: 0, total: total, empresa: 'Validando conexão com o Google...' });
-        
-        let sucessoCount = 0;
-        let ultimoErro = null;
+            const temCPF = cli.cpf && cli.cpf.trim() !== '';
+            const isSocietario = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || temCPF;
+            const tipoContaReal = isSocietario ? 'especiais' : 'mensalista';
 
-        for (let i = 0; i < total; i++) {
-          const cli = clientesSemDrive[i];
-          setProgressoSync({ atual: i + 1, total: total, empresa: cli.nome_empresa });
+            try {
+              const resDrive = await fetch('/api/drive/criar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nomeEmpresa: cli.nome_empresa, tipoConta: tipoContaReal }) 
+              });
+              const dataDrive = await resDrive.json();
+              
+              if (dataDrive.success) {
+                 const payloadUpdate = { id_drive_raiz: dataDrive.folders.pasta_raiz_cliente };
+                 
+                 if (isSocietario) {
+                   payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
+                   payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados;
+                   payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
+                 } else {
+                   payloadUpdate.id_drive_contabil = dataDrive.folders.pasta_cont_bil;
+                   payloadUpdate.id_drive_fiscal = dataDrive.folders.pasta_fiscal;
+                   payloadUpdate.id_drive_rh = dataDrive.folders.pasta_dp___rh;
+                   payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
+                   payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados;
+                   payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
+                 }
 
-          // INTELIGÊNCIA: Se tem CPF ou se o tipo for especial, joga pro Societário!
-          const temCPF = cli.cpf && cli.cpf.trim() !== '';
-          const isSocietario = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || temCPF;
-          const tipoContaReal = isSocietario ? 'especiais' : 'mensalista';
-
-          try {
-            const resDrive = await fetch('/api/drive/criar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              // MÁGICA 2: Mandamos o tipo de conta para a API
-              body: JSON.stringify({ nomeEmpresa: cli.nome_empresa, tipoConta: tipoContaReal }) 
-            });
-            const dataDrive = await resDrive.json();
-            
-            if (dataDrive.success) {
-               // Salvamos as pastas no banco de dados de acordo com o que foi gerado
-               const payloadUpdate = { id_drive_raiz: dataDrive.folders.pasta_raiz_cliente };
-               
-               if (isSocietario) {
-                 payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
-                 payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados; // <-- NOVO AQUI
-                 payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
-               } else {
-                 payloadUpdate.id_drive_contabil = dataDrive.folders.pasta_cont_bil;
-                 payloadUpdate.id_drive_fiscal = dataDrive.folders.pasta_fiscal;
-                 payloadUpdate.id_drive_rh = dataDrive.folders.pasta_dp___rh;
-                 payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
-                 payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados; // <-- NOVO AQUI
-                 payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
-               }
-
-               await supabase.from('clientes').update(payloadUpdate).eq('id', cli.id);
-               sucessoCount++;
-            } else {
-               ultimoErro = dataDrive.error;
-               console.error(`Erro do Drive para ${cli.nome_empresa}:`, ultimoErro);
-               if (ultimoErro.toLowerCase().includes('credential') || ultimoErro.toLowerCase().includes('auth') || ultimoErro.toLowerCase().includes('token')) {
-                 mostrarToast(`Erro Fatal de Conexão com o Google!`, 'erro');
-                 break; 
-               }
-            }
-          } catch (e) {
-            ultimoErro = e.message;
-            console.error(`Erro de sistema para ${cli.nome_empresa}:`, e);
-            break;
+                 const { error: errUpdate } = await supabase.from('clientes').update(payloadUpdate).eq('id', cli.id);
+                 if (errUpdate) { ultimoErro = errUpdate.message; break; }
+                 sucessoCount++;
+              } else {
+                 ultimoErro = dataDrive.error;
+                 if (ultimoErro?.toLowerCase().includes('credential') || ultimoErro?.toLowerCase().includes('token')) {
+                   mostrarToast(`Erro Fatal de Conexão com o Google!`, 'erro');
+                   break; 
+                 }
+              }
+            } catch (e) { ultimoErro = e.message; break; }
           }
         }
 
-        setProgressoSync({ atual: total, total: total, empresa: 'Finalizando...' });
+        // --- 🚀 FASE 2: SINCRONIZAR SUBPASTAS PERSONALIZADAS ANTIGAS ---
+        setProgressoSync({ atual: 1, total: 1, empresa: 'Buscando subpastas avulsas...' });
+        
+        // Puxa as subpastas órfãs. A ordem 'parent_id' garante que as subpastas pai sejam criadas antes das filhas!
+        const { data: subpastasPendentes } = await supabase
+          .from('pastas_portal')
+          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh)')
+          .is('id_drive_pasta', null)
+          .order('parent_id', { ascending: true, nullsFirst: true });
 
-        if (sucessoCount > 0) {
-          mostrarToast(`Sincronização concluída! ${sucessoCount} estrutura(s) gerada(s).`, 'sucesso');
+        let subpastasSincronizadas = 0;
+
+        if (subpastasPendentes && subpastasPendentes.length > 0) {
+          for (let j = 0; j < subpastasPendentes.length; j++) {
+            const sp = subpastasPendentes[j];
+            setProgressoSync({ atual: j + 1, total: subpastasPendentes.length, empresa: `Subpasta: ${sp.nome}` });
+
+            // Identifica quem é a gaveta Pai lá no Google Drive
+            let parentDriveId = null;
+            if (!sp.parent_id) {
+              if (sp.setor === 'contabil') parentDriveId = sp.clientes.id_drive_contabil;
+              else if (sp.setor === 'fiscal') parentDriveId = sp.clientes.id_drive_fiscal;
+              else if (sp.setor === 'rh') parentDriveId = sp.clientes.id_drive_rh;
+              else parentDriveId = sp.clientes.id_drive_raiz;
+            } else {
+              const { data: pai } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', sp.parent_id).single();
+              if (pai && pai.id_drive_pasta) parentDriveId = pai.id_drive_pasta;
+            }
+
+            if (parentDriveId) {
+              try {
+                const resSub = await fetch('/api/drive/criar-subpasta', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ nomePasta: sp.nome, parentDriveId })
+                });
+                const dataSub = await resSub.json();
+                if (dataSub.success && dataSub.id_drive_pasta) {
+                  await supabase.from('pastas_portal').update({ id_drive_pasta: dataSub.id_drive_pasta }).eq('id', sp.id);
+                  subpastasSincronizadas++;
+                }
+              } catch(e) { console.error('Erro na subpasta', e); }
+            }
+          }
+        }
+
+        setProgressoSync({ atual: 1, total: 1, empresa: 'Finalizando...' });
+
+        // Relatório Final Inteligente
+        if (sucessoCount > 0 && subpastasSincronizadas > 0) {
+          mostrarToast(`${sucessoCount} empresas e ${subpastasSincronizadas} subpastas criadas!`, 'sucesso');
+        } else if (sucessoCount > 0) {
+          mostrarToast(`${sucessoCount} novas empresas geradas no Drive!`, 'sucesso');
+        } else if (subpastasSincronizadas > 0) {
+          mostrarToast(`${subpastasSincronizadas} subpastas antigas sincronizadas no Drive!`, 'sucesso');
+        } else if (!ultimoErro) {
+          mostrarToast('O seu portal e Google Drive já estão 100% alinhados!', 'aviso');
         } else if (ultimoErro) {
-          mostrarToast(`Falha na criação. Erro: ${ultimoErro}`, 'erro');
+          mostrarToast(`Falha no banco ou sistema: ${ultimoErro}`, 'erro');
         }
         
         await carregarDados();
