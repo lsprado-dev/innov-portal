@@ -943,7 +943,7 @@ export default function EspecialView({ params }) {
                                 
                                 {!proc.honorario_pago && !honorarioPagoManual[proc.id] && (
                                   <label className="block w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2.5 rounded-lg text-[10px] uppercase tracking-wider hover:bg-yellow-500 transition shadow-sm text-center">
-                                    {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante do Saldo'}
+                                    {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante de Pagamento'}
                                     <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async (e) => {
                                       const file = e.target.files[0];
                                       if(!file) return;
