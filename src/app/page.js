@@ -133,7 +133,7 @@ export default function AdminPage() {
   
   const [formAlerta, setFormAlerta] = useState({
     clientesSelecionados: [],
-    responsavel: '', // NOVO: Definido ao carregar
+    responsavel: '', 
     tipo_documento: 'Extratos Bancários',
     titulo: '',
     mensagem: '',
@@ -143,11 +143,16 @@ export default function AdminPage() {
     dia_recorrencia: '',
     dia_vencimento: '',
     enviar_email: true,
+    enviar_push: true, // NOVO: Gatilho do Push na cobrança
     enviar_agora: true,
     data_envio_programado: '',
     exibir_prazo_email: true,
     exibir_vencimento_email: true
   });
+  
+  // NOVOS ESTADOS DA CENTRAL DE DISPARO
+  const [modoAlertaTopo, setModoAlertaTopo] = useState('cobrancas');
+  const [formPush, setFormPush] = useState({ alvo: 'todos', titulo: '', mensagem: '' });
   
   const [buscaAlertaInput, setBuscaAlertaInput] = useState('');
   const [mostrarAutoAlerta, setMostrarAutoAlerta] = useState(false);
@@ -545,20 +550,54 @@ export default function AdminPage() {
             }
           }
         }
-        mostrarToast(`Criado! E-mails disparados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
+        // MÁGICA 1: Dispara o PUSH para a lista de cobrança!
+        if (formAlerta.enviar_push) {
+           dispararPush(clientesAlvo.map(c => c.id), formAlerta.titulo, formAlerta.mensagem);
+        }
+        
+        mostrarToast(`Criado! Avisos disparados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
       } else if (isAgendadoFuturo) {
         mostrarToast(`Agendada para disparo futuro!`, 'sucesso');
       } else if (isRecorrente) {
         mostrarToast(`Automação Mensal Salva!`, 'sucesso');
       } else {
-        mostrarToast(`Cobrança publicada APENAS no portal (Sem e-mail).`, 'aviso');
+        mostrarToast(`Cobrança publicada APENAS no portal.`, 'aviso');
       }
 
-      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true });
+      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true });
       carregarDados();
     } else {
+
       mostrarToast('Erro ao criar cobrança no sistema: ' + error.message, 'erro');
     }
+    setSubindo(false);
+  }
+
+  async function handleDisparoPushMassa(e) {
+    e.preventDefault();
+    if (!formPush.titulo || !formPush.mensagem) return mostrarToast('Título e Mensagem são obrigatórios.', 'erro');
+    setSubindo(true);
+
+    let alvosIds = [];
+    if (formPush.alvo === 'interno') {
+      alvosIds = 'interno'; // O Servidor sabe que é para avisar todo o time!
+    } else if (formPush.alvo === 'todos') {
+      alvosIds = clientes.map(c => c.id);
+    } else if (formPush.alvo === 'selecionados') {
+      if (formAlerta.clientesSelecionados.length === 0) {
+         setSubindo(false);
+         return mostrarToast('Selecione os clientes na aba Cobranças primeiro.', 'erro');
+      }
+      alvosIds = formAlerta.clientesSelecionados.map(c => c.id);
+    } else {
+      // Filtra por Regime (Simples, Presumido, Real)
+      alvosIds = clientes.filter(c => c.regime_tributario === formPush.alvo).map(c => c.id);
+    }
+
+    await dispararPush(alvosIds, formPush.titulo, formPush.mensagem);
+    
+    mostrarToast('Notificações push disparadas com sucesso!', 'sucesso');
+    setFormPush({ ...formPush, titulo: '', mensagem: '' });
     setSubindo(false);
   }
 
@@ -2063,8 +2102,59 @@ export default function AdminPage() {
         {abaAtiva === 'alertas' && (
           <div className="space-y-6">
             
+            {/* NAVEGAÇÃO INTERNA DE DISPAROS */}
+            <div className="flex bg-[#1b263b] p-1.5 rounded-xl border border-zinc-800 w-full sm:w-max gap-1 shadow-lg">
+              <button onClick={() => setModoAlertaTopo('cobrancas')} className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${modoAlertaTopo === 'cobrancas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-md' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                <IconBell /> Gestão de Cobranças
+              </button>
+              <button onClick={() => setModoAlertaTopo('push')} className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${modoAlertaTopo === 'push' ? 'bg-blue-500 text-white shadow-md' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                <IconChat /> Disparo Rápido (Push)
+              </button>
+            </div>
+
+            {modoAlertaTopo === 'push' && (
+              <div className="bg-blue-500/10 p-6 md:p-8 rounded-xl border border-blue-500/30 shadow-xl animate-in fade-in slide-in-from-top-4">
+                <h2 className="text-xl font-black text-blue-400 mb-2 flex items-center gap-2">Central de Notificações (Celular)</h2>
+                <p className="text-xs text-blue-200/80 mb-8">Esta área envia apenas uma notificação direta e imediata para o celular/computador do grupo selecionado. Não cria histórico de cobrança no painel.</p>
+                
+                <form onSubmit={handleDisparoPushMassa} className="space-y-6">
+                  <div className="bg-[#0d1b2a] p-5 rounded-lg border border-blue-500/20 shadow-inner">
+                    <label className="block text-xs font-bold text-zinc-300 uppercase mb-4 border-b border-blue-500/20 pb-2">Destinatários da Notificação</label>
+                    <select value={formPush.alvo} onChange={e => setFormPush({...formPush, alvo: e.target.value})} className="w-full sm:w-1/2 bg-[#1b263b] border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-white focus:border-blue-400 focus:outline-none cursor-pointer">
+                      <option value="todos">Todos os Clientes Ativos</option>
+                      <option value="interno">🚨 Apenas a Equipe Interna (Admins)</option>
+                      <option value="selecionados">Apenas Clientes Selecionados (Usa a lista da aba de cobranças)</option>
+                      <optgroup label="Por Regime Tributário">
+                        <option value="Simples Nacional">Empresas do Simples Nacional</option>
+                        <option value="Lucro Presumido">Empresas do Lucro Presumido</option>
+                        <option value="Lucro Real">Empresas do Lucro Real</option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold text-zinc-300 uppercase">Título da Notificação</label>
+                      <input type="text" required placeholder="Ex: Feriado Nacional - Sexta-feira" value={formPush.titulo} onChange={e => setFormPush({...formPush, titulo: e.target.value})} className="w-full bg-[#0d1b2a] border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-white focus:border-blue-400 focus:outline-none" />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold text-zinc-300 uppercase">Mensagem (Corpo)</label>
+                      <textarea rows="2" required placeholder="Ex: Informamos que o escritório estará fechado nesta sexta..." value={formPush.mensagem} onChange={e => setFormPush({...formPush, mensagem: e.target.value})} className="w-full bg-[#0d1b2a] border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-white focus:border-blue-400 focus:outline-none resize-none"></textarea>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-5 border-t border-blue-500/20">
+                    <button type="submit" disabled={subindo} className="w-full md:w-auto bg-blue-500 text-white font-extrabold px-8 py-3.5 rounded-lg text-sm hover:bg-blue-400 transition shadow-[0_0_15px_rgba(59,130,246,0.4)] disabled:opacity-50">
+                      {subindo ? 'A disparar...' : 'Enviar Alertas Agora'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {/* FORMULÁRIO DE CRIAÇÃO E AUTOMATIZAÇÃO */}
-            <div className="bg-[#1b263b] p-6 md:p-8 rounded-xl border border-zinc-800 shadow-xl">
+            {modoAlertaTopo === 'cobrancas' && (
+            <div className="bg-[#1b263b] p-6 md:p-8 rounded-xl border border-zinc-800 shadow-xl animate-in fade-in">
               <h2 className="text-xl font-bold text-[#d4af37] mb-6 flex items-center gap-2"><IconBell /> Painel Avançado de Cobranças</h2>
               <form onSubmit={handleCriarAlerta} className="space-y-6">
                 
@@ -2200,19 +2290,35 @@ export default function AdminPage() {
                       )}
                     </div>
 
-                    {/* COLUNA 2: E-MAIL */}
-                    <div className="space-y-3">
-                        <label className="block text-xs font-bold text-[#d4af37] uppercase mb-1">Notificação por E-mail</label>
-                        <label className="flex items-center gap-3 cursor-pointer">
-                          <div className="relative">
-                            <input type="checkbox" checked={formAlerta.enviar_email} onChange={e => setFormAlerta({...formAlerta, enviar_email: e.target.checked})} className="sr-only cursor-pointer" />
-                            <div className={`block w-10 h-6 rounded-full transition-colors ${formAlerta.enviar_email ? 'bg-emerald-500' : 'bg-zinc-700'}`}></div>
-                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${formAlerta.enviar_email ? 'transform translate-x-4' : ''}`}></div>
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-white">Disparar E-mail ao Cliente</p>
-                          </div>
-                        </label>
+                    {/* COLUNA 2: E-MAIL E PUSH */}
+                    <div className="space-y-4">
+                        <label className="block text-xs font-bold text-[#d4af37] uppercase mb-1">Canais de Aviso Automático</label>
+                        
+                        <div className="flex flex-col gap-3">
+                          {/* CHECK E-MAIL */}
+                          <label className="flex items-center gap-3 cursor-pointer group">
+                            <div className="relative">
+                              <input type="checkbox" checked={formAlerta.enviar_email} onChange={e => setFormAlerta({...formAlerta, enviar_email: e.target.checked})} className="sr-only cursor-pointer" />
+                              <div className={`block w-10 h-6 rounded-full transition-colors ${formAlerta.enviar_email ? 'bg-emerald-500' : 'bg-zinc-700'}`}></div>
+                              <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${formAlerta.enviar_email ? 'transform translate-x-4' : ''}`}></div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-zinc-300 group-hover:text-white transition">Disparar E-mail</p>
+                            </div>
+                          </label>
+
+                          {/* CHECK PUSH (CELULAR) */}
+                          <label className="flex items-center gap-3 cursor-pointer group">
+                            <div className="relative">
+                              <input type="checkbox" checked={formAlerta.enviar_push} onChange={e => setFormAlerta({...formAlerta, enviar_push: e.target.checked})} className="sr-only cursor-pointer" />
+                              <div className={`block w-10 h-6 rounded-full transition-colors ${formAlerta.enviar_push ? 'bg-blue-500' : 'bg-zinc-700'}`}></div>
+                              <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${formAlerta.enviar_push ? 'transform translate-x-4' : ''}`}></div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-zinc-300 group-hover:text-white transition">Notificação (Push) no Celular/PC</p>
+                            </div>
+                          </label>
+                        </div>
 
                         {formAlerta.enviar_email && (
                           <div className="flex flex-wrap gap-4 border-l-2 border-emerald-500 pl-3 ml-2 mt-2">
@@ -2237,6 +2343,7 @@ export default function AdminPage() {
                 </div>
               </form>
             </div>
+            )}
 
             {/* ÁREA DE HISTÓRICO DIVIDIDA EM 4 ABAS LÓGICAS */}
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 shadow-2xl">
