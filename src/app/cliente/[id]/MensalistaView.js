@@ -646,19 +646,43 @@ export default function MensalistaView({ params: paramsPromise }) {
     abrirInputModal('Nova Pasta', '', 'Digite o nome da pasta...', async (nomePasta) => {
       if (!nomePasta || nomePasta.trim() === '') return;
       setSubindoArquivo(true);
+
+      // 1. Descobre qual é a pasta Pai no Google Drive para colocar a nova dentro dela
+      let parentDriveId = null;
+      if (!subpastaAtiva) {
+        if (pastaAtiva === 'contabil') parentDriveId = cliente.id_drive_contabil;
+        else if (pastaAtiva === 'fiscal') parentDriveId = cliente.id_drive_fiscal;
+        else if (pastaAtiva === 'rh') parentDriveId = cliente.id_drive_rh;
+        else parentDriveId = cliente.id_drive_raiz;
+      } else {
+        parentDriveId = pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta;
+      }
+
+      // 2. Manda o robô criar a pasta fisicamente no Google Drive em tempo real
+      let idDrivePastaFinal = null;
+      if (parentDriveId) {
+        try {
+          const resSub = await fetch('/api/drive/criar-subpasta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nomePasta: nomePasta.trim(), parentDriveId })
+          });
+          const dataSub = await resSub.json();
+          if (dataSub.success) idDrivePastaFinal = dataSub.id_drive_pasta;
+        } catch(e) { console.error("Erro ao espelhar pasta no Drive:", e); }
+      }
       
-      // Select para podermos pegar no ID da pasta que acabou de ser criada
-      const { error, data: novaPasta } = await supabase.from('pastas_portal').insert([{
+      const { error } = await supabase.from('pastas_portal').insert([{
         cliente_id: id,
         setor: pastaAtiva,
         nome: nomePasta.trim(),
-        parent_id: subpastaAtiva || null
-      }]).select().single();
+        parent_id: subpastaAtiva || null,
+        id_drive_pasta: idDrivePastaFinal // Amarra o ID do Drive no banco
+      }]);
       
       if (!error) {
-        // Dispara o Coringa se for a Lsprado
         await processarPastaCoringa(nomePasta.trim(), subpastaAtiva);
-        await registrarAuditoria('PASTA_CRIADA', `Criou a pasta "${nomePasta.trim()}" no setor de ${pastaAtiva}.`);
+        await registrarAuditoria('PASTA_CRIADA', `Criou a pasta "${nomePasta.trim()}" espelhada no Google Drive.`);
         await carregarDadosDaAba();
       }
       setSubindoArquivo(false);
@@ -709,25 +733,57 @@ export default function MensalistaView({ params: paramsPromise }) {
       mostrarToast(`Ignorado: "${file.name}" excede 15MB.`, 'erro');
       return false;
     }
-    const timestamp = Date.now();
-    
-    // MÁGICA: Remove acentos (ç, ã), espaços e vírgulas só para o link do servidor não explodir!
-    const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
-    const caminhoArquivo = `${id}/${pastaAtiva}/${timestamp}_${nomeSeguro}`;
-    
-    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
-    
-    if (storageError) {
-      mostrarToast(`Erro no arquivo "${file.name}": ${storageError.message}`, 'erro');
-      return false;
+
+    // 1. Identifica dinamicamente qual a pasta alvo correta do Google Drive
+    let folderIdDrive = null;
+    if (targetPastaId) {
+      folderIdDrive = pastas.find(p => p.id === targetPastaId)?.id_drive_pasta;
+    } else {
+      if (pastaAtiva === 'contabil') folderIdDrive = cliente.id_drive_contabil;
+      else if (pastaAtiva === 'fiscal') folderIdDrive = cliente.id_drive_fiscal;
+      else if (pastaAtiva === 'rh') folderIdDrive = cliente.id_drive_rh;
+      else folderIdDrive = cliente.id_drive_raiz;
     }
-    
-    // BLINDAGEM: O arquivo só responde ao UUID desta pasta exata, nunca pelo nome de texto!
+
+    let caminhoFinal = null;
+
+    // 2. Se a pasta do Drive existir, arremessa o arquivo direto para lá!
+    if (folderIdDrive) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folderId', folderIdDrive);
+
+      try {
+        const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
+        const resData = await res.json();
+        if (resData.success) {
+          caminhoFinal = `DRIVE:${resData.fileId}`;
+        }
+      } catch (err) { console.error("Erro no upload para o Drive:", err); }
+    }
+
+    // Fallback de Segurança: Se o Drive falhar, salva no Supabase Storage como backup
+    if (!caminhoFinal) {
+      const timestamp = Date.now();
+      const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
+      caminhoFinal = `${id}/${pastaAtiva}/${timestamp}_${nomeSeguro}`;
+      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoFinal, file);
+      if (storageError) {
+        mostrarToast(`Erro no arquivo "${file.name}": ${storageError.message}`, 'erro');
+        return false;
+      }
+    }
+
     await supabase.from('arquivos_portal').insert([{ 
-      cliente_id: id, setor: pastaAtiva, subpasta_id: targetPastaId, nome_original: file.name, caminho_storage: caminhoArquivo, enviado_por: operador 
+      cliente_id: id, 
+      setor: pastaAtiva, 
+      subpasta_id: targetPastaId, 
+      nome_original: file.name, 
+      caminho_storage: caminhoFinal, 
+      enviado_por: operador 
     }]);
     
-    await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}".`);
+    await registrarAuditoria('ARQUIVO_UPLOAD', `Subiu o documento "${file.name}" para o Drive.`);
     return true;
   }
 
@@ -1425,16 +1481,31 @@ export default function MensalistaView({ params: paramsPromise }) {
           if (uploaded) sucessoCount++;
         }
       } else if (item.isDirectory) {
-        // 🚀 SE FOR UMA PASTA: CRIA A PASTA NA BASE DE DADOS PRIMEIRO
+        // 🚀 SE FOR UMA PASTA dropped: Descobre o pai e cria no Drive antes do banco!
+        let idDrivePastaDropped = null;
+        let pDriveId = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : cliente.id_drive_raiz);
+        
+        if (pDriveId) {
+          try {
+            const resSub = await fetch('/api/drive/criar-subpasta', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nomePasta: item.name, parentDriveId: pDriveId })
+            });
+            const dataSub = await resSub.json();
+            if (dataSub.success) idDrivePastaDropped = dataSub.id_drive_pasta;
+          } catch(e){}
+        }
+
         const { data: novaPasta, error: erroPasta } = await supabase.from('pastas_portal').insert([{
           cliente_id: id,
           setor: pastaAtiva,
-          nome: item.name, // Nome da pasta que veio do Windows/Mac
-          parent_id: subpastaAtiva || null
+          nome: item.name,
+          parent_id: subpastaAtiva || null,
+          id_drive_pasta: idDrivePastaDropped
         }]).select().single();
 
         if (!erroPasta && novaPasta) {
-          // Espelha se for a Lsprado
           await processarPastaCoringa(novaPasta.nome, subpastaAtiva);
           
           // Abre a pasta atirada e puxa os ficheiros de lá de dentro
