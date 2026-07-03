@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { criarEstruturaClienteDrive } from '../../../../lib/driveUtils'; // Ajuste o caminho se a sua lib ficar em outro lugar
+// Opção 1: Tirar um nível de retorno (Geralmente resolve na hora)
+import { criarEstruturaClienteDrive } from '../../../lib/driveUtils'; 
+
+// Opção 2: Se a Opção 1 falhar, use o atalho absoluto do Next.js:
+// import { criarEstruturaClienteDrive } from '@/lib/driveUtils'; // Ajuste o caminho se a sua lib ficar em outro lugar
 
 export async function POST(req) {
   try {
