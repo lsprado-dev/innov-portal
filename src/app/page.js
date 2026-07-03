@@ -1456,7 +1456,7 @@ export default function AdminPage() {
                         {cli.senha_alterada ? (
                           <>
                             <span className="font-mono font-bold tracking-widest text-xs px-3 py-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 select-none">
-                              🔒 Personalizada
+                              Personalizada
                             </span>
                             <button 
                               onClick={() => handleResetarSenha(cli)}

@@ -263,6 +263,7 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   const [toasts, setToasts] = useState([]); // Memória dos Toasts
   const [carregando, setCarregando] = useState(true);
+  const [carregandoConteudo, setCarregandoConteudo] = useState(false);
   const [subindoArquivo, setSubindoArquivo] = useState(false);
   const [isDragging, setIsDragging] = useState(false); // Radar do Drag & Drop
 
@@ -460,45 +461,40 @@ export default function MensalistaView({ params: paramsPromise }) {
   }
 
   async function carregarDadosDaAba() {
-    setArquivos([]);
-    setPedidos([]);
-    setPastas([]);
-    setItensLixeira([]);
+    setCarregandoConteudo(true); // <--- Inicia a animação de loading
     
     if (abaPrincipal === 'pastas' && pastaAtiva) {
-      // 1. Carrega subpastas
-      const resPastas = await supabase.from('pastas_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).order('nome');
-      if (resPastas.data) setPastas(resPastas.data);
+      // MÁGICA: Prepara as 3 consultas e dispara juntas em paralelo (Muito mais rápido!)
+      const reqPastas = supabase.from('pastas_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).order('nome');
+      const reqArquivos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
+      const reqFinanceiro = pastaAtiva === 'financeiro' ? supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id) : Promise.resolve({ data: null });
 
-      // 2. Carrega arquivos ativos (fora da lixeira)
-      const { data } = await supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
-      if (data) {
-        setArquivos(data);
-        // NOVO: Apaga as bolinhas verdes se o cliente estiver vendo a pasta
+      const [resPastas, resArquivos, resFinanceiro] = await Promise.all([reqPastas, reqArquivos, reqFinanceiro]);
+
+      if (resPastas.data) setPastas(resPastas.data);
+      else setPastas([]);
+
+      if (resFinanceiro.data) setMensalidadesPagas(resFinanceiro.data.map(p => p.mes_ref));
+
+      if (resArquivos.data) {
+        setArquivos(resArquivos.data);
         const tipoSalvo = localStorage.getItem('usuario_tipo');
         if (tipoSalvo !== 'interno') {
-           const arquivosNaTela = data.filter(a => (a.subpasta_id || null) === (subpastaAtiva || null) && !a.visualizado_cliente);
+           const arquivosNaTela = resArquivos.data.filter(a => (a.subpasta_id || null) === (subpastaAtiva || null) && !a.visualizado_cliente);
            if (arquivosNaTela.length > 0) {
              const ids = arquivosNaTela.map(a => a.id);
-             // UPDATE OTIMISTA (Instantâneo no ecrã)
              setArquivosNaoLidos(prev => prev.filter(a => !ids.includes(a.id)));
              setArquivos(prev => prev.map(a => ids.includes(a.id) ? { ...a, visualizado_cliente: true } : a));
-             
-             // Atualiza no banco de dados em segundo plano, sem travar a tela
              supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids).then();
            }
         }
-      }
-
-      // 3. Carrega status de pagamentos manuais (apenas Financeiro)
-      if (pastaAtiva === 'financeiro') {
-        const { data: pagas } = await supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id);
-        if (pagas) setMensalidadesPagas(pagas.map(p => p.mes_ref));
+      } else {
+        setArquivos([]);
       }
     } 
     else if (abaPrincipal === 'envios') {
       const { data } = await supabase.from('envios_cliente').select('*').eq('cliente_id', id).is('data_exclusao', null).order('criado_em', { ascending: false });
-      if (data) setArquivos(data);
+      setArquivos(data || []);
     } 
     else if (abaPrincipal === 'solicitacoes') {
       const { data } = await supabase.from('pedidos_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
@@ -509,16 +505,14 @@ export default function MensalistaView({ params: paramsPromise }) {
           const naoLidos = data.filter(p => !p.visualizado_em && p.status === 'atendido').map(p => p.id);
           if (naoLidos.length > 0) {
             await supabase.from('pedidos_cliente').update({ visualizado_em: new Date().toISOString() }).in('id', naoLidos);
-            atualizarBadgeGlobal(id); // Limpa o banner verde da tela
-            // Atualiza localmente para mudar a cor para cinza sem precisar recarregar a tela
+            atualizarBadgeGlobal(id);
             setPedidos(prev => prev.map(p => naoLidos.includes(p.id) ? { ...p, visualizado_em: new Date().toISOString() } : p));
           }
         }
-      }
+      } else { setPedidos([]); }
     } 
     else if (abaPrincipal === 'alertas') {
       const { data } = await supabase.from('alertas_clientes').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
-      
       if (data) {
         setAlertas(data);
         const tipoSalvo = localStorage.getItem('usuario_tipo');
@@ -529,22 +523,21 @@ export default function MensalistaView({ params: paramsPromise }) {
             await registrarAuditoria('ALERTA_VISUALIZADO', `O cliente visualizou ${naoLidos.length} cobrança(s)/pendência(s) pendente(s) no portal.`);
           }
         }
-      }
+      } else { setAlertas([]); }
     }
     else if (abaPrincipal === 'lixeira') {
-      // Carrega arquivos apagados
       const reqArq = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).not('data_exclusao', 'is', null);
       const reqEnv = supabase.from('envios_cliente').select('*').eq('cliente_id', id).not('data_exclusao', 'is', null);
-      
       const [resArq, resEnv] = await Promise.all([reqArq, reqEnv]);
       
       let lixeiraCompleta = [];
       if (resArq.data) lixeiraCompleta = [...lixeiraCompleta, ...resArq.data.map(i => ({...i, origem: 'portal'}))];
       if (resEnv.data) lixeiraCompleta = [...lixeiraCompleta, ...resEnv.data.map(i => ({...i, origem: 'envios'}))];
-      
       lixeiraCompleta.sort((a, b) => new Date(b.data_exclusao) - new Date(a.data_exclusao));
       setItensLixeira(lixeiraCompleta);
     }
+
+    setCarregandoConteudo(false); // <--- Termina a animação
   }
 
   async function togglePagoManual(mesRef, estaPago) {
@@ -1788,84 +1781,94 @@ export default function MensalistaView({ params: paramsPromise }) {
                   </div>
                 </div>
 
-                {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS */}
-                {pastasAtuais.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                    {pastasAtuais.map(pasta => {
-                      const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
-                      return (
-                        <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md">
-                          <div className="flex items-center gap-3 flex-1 overflow-hidden relative" onClick={() => setSubpastaAtiva(pasta.id)}>
-                            <IconFolderSolid /> 
-                            <span className="font-bold text-zinc-200 truncate">{pasta.nome}</span>
-                            {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-1"></span>}
-                          </div>
-                          {isInterno && (
-                            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
-                              <button onClick={(e) => { e.stopPropagation(); handleRenomearPasta(pasta); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-600 px-2 py-1 rounded font-bold text-zinc-300">Renomear</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeletarPasta(pasta); }} className="text-[10px] bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded font-bold border border-red-500/20">Excluir</button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                {/* EXIBIÇÃO DE LOADING E DADOS */}
+                {carregandoConteudo ? (
+                  <div className="flex flex-col items-center justify-center py-12 opacity-80">
+                    <div className="w-10 h-10 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin mb-4 shadow-[0_0_15px_rgba(212,175,55,0.2)]"></div>
+                    <p className="text-sm text-[#d4af37] font-bold tracking-widest uppercase animate-pulse">Buscando documentos...</p>
                   </div>
-                )}
-
-                {/* EXIBIÇÃO DE ARQUIVOS */}
-                {arquivosFiltradosDaBusca.length === 0 ? (
-                  <p className="text-zinc-400 text-center py-8">Nenhum documento nesta área ainda.</p>
                 ) : (
                   <>
-                    {/* BARRA DE AÇÕES EM LOTE */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-3 rounded-lg mb-4 gap-3">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
-                        <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0} onChange={toggleSelecionarTodos} />
-                        Selecionar Todos
-                      </label>
-                      
-                      {selecionados.length > 0 && (
-                        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-                          <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionados.length} selecionado(s)</span>
-                          {isInterno && (
-                            <>
-                              <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="flex-1 sm:flex-none text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded text-blue-400 font-bold transition text-center">Mover</button>
-                              <button onClick={handleExcluirSelecionados} className="flex-1 sm:flex-none text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 font-bold transition text-center">Excluir</button>
-                            </>
-                          )}
-                          <button onClick={handleBaixarSelecionados} className="flex-1 sm:flex-none text-[10px] bg-[#d4af37] text-black px-3 py-2 rounded font-bold hover:bg-yellow-500 transition shadow-sm text-center">Baixar</button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-3">
-                      {arquivosFiltradosDaBusca.map((arq) => (
-                        <div key={arq.id} className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0 transition-all ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/5 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} />
-                            <IconFile />
-                            <div className="min-w-0 w-full cursor-pointer" onClick={() => toggleSelecao(arq.id)}>
-                              <p className="text-sm text-zinc-200 font-medium truncate max-w-md">{arq.nome_original}</p>
-                              <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
+                    {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS */}
+                    {pastasAtuais.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                        {pastasAtuais.map(pasta => {
+                          const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
+                          return (
+                            <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md">
+                              <div className="flex items-center gap-3 flex-1 overflow-hidden relative" onClick={() => setSubpastaAtiva(pasta.id)}>
+                                <IconFolderSolid /> 
+                                <span className="font-bold text-zinc-200 truncate">{pasta.nome}</span>
+                                {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-1"></span>}
+                              </div>
+                              {isInterno && (
+                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
+                                  <button onClick={(e) => { e.stopPropagation(); handleRenomearPasta(pasta); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-600 px-2 py-1 rounded font-bold text-zinc-300">Renomear</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDeletarPasta(pasta); }} className="text-[10px] bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded font-bold border border-red-500/20">Excluir</button>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-                            {isInterno && (
-                              <>
-                                <button onClick={() => setArquivosMovendo([arq])} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
-                                <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
-                                <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
-                              </>
-                            )}
-                            {!isInterno && (
-                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-4 py-2.5 rounded-lg text-[#d4af37] font-bold transition-all shadow-sm whitespace-nowrap">Suporte</button>
-                            )}
-                            <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
-                            <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
-                          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* EXIBIÇÃO DE ARQUIVOS */}
+                    {arquivosFiltradosDaBusca.length === 0 ? (
+                      <p className="text-zinc-400 text-center py-8">Nenhum documento nesta área ainda.</p>
+                    ) : (
+                      <>
+                        {/* BARRA DE AÇÕES EM LOTE */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-3 rounded-lg mb-4 gap-3">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
+                            <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0} onChange={toggleSelecionarTodos} />
+                            Selecionar Todos
+                          </label>
+                          
+                          {selecionados.length > 0 && (
+                            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+                              <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionados.length} selecionado(s)</span>
+                              {isInterno && (
+                                <>
+                                  <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="flex-1 sm:flex-none text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded text-blue-400 font-bold transition text-center">Mover</button>
+                                  <button onClick={handleExcluirSelecionados} className="flex-1 sm:flex-none text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 font-bold transition text-center">Excluir</button>
+                                </>
+                              )}
+                              <button onClick={handleBaixarSelecionados} className="flex-1 sm:flex-none text-[10px] bg-[#d4af37] text-black px-3 py-2 rounded font-bold hover:bg-yellow-500 transition shadow-sm text-center">Baixar</button>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
+
+                        <div className="space-y-3">
+                          {arquivosFiltradosDaBusca.map((arq) => (
+                            <div key={arq.id} className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0 transition-all ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/5 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} />
+                                <IconFile />
+                                <div className="min-w-0 w-full cursor-pointer" onClick={() => toggleSelecao(arq.id)}>
+                                  <p className="text-sm text-zinc-200 font-medium truncate max-w-md">{arq.nome_original}</p>
+                                  <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                                {isInterno && (
+                                  <>
+                                    <button onClick={() => setArquivosMovendo([arq])} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
+                                    <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
+                                    <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
+                                  </>
+                                )}
+                                {!isInterno && (
+                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-4 py-2.5 rounded-lg text-[#d4af37] font-bold transition-all shadow-sm whitespace-nowrap">Suporte</button>
+                                )}
+                                <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
+                                <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
