@@ -852,6 +852,60 @@ export default function AdminPage() {
     }, 'sucesso');
   }
 
+  async function sincronizarDriveClientesAntigos() {
+    confirmarAcao(
+      'Sincronizar Google Drive', 
+      'Deseja criar as pastas no Google Drive para todos os clientes antigos que ainda não possuem? Isso pode levar alguns minutos.', 
+      async () => {
+        setSubindo(true);
+        
+        const { data: clientesSemDrive, error } = await supabase
+          .from('clientes')
+          .select('id, nome_empresa')
+          .is('id_drive_raiz', null);
+
+        if (error || !clientesSemDrive || clientesSemDrive.length === 0) {
+          mostrarToast('Todos os clientes já possuem pastas no Drive!', 'aviso');
+          setSubindo(false);
+          return;
+        }
+
+        mostrarToast(`Iniciando sincronização de ${clientesSemDrive.length} cliente(s)...`, 'aviso');
+        let sucessoCount = 0;
+
+        for (const cli of clientesSemDrive) {
+          try {
+            const resDrive = await fetch('/api/drive/criar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nomeEmpresa: cli.nome_empresa })
+            });
+            const dataDrive = await resDrive.json();
+            
+            if (dataDrive.success) {
+               await supabase.from('clientes').update({
+                  id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
+                  id_drive_contabil: dataDrive.folders.pasta_cont_bil,
+                  id_drive_fiscal: dataDrive.folders.pasta_fiscal,
+                  id_drive_rh: dataDrive.folders.pasta_dp___rh,
+                  id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
+                  id_drive_lixeira: dataDrive.folders.pasta_lixeira
+               }).eq('id', cli.id);
+               sucessoCount++;
+            }
+          } catch (e) {
+            console.error(`Erro ao criar pasta para ${cli.nome_empresa}:`, e);
+          }
+        }
+
+        mostrarToast(`Sincronização concluída! ${sucessoCount} estrutura(s) gerada(s).`, 'sucesso');
+        await carregarDados();
+        setSubindo(false);
+      }, 
+      'sucesso'
+    );
+  }
+
   function rejeitarEDeletar(doc) {
     confirmarAcao('Apagar Documento', 'Tem certeza que deseja apagar permanentemente este documento?', async () => {
       setSubindo(true);
@@ -931,8 +985,35 @@ export default function AdminPage() {
     if (existe) {
       mostrarToast('Este cliente (Documento) já existe na base!', 'aviso');
     } else {
-      const { error } = await supabase.from('clientes').insert([payload]);
-      if (!error) {
+      const { data: novoClienteInserido, error } = await supabase.from('clientes').insert([payload]).select().single();
+      if (!error && novoClienteInserido) {
+        
+        // --- 🚀 MÁGICA DO GOOGLE DRIVE ---
+        mostrarToast('Criando pastas no Google Drive... Aguarde.', 'aviso');
+        try {
+          const resDrive = await fetch('/api/drive/criar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nomeEmpresa: formManual.nome_empresa })
+          });
+          const dataDrive = await resDrive.json();
+          
+          if (dataDrive.success) {
+             await supabase.from('clientes').update({
+                id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
+                id_drive_contabil: dataDrive.folders.pasta_cont_bil,
+                id_drive_fiscal: dataDrive.folders.pasta_fiscal,
+                id_drive_rh: dataDrive.folders.pasta_dp___rh,
+                id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
+                id_drive_lixeira: dataDrive.folders.pasta_lixeira
+             }).eq('id', novoClienteInserido.id);
+             mostrarToast('Pastas criadas e sincronizadas com sucesso no Drive!', 'sucesso');
+          }
+        } catch (e) {
+          console.error("Erro na integração com Drive:", e);
+        }
+        // --- FIM DA MÁGICA ---
+
         mostrarToast('Cliente cadastrado com sucesso!', 'sucesso');
         setModalAdicionar(false);
         setFormManual({ nome_empresa: '', documento: '', nome_contato: '', email: '', celular: '', regime_tributario: 'Simples Nacional' });
@@ -1108,6 +1189,33 @@ export default function AdminPage() {
       }]).select().single();
 
       if (!error && novoCliente) { 
+        
+        // --- 🚀 MÁGICA DO GOOGLE DRIVE ---
+        mostrarToast('Criando pastas no Google Drive... Aguarde.', 'aviso');
+        try {
+          const resDrive = await fetch('/api/drive/criar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nomeEmpresa: solicitacao.nome_empresa })
+          });
+          const dataDrive = await resDrive.json();
+          
+          if (dataDrive.success) {
+             await supabase.from('clientes').update({
+                id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
+                id_drive_contabil: dataDrive.folders.pasta_cont_bil,
+                id_drive_fiscal: dataDrive.folders.pasta_fiscal,
+                id_drive_rh: dataDrive.folders.pasta_dp___rh,
+                id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
+                id_drive_lixeira: dataDrive.folders.pasta_lixeira
+             }).eq('id', novoCliente.id);
+             mostrarToast('Pastas criadas e sincronizadas com sucesso no Drive!', 'sucesso');
+          }
+        } catch (e) {
+          console.error("Erro na integração com Drive:", e);
+        }
+        // --- FIM DA MÁGICA ---
+
         // Se a pessoa pediu para criar essa conta NOVA mas atrelada à conta DELE, faz a conexão:
         if (solicitacao.tipo_solicitacao === 'novo_vinculo' && solicitacao.vinculo_origem_id) {
            const { data: origem } = await supabase.from('clientes').select('id, empresas_vinculadas').eq('id', solicitacao.vinculo_origem_id).single();
@@ -1672,6 +1780,15 @@ export default function AdminPage() {
               {/* CARD 3: ATALHOS PARA OS SERVIDORES */}
               {eGestor && (
                 <div className="grid grid-cols-1 gap-3">
+                  {/* NOVO BOTÃO DO DRIVE */}
+                  <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
+                    <span className="text-[#d4af37] text-2xl group-hover:scale-110 transition-transform">📂</span>
+                    <div>
+                      <p className="text-[11px] font-bold text-[#d4af37] uppercase">Sincronizar G. Drive</p>
+                      <p className="text-[10px] text-zinc-500">Gerar pastas antigas</p>
+                    </div>
+                  </button>
+
                   <a href="https://supabase.com/dashboard/projects" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-emerald-500/20 hover:border-emerald-500 shadow-md flex items-center gap-3 transition-all group">
                     <span className="text-emerald-400 text-2xl group-hover:scale-110 transition-transform"></span>
                     <div>
