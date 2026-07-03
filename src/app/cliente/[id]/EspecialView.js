@@ -495,7 +495,15 @@ export default function EspecialView({ params }) {
               return (
                  <div className="space-y-10">
                    {processosFiltrados.map(proc => {
-                      const porcentagem = Math.round((proc.passo / 8) * 100);
+                      const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                      const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
+                      
+                      // MÁGICA: Bate 99% no passo 8 se ainda não houver a baixa do pagamento
+                      let porcentagem = Math.round((proc.passo / 8) * 100);
+                      if (proc.passo === 8 && !isFinished) {
+                        porcentagem = 99;
+                      }
+                      
                       const isExpanded = processosFiltrados.length === 1 || expandidos[proc.id];
                       let historicoObj = {};
                       try { historicoObj = typeof proc.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc.historico_passos || {}); } catch(e) {}
@@ -567,11 +575,24 @@ export default function EspecialView({ params }) {
                                       <div className={`absolute left-0 top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
                                         {isCompleted ? '✓' : passo.id}
                                       </div>
-                                      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
-                                        <div>
-                                          <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>{passo.nome}</h3>
-                                          <p className="text-xs text-zinc-400 leading-relaxed">{passo.desc}</p>
+                                      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
+                                        <div className="flex-1">
+                                          <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                                            {passo.id === 8 && isCurrent ? 'Pagar Honorários / Finalizar' : passo.nome}
+                                          </h3>
+                                          <p className="text-xs text-zinc-400 leading-relaxed">
+                                            {passo.id === 8 && isCurrent ? 'Seu processo foi deferido! Clique ao lado para ir ao financeiro, efetuar o acerto dos honorários e liberar a documentação 100% concluída.' : passo.desc}
+                                          </p>
                                         </div>
+                                        {passo.id === 8 && isCurrent && !isInterno && (
+                                          <button 
+                                            type="button"
+                                            onClick={() => { setAbaAtiva('financeiro'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                            className="text-xs bg-[#d4af37] text-[#0d1b2a] font-extrabold px-3 py-2 rounded-lg hover:bg-yellow-500 transition shadow-sm whitespace-nowrap self-start sm:self-center"
+                                          >
+                                            Ir para Financeiro ➔
+                                          </button>
+                                        )}
                                         {dataCarimbo && (
                                           <div className="text-[10px] text-zinc-500 font-bold bg-[#0d1b2a] px-3 py-1.5 rounded-lg border border-zinc-800 flex-shrink-0">
                                             Finalizado em: {dataCarimbo.toLocaleDateString('pt-BR')} às {dataCarimbo.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
@@ -875,33 +896,54 @@ export default function EspecialView({ params }) {
                       </div>
 
                       {(finalizado || isInterno) && (
-                        <div className="flex flex-col justify-center bg-[#1b263b] p-6 rounded-lg border border-zinc-700/50 text-center">
+<div className="flex flex-col justify-center bg-[#1b263b] p-6 rounded-lg border border-zinc-700/50 text-center">
+                          {/* MÁGICA FINANCEIRA: Layout flexível conforme a entrada do cliente */}
+                          <div className="space-y-3 mb-4 text-left border-b border-zinc-800 pb-4">
+                            {proc.valor_entrada > 0 ? (
+                              <>
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-zinc-400 font-medium">Honorários Totais:</span>
+                                  <span className="text-zinc-300 font-bold">R$ {Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs text-emerald-400">
+                                  <span className="font-medium">Valor de Entrada (Sinal Pago):</span>
+                                  <span className="font-bold">- R$ {Number(proc.valor_entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                                </div>
+                                <div className="flex justify-between items-center pt-2 border-t border-zinc-800/60">
+                                  <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wide">Honorários Devidos:</span>
+                                  <span className="text-lg font-black text-white">R$ {Number(proc.valor_honorarios - proc.valor_entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Honorários Totais:</span>
+                                <span className="text-xl font-black text-white">R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* SE FOR VISÃO DO CLIENTE EM PASSO DE PAGAMENTO FINAL */}
                           {finalizado && !isInterno ? (
                             <div className="space-y-4 text-center">
-                              <h4 className="text-emerald-400 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2"><IconCheck /> Processo Finalizado</h4>
-                              <p className="text-xs text-zinc-300">Realize o pagamento dos honorários via PIX:</p>
+                              <h4 className="text-emerald-400 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2"><IconCheck /> Pagamento Final do Processo</h4>
+                              <p className="text-xs text-zinc-300">Efetue o acerto do saldo restante via PIX para concluir o processo:</p>
                               
                               <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 text-center">
                                 <p className="text-xs font-mono font-bold text-zinc-300 select-all">CNPJ: 52.305.552/0001-01</p>
                                 <button type="button" onClick={() => { navigator.clipboard.writeText('52.305.552/0001-01'); mostrarToast('Chave PIX de Honorários copiada!', 'sucesso'); }} className="mt-2 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded font-bold hover:bg-emerald-500 hover:text-black transition">Copiar Chave PIX</button>
                               </div>
 
-                              <div className="py-1">
-                                <p className="text-[10px] text-zinc-400 uppercase tracking-widest">Valor dos Honorários</p>
-                                <p className="text-2xl font-black text-white">R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}</p>
-                              </div>
-
                               <div className="flex flex-col items-center gap-3 border-t border-zinc-800 pt-4 mt-2">
                                 <div className="flex items-center gap-1.5">
                                   <span className={`w-2 h-2 rounded-full ${proc.honorario_pago ? 'bg-emerald-500' : honorarioPagoManual[proc.id] ? 'bg-orange-500 animate-pulse' : 'bg-red-500'}`}></span>
                                   <span className={`text-[11px] font-bold ${proc.honorario_pago ? 'text-emerald-400' : honorarioPagoManual[proc.id] ? 'text-orange-400' : 'text-red-400'}`}>
-                                    {proc.honorario_pago ? 'Pago & Confirmado' : honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Aguardando Pagamento'}
+                                    {proc.honorario_pago ? 'Pago & Confirmado' : honorarioPagoManual[proc.id] ? 'Pago (Aguardando conferência)' : 'Aguardando Pagamento Final'}
                                   </span>
                                 </div>
                                 
                                 {!proc.honorario_pago && !honorarioPagoManual[proc.id] && (
                                   <label className="block w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2.5 rounded-lg text-[10px] uppercase tracking-wider hover:bg-yellow-500 transition shadow-sm text-center">
-                                    {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante PIX'}
+                                    {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante do Saldo'}
                                     <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async (e) => {
                                       const file = e.target.files[0];
                                       if(!file) return;
@@ -910,15 +952,14 @@ export default function EspecialView({ params }) {
                                       await supabase.storage.from('documentos').upload(caminho, file);
                                       await supabase.from('envios_cliente').insert([{ cliente_id: id, processo_id: proc.id, nome_documento: `Comprovante Honorários - ${proc.titulo}`, nome_original: file.name, caminho_storage: caminho, departamento: 'Financeiro', status: 'pendente' }]);
                                       
-                                      // MÁGICA: Ao enviar o comprovante, carimba o passo 8 e joga pra finalizados!
                                       const { data: dbProc } = await supabase.from('processos_societarios').select('historico_passos').eq('id', proc.id).single();
-                                      let hist = {}; try { historico = typeof dbProc?.historico_passos === 'string' ? JSON.parse(dbProc.historico_passos) : (dbProc?.historico_passos || {}); } catch(e) {}
+                                      let hist = {}; try { hist = typeof dbProc?.historico_passos === 'string' ? JSON.parse(dbProc.historico_passos) : (dbProc?.historico_passos || {}); } catch(e) {}
                                       hist['8'] = new Date().toISOString();
                                       await supabase.from('processos_societarios').update({ historico_passos: hist }).eq('id', proc.id);
 
                                       setHonorarioPagoManual({...honorarioPagoManual, [proc.id]: true});
-                                      mostrarToast('Comprovante enviado! Processo movido para Finalizados.', 'sucesso');
-                                      await carregarDados(); // Força a tela a atualizar de imediato
+                                      mostrarToast('Comprovante enviado! Aguardando baixa interna.', 'sucesso');
+                                      await carregarDados();
                                       setSubindoArquivo(false);
                                     }} disabled={subindoArquivo} />
                                   </label>
@@ -927,33 +968,17 @@ export default function EspecialView({ params }) {
                             </div>
                           ) : (
                             <>
-                              <div className="flex justify-between items-end border-b border-zinc-700/50 pb-3 mb-3">
-                                <div>
-                                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Valor Total</p>
-                                  <p className="text-lg font-bold text-zinc-300 line-through decoration-red-500/50 decoration-2">R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}</p>
-                                </div>
-                                {proc.valor_entrada > 0 && (
-                                  <div className="text-right">
-                                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-1">Entrada / Sinal (Pago)</p>
-                                    <p className="text-lg font-bold text-emerald-400">- R$ {Number(proc.valor_entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                                  </div>
-                                )}
-                              </div>
-                              <p className="text-xs font-bold text-[#d4af37] uppercase tracking-widest mb-1">Restante a Pagar</p>
-                              <p className={`text-4xl font-black ${finalizado ? 'text-emerald-400' : 'text-white'}`}>
-                                R$ {Number((proc.valor_honorarios || 0) - (proc.valor_entrada || 0)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                              </p>
                               {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
                               
                               {finalizado && isInterno && (
-                                <div className="mt-4 border-t border-zinc-700/50 pt-4 flex flex-col items-center gap-3 w-full">
+                                <div className="mt-2 flex flex-col items-center gap-3 w-full">
                                   {clientEnviouComprovante ? (
                                     <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
-                                      O Cliente enviou o comprovante na plataforma!
+                                      O Cliente enviou o comprovante do saldo final!
                                     </div>
                                   ) : (
                                     <div className="bg-orange-500/10 text-orange-400 border border-orange-500/30 px-3 py-2 rounded-lg text-[10px] font-bold w-full text-center">
-                                      Aguardando cliente anexar comprovante (ou dê baixa manual).
+                                      Aguardando cliente anexar comprovante final (ou dê baixa manual).
                                     </div>
                                   )}
                                   
@@ -966,7 +991,7 @@ export default function EspecialView({ params }) {
                                       : 'bg-emerald-500 text-[#0d1b2a] hover:bg-emerald-400'
                                     }`}
                                   >
-                                    {proc.honorario_pago ? 'Reverter Baixa' : 'Dar Baixa Manual (Recebido via Whats)'}
+                                    {proc.honorario_pago ? 'Reverter Baixa' : 'Dar Baixa Manual (Saldo Recebido)'}
                                   </button>
                                 </div>
                               )}
