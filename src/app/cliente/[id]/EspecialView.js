@@ -111,7 +111,8 @@ export default function EspecialView({ params }) {
 
   // Modais do Admin
   const [modalProcesso, setModalProcesso] = useState({ aberto: false, tipo: 'novo', processo: null });
-  const [formProcesso, setFormProcesso] = useState({ titulo: '', passo: 1, valor_honorarios: '', taxas_pendentes: '', taxas_pagas: '' });
+  const [formProcesso, setFormProcesso] = useState({ titulo: '', passo: 1, valor_honorarios: '', valor_entrada: '', taxas_pendentes: '', taxas_pagas: '' });
+  const [subAbaStatus, setSubAbaStatus] = useState('ativos'); // NOVO: Abas de processos Finalizados x Ativos
   
   const [modalDocs, setModalDocs] = useState(false);
   const [textoDocs, setTextoDocs] = useState('');
@@ -246,7 +247,16 @@ export default function EspecialView({ params }) {
   async function toggleHonorarioPago(procId, statusAtual) {
     setSubindoArquivo(true);
     const novoStatus = !statusAtual;
-    const { error } = await supabase.from('processos_societarios').update({ honorario_pago: novoStatus }).eq('id', procId);
+    
+    // MÁGICA: Carimba a data do Passo 8 (Finalizado)
+    const { data: proc } = await supabase.from('processos_societarios').select('historico_passos').eq('id', procId).single();
+    let historico = {};
+    try { historico = typeof proc?.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc?.historico_passos || {}); } catch(e) {}
+    
+    if (novoStatus) historico['8'] = new Date().toISOString();
+    else delete historico['8'];
+
+    const { error } = await supabase.from('processos_societarios').update({ honorario_pago: novoStatus, historico_passos: historico }).eq('id', procId);
     if (!error) {
       mostrarToast(novoStatus ? 'Processo 100% finalizado com sucesso!' : 'Pagamento revertido para pendente.', 'sucesso');
       await carregarDados();
@@ -264,6 +274,7 @@ export default function EspecialView({ params }) {
       titulo: formProcesso.titulo,
       passo: formProcesso.passo,
       valor_honorarios: formProcesso.valor_honorarios ? parseFloat(formProcesso.valor_honorarios) : 0,
+      valor_entrada: formProcesso.valor_entrada ? parseFloat(formProcesso.valor_entrada) : 0,
       taxas_pendentes: JSON.stringify(listaTaxas),
       taxas_pagas: null,
       honorario_pago: formProcesso.honorario_pago || false
@@ -278,6 +289,21 @@ export default function EspecialView({ params }) {
         setModalProcesso({ aberto: false, tipo: 'novo', processo: null });
       } else mostrarToast('Erro: ' + error.message, 'erro');
     } else {
+      // MÁGICA DOS CARIMBOS DE TEMPO: Verifica quais passos foram pulados/concluídos
+      let historico = {};
+      try { historico = typeof modalProcesso.processo.historico_passos === 'string' ? JSON.parse(modalProcesso.processo.historico_passos) : (modalProcesso.processo.historico_passos || {}); } catch(e) {}
+      
+      const passoAntigo = modalProcesso.processo.passo;
+      if (formProcesso.passo > passoAntigo) {
+        for (let i = passoAntigo; i < formProcesso.passo; i++) {
+          if (!historico[i]) historico[i] = new Date().toISOString();
+        }
+      }
+      if (formProcesso.honorario_pago && !historico['8']) historico['8'] = new Date().toISOString();
+      else if (!formProcesso.honorario_pago && historico['8']) delete historico['8'];
+      
+      payloadProc.historico_passos = historico;
+
       const { error } = await supabase.from('processos_societarios').update(payloadProc).eq('id', modalProcesso.processo.id);
       
       if (!error) {
@@ -438,131 +464,132 @@ export default function EspecialView({ params }) {
         {/* ABA 1: STATUS DO PROCESSO */}
         {abaAtiva === 'status' && (
           <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 border-b border-zinc-800 pb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-zinc-800 pb-6">
               <div>
-                <h2 className="text-xl font-bold text-white mb-2">Acompanhamento em Tempo Real</h2>
-                <p className="text-sm text-zinc-400">Acompanhe a evolução da sua empresa passo a passo.</p>
+                <h2 className="text-xl font-bold text-white mb-2">Acompanhamento de Processos</h2>
+                <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-700 w-max mt-2">
+                  <button onClick={() => setSubAbaStatus('ativos')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${subAbaStatus === 'ativos' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}>Em Andamento</button>
+                  <button onClick={() => setSubAbaStatus('finalizados')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${subAbaStatus === 'finalizados' ? 'bg-emerald-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'}`}>Finalizados</button>
+                </div>
               </div>
               {isInterno && (
-                <button onClick={() => { setFormProcesso({ titulo: '', passo: 1 }); setModalProcesso({ aberto: true, tipo: 'novo', processo: null }); }} className="bg-purple-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg w-full sm:w-auto">
+                <button onClick={() => { setFormProcesso({ titulo: '', passo: 1, valor_honorarios: '', valor_entrada: '' }); setModalProcesso({ aberto: true, tipo: 'novo', processo: null }); }} className="bg-purple-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg w-full sm:w-auto">
                   + Novo Processo
                 </button>
               )}
             </div>
 
-            {processos.length === 0 ? (
-               <div className="text-center py-12 bg-[#0d1b2a] rounded-xl border border-zinc-800">
-                 <p className="text-zinc-500">Nenhum processo societário ativo no momento.</p>
-               </div>
-            ) : (
-               <div className="space-y-10">
-                 {processos.map(proc => {
-                    const porcentagem = Math.round((proc.passo / 8) * 100);
-                    // MÁGICA: Se só tem 1 processo, fica aberto. Se tem vários, lê do estado 'expandidos'.
-                    const isExpanded = processos.length === 1 || expandidos[proc.id];
+            {(() => {
+              const processosFiltrados = processos.filter(proc => {
+                const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
+                return subAbaStatus === 'ativos' ? !isFinished : isFinished;
+              });
 
-                    return (
-                      <div key={proc.id} className="bg-[#0d1b2a] p-6 rounded-xl border border-purple-500/20 relative overflow-hidden shadow-lg transition-all duration-300">
-                         {/* Header do Card do Processo */}
-                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-zinc-800 pb-4 gap-4">
-                            <div className="flex-1 w-full sm:w-auto">
-                              <h3 className="text-lg font-bold text-[#d4af37] flex items-center gap-2 mb-2">
-                                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-                                {proc.titulo}
-                              </h3>
-                              <div className="flex items-center gap-3">
-                                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Status:</span>
-                                <span className="text-xs font-black text-purple-400">{porcentagem}% Concluído</span>
+              if (processosFiltrados.length === 0) return (
+                 <div className="text-center py-12 bg-[#0d1b2a] rounded-xl border border-zinc-800">
+                   <p className="text-zinc-500">Nenhum processo nesta categoria.</p>
+                 </div>
+              );
+
+              return (
+                 <div className="space-y-10">
+                   {processosFiltrados.map(proc => {
+                      const porcentagem = Math.round((proc.passo / 8) * 100);
+                      const isExpanded = processosFiltrados.length === 1 || expandidos[proc.id];
+                      let historicoObj = {};
+                      try { historicoObj = typeof proc.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc.historico_passos || {}); } catch(e) {}
+
+                      return (
+                        <div key={proc.id} className="bg-[#0d1b2a] p-6 rounded-xl border border-purple-500/20 relative overflow-hidden shadow-lg transition-all duration-300">
+                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-zinc-800 pb-4 gap-4">
+                              <div className="flex-1 w-full sm:w-auto">
+                                <h3 className="text-lg font-bold text-[#d4af37] flex items-center gap-2 mb-2">
+                                  <span className={`w-2 h-2 rounded-full ${subAbaStatus === 'ativos' ? 'bg-purple-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                                  {proc.titulo}
+                                </h3>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Status:</span>
+                                  <span className={`text-xs font-black ${subAbaStatus === 'ativos' ? 'text-purple-400' : 'text-emerald-400'}`}>{porcentagem}% Concluído</span>
+                                </div>
                               </div>
+
+                              <div className="flex gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center">
+                                {processosFiltrados.length > 1 && (
+                                  <button onClick={() => setExpandidos(prev => ({ ...prev, [proc.id]: !prev[proc.id] }))} className="flex-1 sm:flex-none text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 px-4 py-2 rounded font-bold hover:bg-zinc-700 hover:text-white transition">
+                                    {isExpanded ? 'Ocultar Etapas ▲' : 'Ver Detalhes ▼'}
+                                  </button>
+                                )}
+
+                                {isInterno && (
+                                  <>
+                                    <button onClick={() => { 
+                                      let parsed = [];
+                                      try { parsed = JSON.parse(proc.taxas_pendentes || '[]'); if (!Array.isArray(parsed)) parsed = [parsed]; } catch(err) { parsed = []; }
+                                      setListaTaxas(parsed); setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix('');
+                                      setFormProcesso({ 
+                                        titulo: proc.titulo, passo: proc.passo, valor_honorarios: proc.valor_honorarios || '', valor_entrada: proc.valor_entrada || '', honorario_pago: proc.honorario_pago || false
+                                      }); 
+                                      setModalProcesso({ aberto: true, tipo: 'editar', processo: proc }); 
+                                    }} className="flex-1 sm:flex-none text-xs bg-purple-500/10 text-purple-300 border border-purple-500/30 px-4 py-2 rounded font-bold hover:bg-purple-500 hover:text-white transition">Gerenciar</button>
+                                    <button onClick={() => deletarProcesso(proc.id)} className="flex-1 sm:flex-none text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-2 rounded font-bold hover:bg-red-500 hover:text-white transition">Excluir</button>
+                                  </>
+                                )}
+                              </div>
+                           </div>
+
+                            <div className={`w-full bg-[#1b263b] rounded-full h-2 border border-zinc-700 overflow-hidden ${isExpanded ? 'mb-8' : 'mb-2'}`}>
+                              <div className={`h-2 rounded-full transition-all duration-1000 ease-out ${subAbaStatus === 'ativos' ? 'bg-gradient-to-r from-purple-700 to-purple-400' : 'bg-emerald-500'}`} style={{ width: `${porcentagem}%` }}></div>
                             </div>
 
-                            <div className="flex gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center">
-                              {/* Botão de Expandir/Minimizar (só aparece se tiver > 1 processo) */}
-                              {processos.length > 1 && (
-                                <button 
-                                  onClick={() => setExpandidos(prev => ({ ...prev, [proc.id]: !prev[proc.id] }))} 
-                                  className="flex-1 sm:flex-none text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 px-4 py-2 rounded font-bold hover:bg-zinc-700 hover:text-white transition"
-                                >
-                                  {isExpanded ? 'Ocultar Etapas ▲' : 'Ver Detalhes das Etapas ▼'}
-                                </button>
-                              )}
-
-                              {isInterno && (
-                                <>
-                                  <button onClick={() => { 
-                                    let parsed = [];
-                                    try {
-                                      parsed = JSON.parse(proc.taxas_pendentes || '[]');
-                                      if (!Array.isArray(parsed)) parsed = [parsed];
-                                    } catch(err) { parsed = []; }
-                                    setListaTaxas(parsed);
-                                    setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix('');
-                                    setFormProcesso({ 
-                                      titulo: proc.titulo, 
-                                      passo: proc.passo, 
-                                      valor_honorarios: proc.valor_honorarios || '',
-                                      honorario_pago: proc.honorario_pago || false
-                                    }); 
-                                    setModalProcesso({ aberto: true, tipo: 'editar', processo: proc }); 
-                                  }} className="flex-1 sm:flex-none text-xs bg-purple-500/10 text-purple-300 border border-purple-500/30 px-4 py-2 rounded font-bold hover:bg-purple-500 hover:text-white transition">Gerenciar & Avançar</button>
-                                  <button onClick={() => deletarProcesso(proc.id)} className="flex-1 sm:flex-none text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-2 rounded font-bold hover:bg-red-500 hover:text-white transition">Excluir</button>
-                                </>
-                              )}
-                            </div>
-                         </div>
-
-                         {/* BARRA DE PROGRESSO GLOBAL (Sempre visível) */}
-                          <div className={`w-full bg-[#1b263b] rounded-full h-2 border border-zinc-700 overflow-hidden ${isExpanded ? 'mb-8' : 'mb-2'}`}>
-                            <div className="bg-gradient-to-r from-purple-700 to-purple-400 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${porcentagem}%` }}></div>
-                          </div>
-
-                          {/* TIMELINE VERTICAL DESTE PROCESSO (Oculta se minimizado) */}
-                          {isExpanded && (
-                            <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                              
-                              {PASSOS_SOCIETARIO.map((passo, index) => {
-                                let isCompleted = proc.passo > passo.id;
-                                let isCurrent = proc.passo === passo.id;
-                                const isFuture = proc.passo < passo.id;
-
-                                // MÁGICA: Passo 8 verde se pago ou se o cliente/admin enviar o comprovante!
-                                if (passo.id === 8 && proc.passo === 8) {
+                            {isExpanded && (
+                              <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                                {PASSOS_SOCIETARIO.map((passo, index) => {
+                                  let isCompleted = proc.passo > passo.id;
+                                  let isCurrent = proc.passo === passo.id;
+                                  const isFuture = proc.passo < passo.id;
                                   const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
-                                  if (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]) {
-                                    isCompleted = true;
-                                    isCurrent = false;
+                                  if (passo.id === 8 && proc.passo === 8) {
+                                    if (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]) { isCompleted = true; isCurrent = false; }
                                   }
-                                }
 
-                                let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
-                                if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
-                                if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
+                                  let colorClass = 'bg-zinc-800 border-zinc-600 text-zinc-500'; 
+                                  if (isCompleted) colorClass = 'bg-emerald-500 border-emerald-400 text-[#0d1b2a] shadow-[0_0_15px_rgba(16,185,129,0.3)]';
+                                  if (isCurrent) colorClass = 'bg-purple-500 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] animate-pulse';
+                                  
+                                  const dataCarimbo = historicoObj[passo.id] ? new Date(historicoObj[passo.id]) : null;
 
-                                return (
-                                  <div key={passo.id} className={`relative pl-12 sm:pl-16 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
-                                    
-                                    {/* Linha de conexão cirúrgica (NÃO renderiza no último passo!) */}
-                                    {index !== PASSOS_SOCIETARIO.length - 1 && (
-                                      <div className={`absolute left-4 -ml-[1px] top-[36px] w-[2px] ${isCompleted ? 'bg-emerald-500/50' : 'bg-zinc-700'} z-0`} style={{ bottom: '-28px' }}></div>
-                                    )}
-
-                                    <div className={`absolute left-0 top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
-                                      {isCompleted ? '✓' : passo.id}
+                                  return (
+                                    <div key={passo.id} className={`relative pl-12 sm:pl-16 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
+                                      {index !== PASSOS_SOCIETARIO.length - 1 && (
+                                        <div className={`absolute left-4 -ml-[1px] top-[36px] w-[2px] ${isCompleted ? 'bg-emerald-500/50' : 'bg-zinc-700'} z-0`} style={{ bottom: '-28px' }}></div>
+                                      )}
+                                      <div className={`absolute left-0 top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
+                                        {isCompleted ? '✓' : passo.id}
+                                      </div>
+                                      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
+                                        <div>
+                                          <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>{passo.nome}</h3>
+                                          <p className="text-xs text-zinc-400 leading-relaxed">{passo.desc}</p>
+                                        </div>
+                                        {dataCarimbo && (
+                                          <div className="text-[10px] text-zinc-500 font-bold bg-[#0d1b2a] px-3 py-1.5 rounded-lg border border-zinc-800 flex-shrink-0">
+                                            Finalizado em: {dataCarimbo.toLocaleDateString('pt-BR')} às {dataCarimbo.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className={`p-4 rounded-xl border transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
-                                      <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>{passo.nome}</h3>
-                                      <p className="text-xs text-zinc-400 leading-relaxed">{passo.desc}</p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                      </div>
-                    )
-                 })}
-               </div>
-            )}
+                                  );
+                                })}
+                              </div>
+                            )}
+                        </div>
+                      )
+                   })}
+                 </div>
+              );
+            })()}
+
           </div>
         )}
 
@@ -882,8 +909,16 @@ export default function EspecialView({ params }) {
                                       const caminho = `${id}/recebidos_societario/${Date.now()}_Honorario_${file.name.replace(/[^a-zA-Z0-9.\-]/g, '_')}`;
                                       await supabase.storage.from('documentos').upload(caminho, file);
                                       await supabase.from('envios_cliente').insert([{ cliente_id: id, processo_id: proc.id, nome_documento: `Comprovante Honorários - ${proc.titulo}`, nome_original: file.name, caminho_storage: caminho, departamento: 'Financeiro', status: 'pendente' }]);
+                                      
+                                      // MÁGICA: Ao enviar o comprovante, carimba o passo 8 e joga pra finalizados!
+                                      const { data: dbProc } = await supabase.from('processos_societarios').select('historico_passos').eq('id', proc.id).single();
+                                      let hist = {}; try { historico = typeof dbProc?.historico_passos === 'string' ? JSON.parse(dbProc.historico_passos) : (dbProc?.historico_passos || {}); } catch(e) {}
+                                      hist['8'] = new Date().toISOString();
+                                      await supabase.from('processos_societarios').update({ historico_passos: hist }).eq('id', proc.id);
+
                                       setHonorarioPagoManual({...honorarioPagoManual, [proc.id]: true});
-                                      mostrarToast('Comprovante de Honorários enviado!', 'sucesso');
+                                      mostrarToast('Comprovante enviado! Processo movido para Finalizados.', 'sucesso');
+                                      await carregarDados(); // Força a tela a atualizar de imediato
                                       setSubindoArquivo(false);
                                     }} disabled={subindoArquivo} />
                                   </label>
@@ -892,9 +927,21 @@ export default function EspecialView({ params }) {
                             </div>
                           ) : (
                             <>
-                              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Honorários do Escritório</p>
-                              <p className={`text-3xl font-black ${finalizado ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                                R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}
+                              <div className="flex justify-between items-end border-b border-zinc-700/50 pb-3 mb-3">
+                                <div>
+                                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Valor Total</p>
+                                  <p className="text-lg font-bold text-zinc-300 line-through decoration-red-500/50 decoration-2">R$ {proc.valor_honorarios ? Number(proc.valor_honorarios).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00'}</p>
+                                </div>
+                                {proc.valor_entrada > 0 && (
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-1">Entrada / Sinal (Pago)</p>
+                                    <p className="text-lg font-bold text-emerald-400">- R$ {Number(proc.valor_entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-xs font-bold text-[#d4af37] uppercase tracking-widest mb-1">Restante a Pagar</p>
+                              <p className={`text-4xl font-black ${finalizado ? 'text-emerald-400' : 'text-white'}`}>
+                                R$ {Number((proc.valor_honorarios || 0) - (proc.valor_entrada || 0)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                               </p>
                               {!finalizado && isInterno && <span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded mt-2 inline-block">Visível apenas para a equipa (Processo em andamento)</span>}
                               
@@ -1010,9 +1057,17 @@ export default function EspecialView({ params }) {
                   {/* CAMPOS FINANCEIROS */}
                   <div className="bg-[#0d1b2a] p-4 rounded-lg border border-[#d4af37]/30 space-y-4 shadow-inner">
                     <div>
-                      <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Honorários Totais (R$)</label>
-                      <p className="text-[9px] text-zinc-500 mb-2">Ficará oculto para o cliente até o Passo 8 ser atingido.</p>
-                      <input type="number" step="0.01" placeholder="Ex: 1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                      <p className="text-[9px] text-zinc-500 mb-3">Estes valores ficarão ocultos para o cliente até o Passo 8 ser atingido.</p>
+                      <div className="grid grid-cols-2 gap-3 mb-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Valor Total (R$)</label>
+                          <input type="number" step="0.01" placeholder="1500.00" value={formProcesso.valor_honorarios} onChange={e => setFormProcesso({...formProcesso, valor_honorarios: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-emerald-400 uppercase mb-1">Valor de Entrada (R$)</label>
+                          <input type="number" step="0.01" placeholder="Ex: 500.00" value={formProcesso.valor_entrada} onChange={e => setFormProcesso({...formProcesso, valor_entrada: e.target.value})} className="w-full bg-[#1b263b] border border-emerald-500/50 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                        </div>
+                      </div>
                       
                       {/* NOVO: CHECKBOX DE HONORÁRIOS PAGOS (APENAS ADMIN) */}
                       <div className="mt-3 flex items-center justify-between bg-emerald-500/5 p-3 rounded-lg border border-emerald-500/20">
