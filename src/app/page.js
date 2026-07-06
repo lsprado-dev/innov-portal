@@ -929,11 +929,33 @@ export default function AdminPage() {
         // =========================================================
         // 🚀 FASE 2: SINCRONIZAR SUBPASTAS (RECURSIVIDADE PROFUNDA)
         // =========================================================
-        const { data: subpastasPendentes } = await supabase
+        const { data: subpastasPendentesBrutas } = await supabase
           .from('pastas_portal')
           .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos, id_drive_contratos)') 
-          .is('id_drive_pasta', null)
-          .order('criado_em', { ascending: true }); // Ordem cronológica para garantir Avô > Pai > Filho
+          .is('id_drive_pasta', null);
+
+        let subpastasPendentes = [];
+        if (subpastasPendentesBrutas && subpastasPendentesBrutas.length > 0) {
+          // 🧠 O GRANDE SEGREDO: Algoritmo de Ordenação Topológica
+          // Resolve o bug de quando a pasta "Filha" foi criada antes da "Pai" (movida depois)
+          const mapPais = {};
+          subpastasPendentesBrutas.forEach(sp => { mapPais[sp.id] = sp.parent_id; });
+          
+          const calcularProfundidade = (id) => {
+            let profundidade = 0;
+            let idPaiAtual = mapPais[id];
+            while (idPaiAtual) {
+              profundidade++;
+              if (!mapPais[idPaiAtual]) break;
+              idPaiAtual = mapPais[idPaiAtual];
+              if (profundidade > 30) break; // Trava de segurança anti-loop
+            }
+            return profundidade;
+          };
+
+          // Força a criar: Nível 0 (Raiz) primeiro, depois Nível 1 (Filhos), depois Nível 2 (Netos)...
+          subpastasPendentes = subpastasPendentesBrutas.sort((a, b) => calcularProfundidade(a.id) - calcularProfundidade(b.id));
+        }
 
         if (subpastasPendentes && subpastasPendentes.length > 0) {
           const totalP = subpastasPendentes.length;
