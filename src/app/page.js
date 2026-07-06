@@ -921,12 +921,12 @@ export default function AdminPage() {
         // --- 🚀 FASE 2: SINCRONIZAR SUBPASTAS PERSONALIZADAS ANTIGAS ---
         setProgressoSync({ atual: 1, total: 1, empresa: 'Buscando subpastas avulsas...' });
         
-        // Puxa as subpastas órfãs. A ordem 'parent_id' garante que as subpastas pai sejam criadas antes das filhas!
+        // Puxa as subpastas órfãs. A ordem 'criado_em' garante que Avôs e Pais sejam criados ANTES dos Filhos infinitamente!
         const { data: subpastasPendentes } = await supabase
           .from('pastas_portal')
-          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh)')
+          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos)') // <-- Puxando recebidos!
           .is('id_drive_pasta', null)
-          .order('parent_id', { ascending: true, nullsFirst: true });
+          .order('criado_em', { ascending: true });
 
         let subpastasSincronizadas = 0;
 
@@ -941,6 +941,7 @@ export default function AdminPage() {
               if (sp.setor === 'contabil') parentDriveId = sp.clientes.id_drive_contabil;
               else if (sp.setor === 'fiscal') parentDriveId = sp.clientes.id_drive_fiscal;
               else if (sp.setor === 'rh') parentDriveId = sp.clientes.id_drive_rh;
+              else if (sp.setor === 'contrato') parentDriveId = sp.clientes.id_drive_recebidos; // <-- Resolvendo "Contratos"!
               else parentDriveId = sp.clientes.id_drive_raiz;
             } else {
               const { data: pai } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', sp.parent_id).single();

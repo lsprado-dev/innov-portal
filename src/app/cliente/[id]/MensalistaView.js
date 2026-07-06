@@ -728,21 +728,32 @@ export default function MensalistaView({ params: paramsPromise }) {
   // GESTÃO DE ARQUIVOS E FLUXOS COM TOASTS
   // ===============================================
   
-  async function fazerUploadUnitario(file, targetPastaId) {
+  async function fazerUploadUnitario(file, targetPastaId, directDriveId = null) {
     if (file.size > 15 * 1024 * 1024) {
       mostrarToast(`Ignorado: "${file.name}" excede 15MB.`, 'erro');
       return false;
     }
 
     // 1. Identifica dinamicamente qual a pasta alvo correta do Google Drive
-    let folderIdDrive = null;
-    if (targetPastaId) {
-      folderIdDrive = pastas.find(p => p.id === targetPastaId)?.id_drive_pasta;
-    } else {
-      if (pastaAtiva === 'contabil') folderIdDrive = cliente.id_drive_contabil;
-      else if (pastaAtiva === 'fiscal') folderIdDrive = cliente.id_drive_fiscal;
-      else if (pastaAtiva === 'rh') folderIdDrive = cliente.id_drive_rh;
-      else folderIdDrive = cliente.id_drive_raiz;
+    let folderIdDrive = directDriveId; // Usa o passe livre se vier do Drag & Drop
+    
+    if (!folderIdDrive) {
+      if (targetPastaId) {
+        // Tenta achar na memória da tela. Se não achar, puxa direto da base de dados!
+        let achouNaTela = pastas.find(p => p.id === targetPastaId)?.id_drive_pasta;
+        if (achouNaTela) {
+          folderIdDrive = achouNaTela;
+        } else {
+          const { data: dbPasta } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', targetPastaId).single();
+          if (dbPasta) folderIdDrive = dbPasta.id_drive_pasta;
+        }
+      } else {
+        if (pastaAtiva === 'contabil') folderIdDrive = cliente.id_drive_contabil;
+        else if (pastaAtiva === 'fiscal') folderIdDrive = cliente.id_drive_fiscal;
+        else if (pastaAtiva === 'rh') folderIdDrive = cliente.id_drive_rh;
+        else if (pastaAtiva === 'contrato') folderIdDrive = cliente.id_drive_recebidos; // Manda os contratos pra gaveta certa!
+        else folderIdDrive = cliente.id_drive_raiz;
+      }
     }
 
     let caminhoFinal = null;
@@ -1468,62 +1479,63 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(true);
     let sucessoCount = 0;
 
-    // Corre os itens atirados para o ecrã
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i].webkitGetAsEntry();
-      if (!item) continue;
-
-      if (item.isFile) {
-        // Se for um ficheiro normal solto
-        const file = await new Promise(res => item.file(res));
+    // 🚀 FUNÇÃO RECURSIVA MÁGICA: Entra infinitamente nas sub-sub-pastas!
+    async function processarEntradaRecursiva(entry, parentDbId, parentDriveId) {
+      if (entry.isFile) {
+        const file = await new Promise(res => entry.file(res));
         if (file) {
-          const uploaded = await fazerUploadUnitario(file, subpastaAtiva);
+          const uploaded = await fazerUploadUnitario(file, parentDbId, parentDriveId);
           if (uploaded) sucessoCount++;
         }
-      } else if (item.isDirectory) {
-        // 🚀 SE FOR UMA PASTA dropped: Descobre o pai e cria no Drive antes do banco!
-        let idDrivePastaDropped = null;
-        let pDriveId = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : cliente.id_drive_raiz);
-        
-        if (pDriveId) {
+      } else if (entry.isDirectory) {
+        let currentDriveId = null;
+        if (parentDriveId) {
           try {
             const resSub = await fetch('/api/drive/criar-subpasta', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nomePasta: item.name, parentDriveId: pDriveId })
+              body: JSON.stringify({ nomePasta: entry.name, parentDriveId })
             });
             const dataSub = await resSub.json();
-            if (dataSub.success) idDrivePastaDropped = dataSub.id_drive_pasta;
-          } catch(e){}
+            if (dataSub.success) currentDriveId = dataSub.id_drive_pasta;
+          } catch(e) {}
         }
 
-        const { data: novaPasta, error: erroPasta } = await supabase.from('pastas_portal').insert([{
-          cliente_id: id,
-          setor: pastaAtiva,
-          nome: item.name,
-          parent_id: subpastaAtiva || null,
-          id_drive_pasta: idDrivePastaDropped
+        const { data: novaPasta, error } = await supabase.from('pastas_portal').insert([{
+          cliente_id: id, setor: pastaAtiva, nome: entry.name, parent_id: parentDbId || null, id_drive_pasta: currentDriveId
         }]).select().single();
 
-        if (!erroPasta && novaPasta) {
-          await processarPastaCoringa(novaPasta.nome, subpastaAtiva);
+        if (!error && novaPasta) {
+          await processarPastaCoringa(novaPasta.nome, parentDbId);
           
-          // Abre a pasta atirada e puxa os ficheiros de lá de dentro
-          const dirReader = item.createReader();
-          const entries = await new Promise(res => dirReader.readEntries(res));
+          const dirReader = entry.createReader();
+          // Garante que o navegador vai ler TODOS os arquivos, mesmo se a pasta tiver mais de 100 documentos
+          const readAllEntries = async (reader) => {
+            let all = [];
+            let read = await new Promise(res => reader.readEntries(res));
+            while(read.length > 0) {
+              all = all.concat(read);
+              read = await new Promise(res => reader.readEntries(res));
+            }
+            return all;
+          };
 
-          for (let entry of entries) {
-             if (entry.isFile) {
-                const file = await new Promise(res => entry.file(res));
-                if (file) {
-                   // Usa o ID da pasta que acabou de ser criada no servidor!
-                   const uploaded = await fazerUploadUnitario(file, novaPasta.id); 
-                   if (uploaded) sucessoCount++;
-                }
-             }
+          const subEntries = await readAllEntries(dirReader);
+          for (let subEntry of subEntries) {
+            await processarEntradaRecursiva(subEntry, novaPasta.id, currentDriveId); // A Mágica de chamar ela mesma
           }
         }
       }
+    }
+
+    // Calcula de onde a gente parte (Qual é o ID da gaveta que o usuário soltou o arquivo em cima)
+    let pDriveIdBase = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : pastaAtiva === 'contrato' ? cliente.id_drive_recebidos : cliente.id_drive_raiz);
+
+    // Dispara a navegação em todas as pastas e documentos atirados
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i].webkitGetAsEntry();
+      if (!item) continue;
+      await processarEntradaRecursiva(item, subpastaAtiva, pDriveIdBase);
     }
 
     if (sucessoCount > 0) {

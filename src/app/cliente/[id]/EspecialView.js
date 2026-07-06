@@ -108,13 +108,33 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(true);
     const timestamp = Date.now();
     const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
-    const caminhoArquivo = `${id}/societario/${timestamp}_${nomeSeguro}`;
 
-    const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
-    
-    if (storageError) {
-      mostrarToast('Erro ao subir arquivo: ' + storageError.message, 'erro');
-      setSubindoArquivo(false); return;
+    // 1. Busca o ID da gaveta de Documentos Enviados no Drive!
+    const { data: dadosCliente } = await supabase.from('clientes').select('id_drive_enviados').eq('id', id).single();
+    const pastaDestinoDrive = dadosCliente?.id_drive_enviados;
+
+    let caminhoArquivo = null;
+
+    // 2. Manda pro Google Drive
+    if (pastaDestinoDrive) {
+       const formData = new FormData();
+       formData.append('file', file);
+       formData.append('folderId', pastaDestinoDrive);
+       try {
+         const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
+         const resData = await res.json();
+         if (resData.success) caminhoArquivo = `DRIVE:${resData.fileId}`;
+       } catch (err) { console.error("Erro no fetch do Drive:", err); }
+    }
+
+    // 3. Fallback de Segurança (Supabase)
+    if (!caminhoArquivo) {
+        caminhoArquivo = `${id}/societario/${timestamp}_${nomeSeguro}`;
+        const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivo, file);
+        if (storageError) {
+          mostrarToast('Erro ao subir arquivo: ' + storageError.message, 'erro');
+          setSubindoArquivo(false); return;
+        }
     }
 
     const payload = {
@@ -124,7 +144,7 @@ export default function EspecialView({ params }) {
       caminho_storage: caminhoArquivo,
       enviado_por: operador
     };
-    if (procId) payload.processo_id = procId; // Linka ao processo se existir
+    if (procId) payload.processo_id = procId;
 
     const { data: novoArq, error: dbError } = await supabase.from('arquivos_portal').insert([payload]).select().single();
 
@@ -135,7 +155,7 @@ export default function EspecialView({ params }) {
       mostrarToast('Erro ao registrar no banco de dados.', 'erro');
     }
     setSubindoArquivo(false);
-    e.target.value = null; // Reseta o input file
+    e.target.value = null; 
   }
 
   // Modais do Admin
