@@ -751,7 +751,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         if (pastaAtiva === 'contabil') folderIdDrive = cliente.id_drive_contabil;
         else if (pastaAtiva === 'fiscal') folderIdDrive = cliente.id_drive_fiscal;
         else if (pastaAtiva === 'rh') folderIdDrive = cliente.id_drive_rh;
-        else if (pastaAtiva === 'contrato') folderIdDrive = cliente.id_drive_recebidos; // Manda os contratos pra gaveta certa!
+        else if (pastaAtiva === 'contrato') folderIdDrive = cliente.id_drive_contratos; // <-- Gaveta oficial de Contratos!
         else folderIdDrive = cliente.id_drive_raiz;
       }
     }
@@ -964,6 +964,10 @@ export default function MensalistaView({ params: paramsPromise }) {
   function handleMoverParaLixeira(arq, origem) {
     confirmarAcao('Mover para a Lixeira', 'Deseja mover este arquivo para a Lixeira? Ele ficará protegido lá por 30 dias antes da exclusão.', async () => {
       setSubindoArquivo(true);
+      // MÁGICA: Joga na lixeira oficial do Google Drive também!
+      if (arq.caminho_storage?.startsWith('DRIVE:')) {
+        await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'lixeira', fileId: arq.caminho_storage }) });
+      }
       const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
       if (!error) { mostrarToast('Movido para a lixeira.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); await carregarDadosDaAba(); }
@@ -973,6 +977,10 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   async function handleRestaurarDaLixeira(arq) {
     setSubindoArquivo(true); 
+    // MÁGICA: Tira da lixeira oficial do Google Drive e ele lembra de qual pasta veio automaticamente!
+    if (arq.caminho_storage?.startsWith('DRIVE:')) {
+      await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'restaurar', fileId: arq.caminho_storage }) });
+    }
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: null }).eq('id', arq.id);
     if (!error) { mostrarToast('Arquivo restaurado!', 'sucesso'); await carregarDadosDaAba(); }
@@ -982,7 +990,12 @@ export default function MensalistaView({ params: paramsPromise }) {
   function handleDeletarPermanente(arq) {
     confirmarAcao('Excluir Definitivamente', 'PERIGO: Este arquivo será apagado permanentemente dos servidores e não poderá ser recuperado. Deseja continuar?', async () => {
       setSubindoArquivo(true);
-      await supabase.storage.from('documentos').remove([arq.caminho_storage]);
+      // MÁGICA: Exclui permanentemente do Google Drive também!
+      if (arq.caminho_storage?.startsWith('DRIVE:')) {
+        await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'deletar', fileId: arq.caminho_storage }) });
+      } else {
+        await supabase.storage.from('documentos').remove([arq.caminho_storage]);
+      }
       const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       await supabase.from(tabela).delete().eq('id', arq.id);
       mostrarToast('Arquivo deletado permanentemente.', 'aviso');
@@ -995,7 +1008,12 @@ export default function MensalistaView({ params: paramsPromise }) {
     confirmarAcao('Esvaziar Lixeira', 'Esvaziar a lixeira agora? TODOS os arquivos aqui presentes serão DELETADOS PERMANENTEMENTE.', async () => {
       setSubindoArquivo(true);
       for (const arq of itensLixeira) {
-        await supabase.storage.from('documentos').remove([arq.caminho_storage]);
+        // MÁGICA: Exclui do Drive ou do Supabase dependendo da origem
+        if (arq.caminho_storage?.startsWith('DRIVE:')) {
+          await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'deletar', fileId: arq.caminho_storage }) });
+        } else {
+          await supabase.storage.from('documentos').remove([arq.caminho_storage]);
+        }
         const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
         await supabase.from(tabela).delete().eq('id', arq.id);
       }
@@ -1529,7 +1547,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
 
     // Calcula de onde a gente parte (Qual é o ID da gaveta que o usuário soltou o arquivo em cima)
-    let pDriveIdBase = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : pastaAtiva === 'contrato' ? cliente.id_drive_recebidos : cliente.id_drive_raiz);
+    let pDriveIdBase = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : pastaAtiva === 'contrato' ? cliente.id_drive_contratos : cliente.id_drive_raiz);
 
     // Dispara a navegação em todas as pastas e documentos atirados
     for (let i = 0; i < items.length; i++) {

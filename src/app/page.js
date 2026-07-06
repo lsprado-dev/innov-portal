@@ -899,6 +899,7 @@ export default function AdminPage() {
                    payloadUpdate.id_drive_contabil = dataDrive.folders.pasta_cont_bil;
                    payloadUpdate.id_drive_fiscal = dataDrive.folders.pasta_fiscal;
                    payloadUpdate.id_drive_rh = dataDrive.folders.pasta_dp___rh;
+                   payloadUpdate.id_drive_contratos = dataDrive.folders.pasta_contratos; // <-- NOVA GAVETA
                    payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
                    payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados;
                    payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
@@ -924,7 +925,7 @@ export default function AdminPage() {
         // Puxa as subpastas órfãs. A ordem 'criado_em' garante que Avôs e Pais sejam criados ANTES dos Filhos infinitamente!
         const { data: subpastasPendentes } = await supabase
           .from('pastas_portal')
-          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos)') // <-- Puxando recebidos!
+          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos, id_drive_contratos)') // <-- Adicionado contratos
           .is('id_drive_pasta', null)
           .order('criado_em', { ascending: true });
 
@@ -941,7 +942,7 @@ export default function AdminPage() {
               if (sp.setor === 'contabil') parentDriveId = sp.clientes.id_drive_contabil;
               else if (sp.setor === 'fiscal') parentDriveId = sp.clientes.id_drive_fiscal;
               else if (sp.setor === 'rh') parentDriveId = sp.clientes.id_drive_rh;
-              else if (sp.setor === 'contrato') parentDriveId = sp.clientes.id_drive_recebidos; // <-- Resolvendo "Contratos"!
+              else if (sp.setor === 'contrato') parentDriveId = sp.clientes.id_drive_contratos; // <-- Gaveta Oficial de Contratos
               else parentDriveId = sp.clientes.id_drive_raiz;
             } else {
               const { data: pai } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', sp.parent_id).single();
