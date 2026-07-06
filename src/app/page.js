@@ -855,26 +855,33 @@ export default function AdminPage() {
 
   async function sincronizarDriveClientesAntigos() {
     confirmarAcao(
-      'Sincronizar Google Drive', 
-      'Deseja gerar as gavetas para clientes novos E sincronizar as subpastas antigas que ainda não estão no Drive?', 
+      'Sincronizador Inteligente (Google Drive)', 
+      'Deseja iniciar a sincronização de múltiplas fases? O sistema criará as estruturas raiz das empresas e, em seguida, fará o mapeamento profundo de todas as subpastas.', 
       async () => {
         setSubindo(true);
         let sucessoCount = 0;
+        let subpastasSincronizadas = 0;
         let ultimoErro = null;
         
-        // --- 🚀 FASE 1: SINCRONIZAR CLIENTES NOVOS (RAIZ E SETORES) ---
+        // 🧠 O CÉREBRO RÁPIDO: Guarda os IDs gerados agora para evitar o "Bug do 2º Clique"
+        const memoriaIdsPastas = {};
+
+        // =========================================================
+        // 🚀 FASE 1: SINCRONIZAR CLIENTES NOVOS (RAIZ E SETORES)
+        // =========================================================
         const { data: clientesSemDrive, error } = await supabase
           .from('clientes')
           .select('id, nome_empresa, tipo_conta, cpf, cnpj')
           .is('id_drive_raiz', null);
 
         if (!error && clientesSemDrive && clientesSemDrive.length > 0) {
-          const total = clientesSemDrive.length;
-          setProgressoSync({ atual: 0, total: total, empresa: 'Criando estruturas raiz...' });
+          const totalC = clientesSemDrive.length;
           
-          for (let i = 0; i < total; i++) {
+          for (let i = 0; i < totalC; i++) {
             const cli = clientesSemDrive[i];
-            setProgressoSync({ atual: i + 1, total: total, empresa: cli.nome_empresa });
+            
+            // 📊 ATUALIZA A TELA (FASE 1)
+            setProgressoSync({ fase: 1, totalFases: 2, nomeFase: 'Criando Gavetas Principais', atual: i + 1, total: totalC, texto: cli.nome_empresa, tipo: 'empresas' });
 
             const temCPF = cli.cpf && cli.cpf.trim() !== '';
             const isSocietario = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || temCPF;
@@ -899,7 +906,7 @@ export default function AdminPage() {
                    payloadUpdate.id_drive_contabil = dataDrive.folders.pasta_cont_bil;
                    payloadUpdate.id_drive_fiscal = dataDrive.folders.pasta_fiscal;
                    payloadUpdate.id_drive_rh = dataDrive.folders.pasta_dp___rh;
-                   payloadUpdate.id_drive_contratos = dataDrive.folders.pasta_contratos; // <-- NOVA GAVETA
+                   payloadUpdate.id_drive_contratos = dataDrive.folders.pasta_contratos; // Gaveta Contratos!
                    payloadUpdate.id_drive_recebidos = dataDrive.folders.pasta_documentos_recebidos;
                    payloadUpdate.id_drive_enviados = dataDrive.folders.pasta_documentos_enviados;
                    payloadUpdate.id_drive_lixeira = dataDrive.folders.pasta_lixeira;
@@ -919,34 +926,42 @@ export default function AdminPage() {
           }
         }
 
-        // --- 🚀 FASE 2: SINCRONIZAR SUBPASTAS PERSONALIZADAS ANTIGAS ---
-        setProgressoSync({ atual: 1, total: 1, empresa: 'Buscando subpastas avulsas...' });
-        
-        // Puxa as subpastas órfãs. A ordem 'criado_em' garante que Avôs e Pais sejam criados ANTES dos Filhos infinitamente!
+        // =========================================================
+        // 🚀 FASE 2: SINCRONIZAR SUBPASTAS (RECURSIVIDADE PROFUNDA)
+        // =========================================================
         const { data: subpastasPendentes } = await supabase
           .from('pastas_portal')
-          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos, id_drive_contratos)') // <-- Adicionado contratos
+          .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos, id_drive_contratos)') 
           .is('id_drive_pasta', null)
-          .order('criado_em', { ascending: true });
-
-        let subpastasSincronizadas = 0;
+          .order('criado_em', { ascending: true }); // Ordem cronológica para garantir Avô > Pai > Filho
 
         if (subpastasPendentes && subpastasPendentes.length > 0) {
-          for (let j = 0; j < subpastasPendentes.length; j++) {
-            const sp = subpastasPendentes[j];
-            setProgressoSync({ atual: j + 1, total: subpastasPendentes.length, empresa: `Subpasta: ${sp.nome}` });
+          const totalP = subpastasPendentes.length;
 
-            // Identifica quem é a gaveta Pai lá no Google Drive
+          for (let j = 0; j < totalP; j++) {
+            const sp = subpastasPendentes[j];
+            
+            // 📊 ATUALIZA A TELA (FASE 2)
+            setProgressoSync({ fase: 2, totalFases: 2, nomeFase: 'Mapeando Subpastas', atual: j + 1, total: totalP, texto: sp.nome, tipo: 'pastas/docs' });
+
             let parentDriveId = null;
+
             if (!sp.parent_id) {
+              // Se não tem pai, a gaveta raiz do setor é o pai
               if (sp.setor === 'contabil') parentDriveId = sp.clientes.id_drive_contabil;
               else if (sp.setor === 'fiscal') parentDriveId = sp.clientes.id_drive_fiscal;
               else if (sp.setor === 'rh') parentDriveId = sp.clientes.id_drive_rh;
-              else if (sp.setor === 'contrato') parentDriveId = sp.clientes.id_drive_contratos; // <-- Gaveta Oficial de Contratos
+              else if (sp.setor === 'contrato') parentDriveId = sp.clientes.id_drive_contratos;
               else parentDriveId = sp.clientes.id_drive_raiz;
             } else {
-              const { data: pai } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', sp.parent_id).single();
-              if (pai && pai.id_drive_pasta) parentDriveId = pai.id_drive_pasta;
+              // 🧠 Tenta pegar o ID do Pai da memória instantânea primeiro!
+              if (memoriaIdsPastas[sp.parent_id]) {
+                parentDriveId = memoriaIdsPastas[sp.parent_id];
+              } else {
+                // Se a pasta pai já existia no banco antes de rodarmos o botão hoje
+                const { data: pai } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', sp.parent_id).single();
+                if (pai && pai.id_drive_pasta) parentDriveId = pai.id_drive_pasta;
+              }
             }
 
             if (parentDriveId) {
@@ -957,24 +972,31 @@ export default function AdminPage() {
                   body: JSON.stringify({ nomePasta: sp.nome, parentDriveId })
                 });
                 const dataSub = await resSub.json();
+                
                 if (dataSub.success && dataSub.id_drive_pasta) {
+                  // 🧠 Salva na memória instantânea caso uma próxima pasta seja filha desta!
+                  memoriaIdsPastas[sp.id] = dataSub.id_drive_pasta;
                   await supabase.from('pastas_portal').update({ id_drive_pasta: dataSub.id_drive_pasta }).eq('id', sp.id);
                   subpastasSincronizadas++;
+                } else {
+                  console.error(`🚨 Erro da API do Google para [${sp.nome}]:`, dataSub.error);
                 }
-              } catch(e) { console.error('Erro na subpasta', e); }
+              } catch(e) { console.error('Erro de sistema na subpasta', e); }
             }
           }
         }
 
-        setProgressoSync({ atual: 1, total: 1, empresa: 'Finalizando...' });
+        // =========================================================
+        // 🎉 FINALIZAÇÃO INTELIGENTE
+        // =========================================================
+        setProgressoSync({ fase: 'Concluído', totalFases: 2, nomeFase: 'Salvando Dados', atual: 1, total: 1, texto: 'Quase pronto...', tipo: 'finalizado' });
 
-        // Relatório Final Inteligente
         if (sucessoCount > 0 && subpastasSincronizadas > 0) {
-          mostrarToast(`${sucessoCount} empresas e ${subpastasSincronizadas} subpastas criadas!`, 'sucesso');
+          mostrarToast(`${sucessoCount} empresas e ${subpastasSincronizadas} pastas sincronizadas!`, 'sucesso');
         } else if (sucessoCount > 0) {
-          mostrarToast(`${sucessoCount} novas empresas geradas no Drive!`, 'sucesso');
+          mostrarToast(`${sucessoCount} novas gavetas de empresas geradas no Drive!`, 'sucesso');
         } else if (subpastasSincronizadas > 0) {
-          mostrarToast(`${subpastasSincronizadas} subpastas antigas sincronizadas no Drive!`, 'sucesso');
+          mostrarToast(`${subpastasSincronizadas} subpastas e documentos sincronizados no Drive!`, 'sucesso');
         } else if (!ultimoErro) {
           mostrarToast('O seu portal e Google Drive já estão 100% alinhados!', 'aviso');
         } else if (ultimoErro) {
@@ -988,7 +1010,6 @@ export default function AdminPage() {
       'sucesso'
     );
   }
-
   function rejeitarEDeletar(doc) {
     confirmarAcao('Apagar Documento', 'Tem certeza que deseja apagar permanentemente este documento?', async () => {
       setSubindo(true);
@@ -3078,8 +3099,13 @@ export default function AdminPage() {
             {progressoSync ? (
               <div className="w-full flex flex-col items-center">
                 <div className="text-5xl mb-4 animate-bounce drop-shadow-lg">📂</div>
-                <h3 className="text-white font-black text-lg mb-1 tracking-wide">Sincronizando Google Drive</h3>
-                <p className="text-[#d4af37] font-black text-3xl mb-5">{Math.round((progressoSync.atual / progressoSync.total) * 100)}%</p>
+                <h3 className="text-white font-black text-lg mb-2 tracking-wide">Sincronização em Andamento</h3>
+                
+                <div className="bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/50 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest mb-4">
+                  {progressoSync.fase === 'Concluído' ? 'Finalizando...' : `Fase ${progressoSync.fase} de ${progressoSync.totalFases}: ${progressoSync.nomeFase}`}
+                </div>
+
+                <p className="text-[#d4af37] font-black text-3xl mb-4">{Math.round((progressoSync.atual / progressoSync.total) * 100)}%</p>
                 
                 <div className="w-full bg-zinc-800 rounded-full h-3.5 mb-3 overflow-hidden border border-zinc-700 shadow-inner">
                   <div 
@@ -3090,8 +3116,10 @@ export default function AdminPage() {
                   </div>
                 </div>
                 
-                <p className="text-xs text-zinc-400 truncate w-full text-center">Processando: <strong className="text-zinc-200">{progressoSync.empresa}</strong></p>
-                <p className="text-[10px] text-zinc-500 mt-2 font-bold bg-[#0d1b2a] px-3 py-1 rounded-full border border-zinc-800">{progressoSync.atual} de {progressoSync.total} empresas</p>
+                <p className="text-xs text-zinc-400 truncate w-full text-center">Processando: <strong className="text-zinc-200">{progressoSync.texto}</strong></p>
+                <p className="text-[10px] text-zinc-500 mt-2 font-bold bg-[#0d1b2a] px-3 py-1 rounded-full border border-zinc-800 uppercase tracking-widest">
+                  {progressoSync.atual} de {progressoSync.total} {progressoSync.tipo}
+                </p>
               </div>
             ) : (
               <>
