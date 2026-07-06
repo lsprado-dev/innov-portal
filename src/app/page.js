@@ -1065,6 +1065,30 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
+  // --- 🚀 FUNÇÃO MÁGICA: CLONAR ESTRUTURA DO LSPRADO ---
+  async function clonarPastasLsprado(novoClienteId) {
+    try {
+      const { data: lsprado } = await supabase.from('clientes').select('id').eq('cnpj', '50.457.640/0001-01').single();
+      if (!lsprado) return;
+
+      const { data: pastasLsprado } = await supabase.from('pastas_portal').select('*').eq('cliente_id', lsprado.id).order('criado_em', { ascending: true });
+      if (!pastasLsprado || pastasLsprado.length === 0) return;
+
+      const mapaIds = {};
+      for (const pasta of pastasLsprado) {
+        const novaPastaPayload = {
+          cliente_id: novoClienteId,
+          setor: pasta.setor,
+          nome: pasta.nome,
+          parent_id: pasta.parent_id ? mapaIds[pasta.parent_id] : null,
+          id_drive_pasta: null // Fica nulo para o Sincronizador criar fisicamente depois
+        };
+        const { data: novaPasta } = await supabase.from('pastas_portal').insert([novaPastaPayload]).select('id').single();
+        if (novaPasta) mapaIds[pasta.id] = novaPasta.id;
+      }
+    } catch(e) { console.error('Erro clone Lsprado:', e); }
+  }
+
   // Lógica Unificada para criação de cliente MANUAL
   async function handleAdicionarManual(e) {
     e.preventDefault();
@@ -1120,10 +1144,16 @@ export default function AdminPage() {
                 id_drive_contabil: dataDrive.folders.pasta_cont_bil,
                 id_drive_fiscal: dataDrive.folders.pasta_fiscal,
                 id_drive_rh: dataDrive.folders.pasta_dp___rh,
+                id_drive_contratos: dataDrive.folders.pasta_contratos, // <-- Gaveta Contratos
                 id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
+                id_drive_enviados: dataDrive.folders.pasta_documentos_enviados, // <-- Gaveta Enviados
                 id_drive_lixeira: dataDrive.folders.pasta_lixeira
              }).eq('id', novoClienteInserido.id);
-             mostrarToast('Pastas criadas e sincronizadas com sucesso no Drive!', 'sucesso');
+             
+             // 🚀 MÁGICA: Clona a árvore do Lsprado na mesma hora!
+             await clonarPastasLsprado(novoClienteInserido.id);
+             
+             mostrarToast('Cliente criado e pastas padrão clonadas!', 'sucesso');
           }
         } catch (e) {
           console.error("Erro na integração com Drive:", e);
@@ -1254,7 +1284,10 @@ export default function AdminPage() {
           senha: encriptarSenha(senhaGerada),
           senha_alterada: false
         };
-        await supabase.from('clientes').insert([clienteNovo]); 
+        const { data: novoCsv } = await supabase.from('clientes').insert([clienteNovo]).select('id').single(); 
+        
+        // 🚀 MÁGICA: Clona a árvore para cada cliente criado no CSV!
+        if (novoCsv) await clonarPastasLsprado(novoCsv.id);
       }
     }
 
@@ -1322,10 +1355,16 @@ export default function AdminPage() {
                 id_drive_contabil: dataDrive.folders.pasta_cont_bil,
                 id_drive_fiscal: dataDrive.folders.pasta_fiscal,
                 id_drive_rh: dataDrive.folders.pasta_dp___rh,
+                id_drive_contratos: dataDrive.folders.pasta_contratos, // <-- Gaveta Contratos
                 id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
+                id_drive_enviados: dataDrive.folders.pasta_documentos_enviados, // <-- Gaveta Enviados
                 id_drive_lixeira: dataDrive.folders.pasta_lixeira
              }).eq('id', novoCliente.id);
-             mostrarToast('Pastas criadas e sincronizadas com sucesso no Drive!', 'sucesso');
+             
+             // 🚀 MÁGICA: Clona a árvore do Lsprado ao ativar o cadastro!
+             await clonarPastasLsprado(novoCliente.id);
+             
+             mostrarToast('Cliente ativado e pastas padrão clonadas!', 'sucesso');
           }
         } catch (e) {
           console.error("Erro na integração com Drive:", e);
@@ -1898,8 +1937,8 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 gap-3">
                   {/* NOVO BOTÃO DO DRIVE COM LOGO */}
                   <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
-                    <svg className="w-8 h-8 group-hover:scale-110 transition-transform flex-shrink-0" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M339 314.9L175.4 32h-114L225 314.9h114zm-64.8 28H106.1L0 480h222.1l68.1-137.1zm115.6-28L281.3 129.2 168.1 314.9l59.4 102.5h222.1l-59.8-102.5z" fill="#d4af37"/>
+                    <svg className="w-8 h-8 min-w-[32px] text-[#d4af37] group-hover:scale-110 transition-transform flex-shrink-0 drop-shadow-md" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M7.71 3.5L1.15 15l3.43 6l6.55-11.5M9.73 3.5l-3.43 6L12.85 21h6.86M14.28 3.5h-6.86l6.57 11.5h6.86" />
                     </svg>
                     <div>
                       <p className="text-[11px] font-bold text-[#d4af37] uppercase">Sincronizar G. Drive</p>
