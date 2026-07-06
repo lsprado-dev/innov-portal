@@ -1937,9 +1937,11 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 gap-3">
                   {/* NOVO BOTÃO DO DRIVE COM LOGO */}
                   <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
-                    <svg className="w-8 h-8 min-w-[32px] text-[#d4af37] group-hover:scale-110 transition-transform flex-shrink-0 drop-shadow-md" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M7.71 3.5L1.15 15l3.43 6l6.55-11.5M9.73 3.5l-3.43 6L12.85 21h6.86M14.28 3.5h-6.86l6.57 11.5h6.86" />
-                    </svg>
+                    <div style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}>
+                      <svg className="w-full h-full text-[#d4af37] group-hover:scale-110 transition-transform drop-shadow-md" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M7.71 3.5L1.15 15l3.43 6l6.55-11.5M9.73 3.5l-3.43 6L12.85 21h6.86M14.28 3.5h-6.86l6.57 11.5h6.86" />
+                      </svg>
+                    </div>
                     <div>
                       <p className="text-[11px] font-bold text-[#d4af37] uppercase">Sincronizar G. Drive</p>
                       <p className="text-[10px] text-zinc-500">Gerar pastas antigas</p>
