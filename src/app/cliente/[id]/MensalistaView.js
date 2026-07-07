@@ -2068,11 +2068,11 @@ export default function MensalistaView({ params: paramsPromise }) {
                         {pastasAtuais.map(pasta => {
                           const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
                           return (
-                            <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-start group cursor-pointer hover:border-[#d4af37] transition shadow-md">
-                              <div className="flex items-start gap-3 flex-1 relative" onClick={() => setSubpastaAtiva(pasta.id)}>
-                                <div className="flex-shrink-0 mt-0.5"><IconFolderSolid /></div>
+                            <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md h-full">
+                              <div className="flex items-center gap-3 flex-1 relative" onClick={() => setSubpastaAtiva(pasta.id)}>
+                                <div className="flex-shrink-0"><IconFolderSolid /></div>
                                 <span className="font-bold text-zinc-200 break-words leading-snug pr-2">{pasta.nome}</span>
-                                {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 mt-1.5 ml-1"></span>}
+                                {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-1"></span>}
                               </div>
                               {isInterno && (
                                 <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
@@ -2114,13 +2114,13 @@ export default function MensalistaView({ params: paramsPromise }) {
 
                         <div className="space-y-3">
                           {arquivosFiltradosDaBusca.map((arq) => (
-                            <div key={arq.id} className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0 transition-all ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/5 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} />
-                                <IconFile />
+                            <div key={arq.id} className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-start justify-between gap-4 w-full min-w-0 transition-all ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/5 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0 mt-1" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} />
+                                <div className="flex-shrink-0 mt-0.5"><IconFile /></div>
                                 <div className="min-w-0 w-full cursor-pointer" onClick={() => toggleSelecao(arq.id)}>
-                                  <p className="text-sm text-zinc-200 font-medium truncate max-w-md">{arq.nome_original}</p>
-                                  <p className="text-[11px] text-zinc-500 mt-0.5 truncate">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
+                                  <p className="text-sm text-zinc-200 font-medium break-words leading-snug pr-2">{arq.nome_original}</p>
+                                  <p className="text-[11px] text-zinc-500 mt-1 break-words">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
                                 </div>
                               </div>
                               <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
