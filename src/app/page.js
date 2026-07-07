@@ -1108,8 +1108,24 @@ export default function AdminPage() {
       const { data: lsprado } = await supabase.from('clientes').select('id').eq('cnpj', '50.457.640/0001-01').single();
       if (!lsprado) return;
 
-      const { data: pastasLsprado } = await supabase.from('pastas_portal').select('*').eq('cliente_id', lsprado.id).order('criado_em', { ascending: true });
+      let { data: pastasLsprado } = await supabase.from('pastas_portal').select('*').eq('cliente_id', lsprado.id);
       if (!pastasLsprado || pastasLsprado.length === 0) return;
+
+      // 🧠 MÁGICA: Ordenação Topológica para garantir que a pasta Pai seja sempre criada ANTES da pasta Filha (Permite níveis infinitos)
+      const mapPais = {};
+      pastasLsprado.forEach(sp => { mapPais[sp.id] = sp.parent_id; });
+      const calcularProfundidade = (id) => {
+        let profundidade = 0;
+        let idPaiAtual = mapPais[id];
+        while (idPaiAtual) {
+          profundidade++;
+          if (!mapPais[idPaiAtual]) break;
+          idPaiAtual = mapPais[idPaiAtual];
+          if (profundidade > 30) break; // Trava anti-loop
+        }
+        return profundidade;
+      };
+      pastasLsprado = pastasLsprado.sort((a, b) => calcularProfundidade(a.id) - calcularProfundidade(b.id));
 
       const mapaIds = {};
       for (const pasta of pastasLsprado) {

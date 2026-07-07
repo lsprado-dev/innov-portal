@@ -630,8 +630,10 @@ export default function MensalistaView({ params: paramsPromise }) {
       // Se for uma subpasta, procura a pasta pai nos outros clientes para colocar lá dentro
       const parentFolder = pastas.find(p => p.id === parentIdAtual);
       if (parentFolder) {
+        // 🚀 MÁGICA: Removemos o ".is('parent_id', null)" que travava a busca apenas na raiz!
+        // Agora ele acha a pasta pai em qualquer nível de profundidade.
         const { data: possibleParents } = await supabase.from('pastas_portal')
-          .select('id, cliente_id').eq('nome', parentFolder.nome).eq('setor', pastaAtiva).is('parent_id', null);
+          .select('id, cliente_id').eq('nome', parentFolder.nome).eq('setor', pastaAtiva);
         
         const insertData = [];
         otherClients.forEach(c => {
