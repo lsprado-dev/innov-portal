@@ -2068,11 +2068,11 @@ export default function MensalistaView({ params: paramsPromise }) {
                         {pastasAtuais.map(pasta => {
                           const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
                           return (
-                            <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md">
-                              <div className="flex items-center gap-3 flex-1 overflow-hidden relative" onClick={() => setSubpastaAtiva(pasta.id)}>
-                                <IconFolderSolid /> 
-                                <span className="font-bold text-zinc-200 truncate">{pasta.nome}</span>
-                                {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-1"></span>}
+                            <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-start group cursor-pointer hover:border-[#d4af37] transition shadow-md">
+                              <div className="flex items-start gap-3 flex-1 relative" onClick={() => setSubpastaAtiva(pasta.id)}>
+                                <div className="flex-shrink-0 mt-0.5"><IconFolderSolid /></div>
+                                <span className="font-bold text-zinc-200 break-words leading-snug pr-2">{pasta.nome}</span>
+                                {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 mt-1.5 ml-1"></span>}
                               </div>
                               {isInterno && (
                                 <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
