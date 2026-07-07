@@ -627,11 +627,17 @@ export default function MensalistaView({ params: paramsPromise }) {
       }));
       await supabase.from('pastas_portal').insert(insertData);
     } else {
-      // Se for uma subpasta, procura a pasta pai nos outros clientes para colocar lá dentro
-      const parentFolder = pastas.find(p => p.id === parentIdAtual);
+      
+      // 🚀 MÁGICA DE VELOCIDADE: Tenta achar no React State. Se for no Drag & Drop rápido e ela não estiver lá, busca direto no Banco!
+      let parentFolder = pastas.find(p => p.id === parentIdAtual);
+      
+      if (!parentFolder) {
+        const { data: dbParent } = await supabase.from('pastas_portal').select('nome').eq('id', parentIdAtual).single();
+        if (dbParent) parentFolder = dbParent;
+      }
+
+      // Agora com a pasta pai garantida na mão, faz o espelhamento
       if (parentFolder) {
-        // 🚀 MÁGICA: Removemos o ".is('parent_id', null)" que travava a busca apenas na raiz!
-        // Agora ele acha a pasta pai em qualquer nível de profundidade.
         const { data: possibleParents } = await supabase.from('pastas_portal')
           .select('id, cliente_id').eq('nome', parentFolder.nome).eq('setor', pastaAtiva);
         
@@ -645,7 +651,6 @@ export default function MensalistaView({ params: paramsPromise }) {
         if (insertData.length > 0) await supabase.from('pastas_portal').insert(insertData);
       }
     }
-    mostrarToast('Pasta Padrão (Lsprado) replicada para os outros clientes!', 'sucesso');
   }
 
   function handleCriarPasta() {
