@@ -330,6 +330,8 @@ export default function EspecialView({ params }) {
       // Sincronizacao direta com o link validado do Google Sheets
       fetch("https://script.google.com/macros/s/AKfycbw1t7TFbMVkMSj28OM4avyCquTTOu6TtZGhaHCu04NzQ7ntKKInFkxyKCKHwNs-IwAL/exec", {
         method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           id: procId,
           cliente_nome: cliente.nome_empresa || cliente.nome_contato,
@@ -392,6 +394,8 @@ export default function EspecialView({ params }) {
         // Sincronizacao direta e imediata com o link validado do Google Sheets
         fetch("https://script.google.com/macros/s/AKfycbw1t7TFbMVkMSj28OM4avyCquTTOu6TtZGhaHCu04NzQ7ntKKInFkxyKCKHwNs-IwAL/exec", {
           method: 'POST',
+          mode: 'no-cors',
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             id: modalProcesso.processo.id,
             cliente_nome: cliente.nome_empresa || cliente.nome_contato,
@@ -401,12 +405,20 @@ export default function EspecialView({ params }) {
           })
         }).catch(err => console.error("Erro na sincronização Sheets:", err));
         
-        // Dispara o Push para o Celular do Cliente
-        dispararPush(
-          id, 
-          'Processo Atualizado!', 
-          `O seu processo de legalização avançou para a etapa: ${formProcesso.passo}.`
-        );
+        // Dispara o Push para o Celular do Cliente (Protegido contra travamento)
+        try {
+          if (typeof dispararPush === 'function') {
+            dispararPush(
+              id, 
+              'Processo Atualizado!', 
+              `O seu processo de legalização avançou para a etapa: ${formProcesso.passo}.`
+            );
+          } else {
+            console.warn("Aviso: Função dispararPush não encontrada/importada neste arquivo.");
+          }
+        } catch (pushErr) {
+          console.error("Erro ao tentar enviar o push:", pushErr);
+        }
         
         // Avisa a Maria
         const passoNome = PASSOS_SOCIETARIO.find(p => p.id === parseInt(formProcesso.passo))?.nome;
