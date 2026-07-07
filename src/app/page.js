@@ -1922,11 +1922,28 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               
               {/* CARD 1: CLIENTES */}
-              <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl flex flex-col justify-between">
+              <div className="bg-[#1b263b] p-5 sm:p-6 rounded-xl border border-zinc-800 shadow-xl flex flex-col justify-between">
                 <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Total de Clientes</p>
-                <div className="flex items-end gap-3 mt-auto">
+                
+                <div className="flex items-baseline gap-3 mb-4">
                   <p className="text-5xl font-black text-white">{clientes.length}</p>
-                  <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded mb-1">Ativos</span>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded uppercase tracking-widest">Ativos</span>
+                </div>
+
+                {/* Divisão Mensalistas vs Societário */}
+                <div className="flex gap-2 flex-wrap border-t border-zinc-800/80 pt-3">
+                  <div className="flex items-center gap-1.5 bg-[#0d1b2a] border border-[#d4af37]/30 px-2 py-1 rounded-md flex-1 min-w-max">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase">Mensalistas:</span>
+                    <span className="text-[11px] font-black text-[#d4af37]">
+                      {clientes.filter(c => c.tipo_conta !== 'especiais' && c.tipo_conta !== 'especial').length}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-[#0d1b2a] border border-purple-500/30 px-2 py-1 rounded-md flex-1 min-w-max">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase">Societário:</span>
+                    <span className="text-[11px] font-black text-purple-400">
+                      {clientes.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial').length}
+                    </span>
+                  </div>
                 </div>
               </div>
 
