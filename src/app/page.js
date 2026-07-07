@@ -299,8 +299,13 @@ export default function AdminPage() {
           setTotalArquivosSistema((r.count || 0) + (e.count || 0));
         });
       });
-      supabase.from('solicitacoes_cadastro').select('id', { count: 'exact' }).then(r => setPendentes({length: r.count || 0}));
-      supabase.from('envios_cliente').select('id').eq('status', 'pendente').then(r => setRecebidos({length: r.data?.length || 0}));
+      // Puxa a contagem sem quebrar o array real da tela!
+      supabase.from('solicitacoes_cadastro').select('id', { count: 'exact', head: true }).then(r => {
+         if (abaAtiva !== 'pendentes') setPendentes(new Array(r.count || 0)); 
+      });
+      supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).eq('status', 'pendente').then(r => {
+         if (abaAtiva !== 'recebidos') setRecebidos(new Array(r.count || 0));
+      });
     }
     
     // Cálculo Mágico do RANGE (Ex: Página 0 pega do 0 ao 49 | Página 1 pega do 50 ao 99)
@@ -310,11 +315,12 @@ export default function AdminPage() {
     let novaBusca = [];
 
     if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
-      const { data } = await supabase.from('clientes').select('*').order('nome_empresa');
+      // Ampliando o limite de segurança para 5.000 clientes (Evita limite padrão do PostgREST)
+      const { data } = await supabase.from('clientes').select('*').order('nome_empresa').limit(5000);
       if (data) setClientes(data);
       
       // Carrega os processos vinculados a esses clientes
-      const { data: procs } = await supabase.from('processos_societarios').select('*');
+      const { data: procs } = await supabase.from('processos_societarios').select('*').limit(5000);
       if (procs) setProcessosSocietarios(procs);
 
       setTemMaisDados(false); 

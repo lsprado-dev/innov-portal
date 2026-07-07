@@ -662,7 +662,8 @@ export default function EspecialView({ params }) {
 
             {(() => {
               const processosFiltrados = processos.filter(proc => {
-                const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                // Busca inteligente e à prova de falhas de digitação
+const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.tipo_documento === 'comprovante_honorario');
                 const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
                 return subAbaStatus === 'ativos' ? !isFinished : isFinished;
               });
@@ -1006,7 +1007,7 @@ export default function EspecialView({ params }) {
             <div className="space-y-6 mb-8">
               {processos.map(proc => {
                 const finalizado = proc.passo === 8;
-                const clientEnviouComprovante = docsEnviados.find(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                const clientEnviouComprovante = docsEnviados.find(d => d.processo_id === proc.id && d.tipo_documento === 'comprovante_honorario');
                 
                 let taxasArray = [];
                 try {
@@ -1131,7 +1132,16 @@ export default function EspecialView({ params }) {
                                       setSubindoArquivo(true);
                                       const caminho = `${id}/recebidos_societario/${Date.now()}_Honorario_${file.name.replace(/[^a-zA-Z0-9.\-]/g, '_')}`;
                                       await supabase.storage.from('documentos').upload(caminho, file);
-                                      await supabase.from('envios_cliente').insert([{ cliente_id: id, processo_id: proc.id, nome_documento: `Comprovante Honorários - ${proc.titulo}`, nome_original: file.name, caminho_storage: caminho, departamento: 'Financeiro', status: 'pendente' }]);
+                                      await supabase.from('envios_cliente').insert([{ 
+  cliente_id: id, 
+  processo_id: proc.id, 
+  nome_documento: `Comprovante Honorários - ${proc.titulo}`, 
+  nome_original: file.name, 
+  caminho_storage: caminho, 
+  departamento: 'Financeiro', 
+  status: 'pendente',
+  tipo_documento: 'comprovante_honorario' // <--- A MÁGICA ACONTECE AQUI
+}]);
                                       
                                       const { data: dbProc } = await supabase.from('processos_societarios').select('historico_passos').eq('id', proc.id).single();
                                       let hist = {}; try { hist = typeof dbProc?.historico_passos === 'string' ? JSON.parse(dbProc.historico_passos) : (dbProc?.historico_passos || {}); } catch(e) {}

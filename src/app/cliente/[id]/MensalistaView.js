@@ -516,9 +516,9 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   async function carregarDadosDaAba() {
     setCarregandoConteudo(true); // <--- Inicia a animação de loading
-    
-    if (abaPrincipal === 'pastas' && pastaAtiva) {
-      // MÁGICA: Prepara as 3 consultas e dispara juntas em paralelo (Muito mais rápido!)
+    try {
+      if (abaPrincipal === 'pastas' && pastaAtiva) {
+        // MÁGICA: Prepara as 3 consultas e dispara juntas em paralelo (Muito mais rápido!)
       const reqPastas = supabase.from('pastas_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).order('nome');
       const reqArquivos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
       const reqFinanceiro = pastaAtiva === 'financeiro' ? supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id) : Promise.resolve({ data: null });
@@ -586,12 +586,16 @@ export default function MensalistaView({ params: paramsPromise }) {
       
       let lixeiraCompleta = [];
       if (resArq.data) lixeiraCompleta = [...lixeiraCompleta, ...resArq.data.map(i => ({...i, origem: 'portal'}))];
-      if (resEnv.data) lixeiraCompleta = [...lixeiraCompleta, ...resEnv.data.map(i => ({...i, origem: 'envios'}))];
-      lixeiraCompleta.sort((a, b) => new Date(b.data_exclusao) - new Date(a.data_exclusao));
-      setItensLixeira(lixeiraCompleta);
+        if (resEnv.data) lixeiraCompleta = [...lixeiraCompleta, ...resEnv.data.map(i => ({...i, origem: 'envios'}))];
+        lixeiraCompleta.sort((a, b) => new Date(b.data_exclusao) - new Date(a.data_exclusao));
+        setItensLixeira(lixeiraCompleta);
+      }
+    } catch (error) {
+      console.error("Erro no carregamento da aba:", error);
+      mostrarToast("Houve uma instabilidade na rede. Alguns dados podem não ter carregado.", "erro");
+    } finally {
+      setCarregandoConteudo(false); // <--- Termina a animação garantido, com erro ou sem!
     }
-
-    setCarregandoConteudo(false); // <--- Termina a animação
   }
 
   async function togglePagoManual(mesRef, estaPago) {
