@@ -1967,12 +1967,22 @@ export default function AdminPage() {
               {eGestor && (
                 <div className="grid grid-cols-1 gap-3">
 
-                 {/* NOVO BOTÃO DO DRIVE COM LOGO CORRETO E BLINDADO */}
+                {/* NOVO BOTÃO DO DRIVE COM MÁSCARA DOURADA */}
                   <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
                     <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
-                      <svg style={{ width: '20px', height: '20px' }} viewBox="0 0 512 512" fill="currentColor" className="text-[#d4af37]" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M339 314.9L175.4 32h-114L225 314.9h114zm-64.8 28H106.1L0 480h222.1l68.1-137.1zm115.6-28L281.3 129.2 168.1 314.9l59.4 102.5h222.1l-59.8-102.5z" />
-                      </svg>
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        backgroundColor: '#d4af37',
+                        WebkitMaskImage: 'url("https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg")',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskImage: 'url("https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg")',
+                        maskSize: 'contain',
+                        maskRepeat: 'no-repeat',
+                        maskPosition: 'center'
+                      }}></div>
                     </div>
                     <div className="overflow-hidden">
                       <p className="text-[11px] font-bold text-[#d4af37] uppercase truncate">Sincronizar G. Drive</p>
