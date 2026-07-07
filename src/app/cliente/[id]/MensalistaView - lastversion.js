@@ -962,65 +962,35 @@ export default function MensalistaView({ params: paramsPromise }) {
   }
 
   function handleMoverParaLixeira(arq, origem) {
-    confirmarAcao('Mover para a Lixeira', 'Deseja mover este arquivo para a gaveta Lixeira do Drive? Ele ficará protegido lá.', async () => {
+    confirmarAcao('Mover para a Lixeira', 'Deseja mover este arquivo para a Lixeira? Ele ficará protegido lá por 30 dias antes da exclusão.', async () => {
       setSubindoArquivo(true);
-      // Joga na gaveta física da Lixeira do cliente
+      // MÁGICA: Joga na lixeira oficial do Google Drive também!
       if (arq.caminho_storage?.startsWith('DRIVE:')) {
-        await fetch('/api/drive/acao', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ acao: 'mover', fileId: arq.caminho_storage, targetFolderId: cliente.id_drive_lixeira }) 
-        });
+        await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'lixeira', fileId: arq.caminho_storage }) });
       }
       const tabela = origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
       const { error } = await supabase.from(tabela).update({ data_exclusao: new Date().toISOString() }).eq('id', arq.id);
-      if (!error) { mostrarToast('Movido para a Lixeira física.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); await carregarDadosDaAba(); }
+      if (!error) { mostrarToast('Movido para a lixeira.', 'aviso'); await registrarAuditoria('ARQUIVO_LIXEIRA', `Moveu o arquivo para a lixeira.`); await carregarDadosDaAba(); }
       setSubindoArquivo(false);
     });
   }
 
   async function handleRestaurarDaLixeira(arq) {
     setSubindoArquivo(true); 
-    
-    // MÁGICA DE RESTAURAÇÃO: Descobre de onde ele veio
-    let pastaOriginalId = null;
-    if (arq.origem === 'envios') {
-       pastaOriginalId = cliente.id_drive_recebidos;
-    } else {
-       if (arq.subpasta_id) {
-          pastaOriginalId = typeof pastas !== 'undefined' ? pastas.find(p => p.id === arq.subpasta_id)?.id_drive_pasta : null;
-          if (!pastaOriginalId) {
-             const { data: dbPasta } = await supabase.from('pastas_portal').select('id_drive_pasta').eq('id', arq.subpasta_id).single();
-             if (dbPasta) pastaOriginalId = dbPasta.id_drive_pasta;
-          }
-       } else {
-          if (arq.setor === 'contabil') pastaOriginalId = cliente.id_drive_contabil;
-          else if (arq.setor === 'fiscal') pastaOriginalId = cliente.id_drive_fiscal;
-          else if (arq.setor === 'rh') pastaOriginalId = cliente.id_drive_rh;
-          else if (arq.setor === 'contrato') pastaOriginalId = cliente.id_drive_contratos;
-          else if (arq.setor === 'societario') pastaOriginalId = cliente.id_drive_enviados;
-          else pastaOriginalId = cliente.id_drive_raiz;
-       }
+    // MÁGICA: Tira da lixeira oficial do Google Drive e ele lembra de qual pasta veio automaticamente!
+    if (arq.caminho_storage?.startsWith('DRIVE:')) {
+      await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'restaurar', fileId: arq.caminho_storage }) });
     }
-
-    // Devolve para a pasta original
-    if (arq.caminho_storage?.startsWith('DRIVE:') && pastaOriginalId) {
-      await fetch('/api/drive/acao', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ acao: 'mover', fileId: arq.caminho_storage, targetFolderId: pastaOriginalId }) 
-      });
-    }
-    
     const tabela = arq.origem === 'portal' ? 'arquivos_portal' : 'envios_cliente';
     const { error } = await supabase.from(tabela).update({ data_exclusao: null }).eq('id', arq.id);
-    if (!error) { mostrarToast('Arquivo restaurado para a pasta original!', 'sucesso'); await carregarDadosDaAba(); }
+    if (!error) { mostrarToast('Arquivo restaurado!', 'sucesso'); await carregarDadosDaAba(); }
     setSubindoArquivo(false);
   }
 
   function handleDeletarPermanente(arq) {
     confirmarAcao('Excluir Definitivamente', 'PERIGO: Este arquivo será apagado permanentemente dos servidores e não poderá ser recuperado. Deseja continuar?', async () => {
       setSubindoArquivo(true);
+      // MÁGICA: Exclui permanentemente do Google Drive também!
       if (arq.caminho_storage?.startsWith('DRIVE:')) {
         await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'deletar', fileId: arq.caminho_storage }) });
       } else {
@@ -1038,6 +1008,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     confirmarAcao('Esvaziar Lixeira', 'Esvaziar a lixeira agora? TODOS os arquivos aqui presentes serão DELETADOS PERMANENTEMENTE.', async () => {
       setSubindoArquivo(true);
       for (const arq of itensLixeira) {
+        // MÁGICA: Exclui do Drive ou do Supabase dependendo da origem
         if (arq.caminho_storage?.startsWith('DRIVE:')) {
           await fetch('/api/drive/acao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'deletar', fileId: arq.caminho_storage }) });
         } else {
