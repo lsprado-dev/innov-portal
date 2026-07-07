@@ -1990,18 +1990,49 @@ export default function AdminPage() {
                     </div>
                   </button>
 
+                  {/* BOTÃO SUPABASE COM MÁSCARA */}
                   <a href="https://supabase.com/dashboard/projects" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-emerald-500/20 hover:border-emerald-500 shadow-md flex items-center gap-3 transition-all group">
-                    <span className="text-emerald-400 text-2xl group-hover:scale-110 transition-transform"></span>
-                    <div>
-                      <p className="text-[11px] font-bold text-emerald-400 uppercase">Banco de Dados</p>
-                      <p className="text-[10px] text-zinc-500">Painel Supabase</p>
+                    <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        backgroundColor: '#34d399',
+                        WebkitMaskImage: 'url("https://cdn.simpleicons.org/supabase")',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskImage: 'url("https://cdn.simpleicons.org/supabase")',
+                        maskSize: 'contain',
+                        maskRepeat: 'no-repeat',
+                        maskPosition: 'center'
+                      }}></div>
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="text-[11px] font-bold text-emerald-400 uppercase truncate">Banco de Dados</p>
+                      <p className="text-[10px] text-zinc-500 truncate">Painel Supabase</p>
                     </div>
                   </a>
+
+                  {/* BOTÃO VERCEL COM MÁSCARA */}
                   <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-blue-500/20 hover:border-blue-500 shadow-md flex items-center gap-3 transition-all group">
-                    <span className="text-blue-400 text-2xl group-hover:scale-110 transition-transform"></span>
-                    <div>
-                      <p className="text-[11px] font-bold text-blue-400 uppercase">Servidor (Banda)</p>
-                      <p className="text-[10px] text-zinc-500">Painel Vercel</p>
+                    <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        backgroundColor: '#60a5fa',
+                        WebkitMaskImage: 'url("https://cdn.simpleicons.org/vercel")',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskImage: 'url("https://cdn.simpleicons.org/vercel")',
+                        maskSize: 'contain',
+                        maskRepeat: 'no-repeat',
+                        maskPosition: 'center'
+                      }}></div>
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="text-[11px] font-bold text-blue-400 uppercase truncate">Servidor (Banda)</p>
+                      <p className="text-[10px] text-zinc-500 truncate">Painel Vercel</p>
                     </div>
                   </a>
                 </div>
