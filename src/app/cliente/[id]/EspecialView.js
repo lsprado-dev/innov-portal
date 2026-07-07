@@ -316,7 +316,8 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(true);
     const novoStatus = !statusAtual;
     
-    const { data: proc } = await supabase.from('processos_societarios').select('historico_passos, titulo, passo').eq('id', procId).single();
+    // Buscando também os valores e taxas do processo
+    const { data: proc } = await supabase.from('processos_societarios').select('historico_passos, titulo, passo, valor_honorarios, valor_entrada, taxas_pendentes').eq('id', procId).single();
     let historico = {};
     try { historico = typeof proc?.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc?.historico_passos || {}); } catch(e) {}
     
@@ -327,8 +328,13 @@ export default function EspecialView({ params }) {
     if (!error) {
       mostrarToast(novoStatus ? 'Processo 100% finalizado com sucesso!' : 'Pagamento revertido para pendente.', 'sucesso');
       
-      // Sincronizacao direta com o link validado do Google Sheets
-      fetch("https://script.google.com/macros/s/AKfycbw1t7TFbMVkMSj28OM4avyCquTTOu6TtZGhaHCu04NzQ7ntKKInFkxyKCKHwNs-IwAL/exec", {
+      // Prepara as taxas pagas para enviar a planilha
+      let taxasArray = [];
+      try { taxasArray = JSON.parse(proc?.taxas_pendentes || '[]'); if(!Array.isArray(taxasArray)) taxasArray = [taxasArray]; } catch(e){}
+      const taxasPagasStr = taxasArray.filter(t => t.status === 'pago').map(t => `${t.nome} (R$ ${t.valor})`).join(' | ') || 'Nenhuma';
+
+      // Sincronizacao direta com o NOVO link do Google Sheets
+      fetch("https://script.google.com/macros/s/AKfycby7zYZabe5RAmuGWmzG1q7bbhtfBSlxHLmsyzXeitffYmxftWNJ0mHfPqJqlPLwIplKxQ/exec", {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -337,7 +343,10 @@ export default function EspecialView({ params }) {
           cliente_nome: cliente.nome_empresa || cliente.nome_contato,
           titulo: proc?.titulo || 'Sem Titulo',
           passo: novoStatus ? 8 : (parseInt(proc?.passo) || 1),
-          pago: novoStatus
+          pago: novoStatus,
+          valor_total: proc?.valor_honorarios || 0,
+          valor_entrada: proc?.valor_entrada || 0,
+          taxas_pagas: taxasPagasStr
         })
       }).catch(err => console.error("Erro Sheets:", err));
 
@@ -391,8 +400,8 @@ export default function EspecialView({ params }) {
       if (!error) {
         mostrarToast('Processo atualizado!', 'sucesso');
         
-        // Sincronizacao direta e imediata com o link validado do Google Sheets
-        fetch("https://script.google.com/macros/s/AKfycbw1t7TFbMVkMSj28OM4avyCquTTOu6TtZGhaHCu04NzQ7ntKKInFkxyKCKHwNs-IwAL/exec", {
+        // Sincronizacao direta e imediata com o NOVO link do Google Sheets
+        fetch("https://script.google.com/macros/s/AKfycby7zYZabe5RAmuGWmzG1q7bbhtfBSlxHLmsyzXeitffYmxftWNJ0mHfPqJqlPLwIplKxQ/exec", {
           method: 'POST',
           mode: 'no-cors',
           headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -401,7 +410,10 @@ export default function EspecialView({ params }) {
             cliente_nome: cliente.nome_empresa || cliente.nome_contato,
             titulo: formProcesso.titulo,
             passo: parseInt(formProcesso.passo),
-            pago: formProcesso.honorario_pago
+            pago: formProcesso.honorario_pago,
+            valor_total: formProcesso.valor_honorarios || 0,
+            valor_entrada: formProcesso.valor_entrada || 0,
+            taxas_pagas: listaTaxas.filter(t => t.status === 'pago').map(t => `${t.nome} (R$ ${t.valor})`).join(' | ') || 'Nenhuma'
           })
         }).catch(err => console.error("Erro na sincronização Sheets:", err));
         
