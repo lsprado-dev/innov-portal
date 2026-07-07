@@ -947,7 +947,8 @@ export default function AdminPage() {
         const { data: subpastasPendentesBrutas } = await supabase
           .from('pastas_portal')
           .select('*, clientes!inner(id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_recebidos, id_drive_contratos)') 
-          .is('id_drive_pasta', null);
+          .is('id_drive_pasta', null)
+          .limit(5000); // 🚀 MÁGICA: Impede o PostgREST de cortar a lista em 1000 itens se houverem muitas subpastas profundas pendentes.
 
         let subpastasPendentes = [];
         if (subpastasPendentesBrutas && subpastasPendentesBrutas.length > 0) {

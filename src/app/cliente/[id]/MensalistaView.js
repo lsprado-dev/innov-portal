@@ -627,27 +627,54 @@ export default function MensalistaView({ params: paramsPromise }) {
       }));
       await supabase.from('pastas_portal').insert(insertData);
     } else {
+      // 🚀 MÁGICA PROFUNDA: Reconstruir o caminho (árvore) exato da pasta pai na Lsprado
+      let atual = parentIdAtual;
+      const arvoreOriginal = [];
+      let dbSearchLimit = 15; // Proteção contra loops infinitos
       
-      // 🚀 MÁGICA DE VELOCIDADE: Tenta achar no React State. Se for no Drag & Drop rápido e ela não estiver lá, busca direto no Banco!
-      let parentFolder = pastas.find(p => p.id === parentIdAtual);
-      
-      if (!parentFolder) {
-        const { data: dbParent } = await supabase.from('pastas_portal').select('nome').eq('id', parentIdAtual).single();
-        if (dbParent) parentFolder = dbParent;
+      while (atual && dbSearchLimit > 0) {
+        let f = pastas.find(p => p.id === atual);
+        if (!f) {
+          const { data } = await supabase.from('pastas_portal').select('id, nome, parent_id').eq('id', atual).single();
+          f = data;
+        }
+        if (f) {
+          arvoreOriginal.unshift(f.nome);
+          atual = f.parent_id;
+          dbSearchLimit--;
+        } else {
+          break;
+        }
       }
 
-      // Agora com a pasta pai garantida na mão, faz o espelhamento
-      if (parentFolder) {
-        const { data: possibleParents } = await supabase.from('pastas_portal')
-          .select('id, cliente_id').eq('nome', parentFolder.nome).eq('setor', pastaAtiva);
-        
+      if (arvoreOriginal.length > 0) {
+        // Puxa TODAS as pastas deste setor de uma só vez para velocidade!
+        const { data: todasPastasSetor } = await supabase.from('pastas_portal')
+          .select('id, cliente_id, nome, parent_id').eq('setor', pastaAtiva);
+
         const insertData = [];
+        
         otherClients.forEach(c => {
-          const match = possibleParents?.find(p => p.cliente_id === c.id);
+          const pastasCliente = todasPastasSetor?.filter(p => p.cliente_id === c.id) || [];
+          
+          // Validação de DNA (Checa se todo o caminho para trás bate com a Lsprado)
+          const validarCaminho = (pastaCandidata) => {
+            let currId = pastaCandidata.id;
+            for (let i = arvoreOriginal.length - 1; i >= 0; i--) {
+              const p = pastasCliente.find(x => x.id === currId);
+              if (!p || p.nome !== arvoreOriginal[i]) return false;
+              currId = p.parent_id;
+            }
+            return currId === null; // Deve terminar na raiz ao mesmo tempo
+          };
+
+          const match = pastasCliente.find(p => p.nome === arvoreOriginal[arvoreOriginal.length - 1] && validarCaminho(p));
+
           if (match) {
             insertData.push({ cliente_id: c.id, setor: pastaAtiva, nome: nomePastaCoringa, parent_id: match.id });
           }
         });
+
         if (insertData.length > 0) await supabase.from('pastas_portal').insert(insertData);
       }
     }
