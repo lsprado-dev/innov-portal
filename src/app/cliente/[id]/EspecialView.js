@@ -377,6 +377,19 @@ export default function EspecialView({ params }) {
       if (!error) {
         mostrarToast('Processo atualizado!', 'sucesso');
         
+        // 🚀 GATILHO PRO: Sincroniza em tempo real com o Google Sheets!
+        fetch('/api/societario/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: modalProcesso.processo.id,
+            cliente_nome: cliente.nome_empresa || cliente.nome_contato,
+            titulo: formProcesso.titulo,
+            passo: parseInt(formProcesso.passo),
+            pago: formProcesso.honorario_pago
+          })
+        }).catch(err => console.error("Erro na sincronização Sheets:", err));
+        
         // Dispara o Push para o Celular do Cliente
         dispararPush(
           id, 
