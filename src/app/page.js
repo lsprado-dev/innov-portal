@@ -339,7 +339,7 @@ export default function AdminPage() {
       novaBusca = data || [];
       setAlertas(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
       if (recarregar) {
-        const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email').order('nome_empresa');
+        const { data: clis } = await supabase.from('clientes').select('*').order('nome_empresa');
         if (clis) setClientes(clis);
       }
     } 
@@ -353,7 +353,7 @@ export default function AdminPage() {
       novaBusca = data || [];
       setLogs(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
       if (recarregar) {
-        const { data: clis } = await supabase.from('clientes').select('id, nome_empresa, regime_tributario, email');
+        const { data: clis } = await supabase.from('clientes').select('*').order('nome_empresa');
         if (clis) setClientes(clis);
       }
     }
