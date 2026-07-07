@@ -316,8 +316,7 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(true);
     const novoStatus = !statusAtual;
     
-    // MÁGICA: Carimba a data do Passo 8 (Finalizado)
-    const { data: proc } = await supabase.from('processos_societarios').select('historico_passos').eq('id', procId).single();
+    const { data: proc } = await supabase.from('processos_societarios').select('historico_passos, titulo, passo').eq('id', procId).single();
     let historico = {};
     try { historico = typeof proc?.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc?.historico_passos || {}); } catch(e) {}
     
@@ -327,6 +326,19 @@ export default function EspecialView({ params }) {
     const { error } = await supabase.from('processos_societarios').update({ honorario_pago: novoStatus, historico_passos: historico }).eq('id', procId);
     if (!error) {
       mostrarToast(novoStatus ? 'Processo 100% finalizado com sucesso!' : 'Pagamento revertido para pendente.', 'sucesso');
+      
+      // Sincronizacao direta com o link validado do Google Sheets
+      fetch("https://script.google.com/macros/s/AKfycbw1t7TFbMVkMSj28OM4avyCquTTOu6TtZGhaHCu04NzQ7ntKKInFkxyKCKHwNs-IwAL/exec", {
+        method: "POST",
+        body: JSON.stringify({
+          id: procId,
+          cliente_nome: cliente.nome_empresa || cliente.nome_contato,
+          titulo: proc?.titulo || 'Sem Titulo',
+          passo: novoStatus ? 8 : (parseInt(proc?.passo) || 1),
+          pago: novoStatus
+        })
+      }).catch(err => console.error("Erro Sheets:", err));
+
       await carregarDados();
     } else {
       mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
@@ -377,10 +389,9 @@ export default function EspecialView({ params }) {
       if (!error) {
         mostrarToast('Processo atualizado!', 'sucesso');
         
-        // 🚀 GATILHO PRO: Sincroniza em tempo real com o Google Sheets!
-        fetch('/api/societario/sync', {
+        // Sincronizacao direta e imediata com o link validado do Google Sheets
+        fetch("https://script.google.com/macros/s/AKfycbw1t7TFbMVkMSj28OM4avyCquTTOu6TtZGhaHCu04NzQ7ntKKInFkxyKCKHwNs-IwAL/exec", {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: modalProcesso.processo.id,
             cliente_nome: cliente.nome_empresa || cliente.nome_contato,
