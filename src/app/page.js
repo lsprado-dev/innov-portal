@@ -1966,12 +1966,12 @@ export default function AdminPage() {
               {/* CARD 3: ATALHOS PARA OS SERVIDORES */}
               {eGestor && (
                 <div className="grid grid-cols-1 gap-3">
-                  
-                 {/* NOVO BOTÃO DO DRIVE COM LOGO BLINDADO */}
+
+                 {/* NOVO BOTÃO DO DRIVE COM LOGO CORRETO E BLINDADO */}
                   <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
                     <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
-                      <svg style={{ width: '22px', height: '22px' }} viewBox="0 0 24 24" fill="currentColor" className="text-[#d4af37]" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M7.71 3.5L1.15 15l3.43 6l6.55-11.5M9.73 3.5l-3.43 6L12.85 21h6.86M14.28 3.5h-6.86l6.57 11.5h6.86" />
+                      <svg style={{ width: '20px', height: '20px' }} viewBox="0 0 512 512" fill="currentColor" className="text-[#d4af37]" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M339 314.9L175.4 32h-114L225 314.9h114zm-64.8 28H106.1L0 480h222.1l68.1-137.1zm115.6-28L281.3 129.2 168.1 314.9l59.4 102.5h222.1l-59.8-102.5z" />
                       </svg>
                     </div>
                     <div className="overflow-hidden">
