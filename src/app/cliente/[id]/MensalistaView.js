@@ -727,33 +727,97 @@ export default function MensalistaView({ params: paramsPromise }) {
     });
   }
 
+  // 🚀 MÁGICA: Mapeia o DNA da pasta na Lsprado e caça as irmãs nos outros clientes
+  async function obterIdsPastaGlobal(pastaAlvo) {
+    let atual = pastaAlvo.id;
+    const arvoreOriginal = [];
+    let dbSearchLimit = 15;
+    
+    while (atual && dbSearchLimit > 0) {
+      let f = pastas.find(p => p.id === atual);
+      if (!f) {
+        const { data } = await supabase.from('pastas_portal').select('id, nome, parent_id').eq('id', atual).single();
+        f = data;
+      }
+      if (f) {
+        arvoreOriginal.unshift(f.nome);
+        atual = f.parent_id;
+        dbSearchLimit--;
+      } else {
+        break;
+      }
+    }
+
+    if (arvoreOriginal.length === 0) return [pastaAlvo.id];
+
+    // Puxa as pastas em lote para ser ultra rápido
+    const { data: todasPastasSetor } = await supabase.from('pastas_portal')
+      .select('id, cliente_id, nome, parent_id').eq('setor', pastaAlvo.setor);
+
+    if (!todasPastasSetor) return [pastaAlvo.id];
+
+    const idsGlobais = [];
+    const { data: allClients } = await supabase.from('clientes').select('id');
+
+    allClients.forEach(c => {
+      const pastasCliente = todasPastasSetor.filter(p => p.cliente_id === c.id);
+      
+      const validarCaminho = (pastaCandidata) => {
+        let currId = pastaCandidata.id;
+        for (let i = arvoreOriginal.length - 1; i >= 0; i--) {
+          const p = pastasCliente.find(x => x.id === currId);
+          if (!p || p.nome !== arvoreOriginal[i]) return false;
+          currId = p.parent_id;
+        }
+        return currId === null;
+      };
+
+      const match = pastasCliente.find(p => p.nome === arvoreOriginal[arvoreOriginal.length - 1] && validarCaminho(p));
+      if (match) idsGlobais.push(match.id);
+    });
+
+    return idsGlobais;
+  }
+
   function handleRenomearPasta(pasta) {
-    abrirInputModal('Renomear Pasta', pasta.nome, 'Novo nome da pasta...', async (novoNome) => {
+    const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
+    const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
+    const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
+
+    const tituloModal = isCoringa ? 'Renomear Pasta Global' : 'Renomear Pasta';
+    const placeholder = isCoringa ? 'Novo nome (Mudará para TODOS os clientes)...' : 'Novo nome da pasta...';
+
+    abrirInputModal(tituloModal, pasta.nome, placeholder, async (novoNome) => {
       if (!novoNome || novoNome.trim() === '' || novoNome === pasta.nome) return;
       setSubindoArquivo(true);
-      const { error } = await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).eq('id', pasta.id);
-      if (!error) await carregarDadosDaAba();
+      
+      if (isCoringa && pastaAtiva !== 'financeiro') {
+         const idsGlobais = await obterIdsPastaGlobal(pasta);
+         await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).in('id', idsGlobais);
+      } else {
+         await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).eq('id', pasta.id);
+      }
+      
+      await carregarDadosDaAba();
       setSubindoArquivo(false);
     });
   }
 
   function handleDeletarPasta(pasta) {
-    // TRAVA DUPLA: Verifica o CNPJ limpo OU se o nome da empresa contém "lsprado" (ignorando maiúsculas/minúsculas)
     const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
     const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
     const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
     
     const mensagem = isCoringa
-      ? `MODO CORINGA: Tem certeza que deseja excluir a pasta "${pasta.nome}" para TODOS OS CLIENTES do sistema?\n\nOs arquivos que estão dentro delas não serão perdidos, voltarão para a tela inicial de cada cliente.`
+      ? `MODO CORINGA: Tem certeza que deseja excluir a pasta "${pasta.nome}" para TODOS OS CLIENTES do sistema?\n\nAs subpastas filhas também poderão ser apagadas. Os arquivos voltarão para a tela inicial.`
       : `Atenção: Tem certeza que deseja excluir a pasta "${pasta.nome}"?\n\nOs arquivos dentro dela NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`;
 
     confirmarAcao(isCoringa ? 'Excluir Pasta Global' : 'Excluir Pasta', mensagem, async () => {
       setSubindoArquivo(true);
       if (isCoringa && pastaAtiva !== 'financeiro') {
-        // Deleta a pasta com este nome e setor em todos os clientes de uma vez
-        await supabase.from('pastas_portal').delete().eq('nome', pasta.nome).eq('setor', pasta.setor);
+        const idsGlobais = await obterIdsPastaGlobal(pasta);
+        await supabase.from('pastas_portal').delete().in('id', idsGlobais);
       } else {
-        // Deleta apenas a pasta deste cliente específico
         await supabase.from('pastas_portal').delete().eq('id', pasta.id);
       }
       setSubpastaAtiva(null);
