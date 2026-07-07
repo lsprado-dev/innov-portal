@@ -1935,13 +1935,13 @@ export default function AdminPage() {
                   <div className="flex items-center gap-1.5 bg-[#0d1b2a] border border-[#d4af37]/30 px-2 py-1 rounded-md flex-1 min-w-max">
                     <span className="text-[10px] text-zinc-400 font-bold uppercase">Mensalistas:</span>
                     <span className="text-[11px] font-black text-[#d4af37]">
-                      {clientes.filter(c => c.tipo_conta !== 'especiais' && c.tipo_conta !== 'especial').length}
+                      {clientes.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== ''))).length}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 bg-[#0d1b2a] border border-purple-500/30 px-2 py-1 rounded-md flex-1 min-w-max">
                     <span className="text-[10px] text-zinc-400 font-bold uppercase">Societário:</span>
                     <span className="text-[11px] font-black text-purple-400">
-                      {clientes.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial').length}
+                      {clientes.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')).length}
                     </span>
                   </div>
                 </div>
@@ -2122,13 +2122,13 @@ export default function AdminPage() {
               {(() => {
                 // FILTRAGEM INTELIGENTE
                 const listaExibicao = subAbaAtivos === 'especiais' 
-                  ? clientesFiltrados.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial')
-                  : clientesFiltrados.filter(c => c.tipo_conta === 'mensalista' || !c.tipo_conta);
+                  ? clientesFiltrados.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== ''))
+                  : clientesFiltrados.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')));
 
                 if (listaExibicao.length === 0) return <p className="text-zinc-500 col-span-full py-8 text-center">Nenhum cliente encontrado nesta categoria.</p>;
 
                 return listaExibicao.map((cli) => {
-                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial';
+                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || (cli.cpf && cli.cpf.trim() !== '');
                   
                   // Busca todos os processos deste cliente específico
                   const processosDoCliente = processosSocietarios.filter(p => p.cliente_id === cli.id);
