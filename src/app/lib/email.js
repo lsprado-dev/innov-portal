@@ -134,7 +134,7 @@ export async function enviarRelatorioDiario({
     blocoSocietarioHtml = `
       <div style="background-color: #0d1b2a; border: 1px solid #1b263b; border-radius: 8px; overflow: hidden; margin-bottom: 35px;">
         <div style="background-color: #1b263b; padding: 12px 15px; border-bottom: 1px solid #2d3748;">
-          <h3 style="margin: 0; color: #d4af37; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">🏢 Andamento Societário</h3>
+          <h3 style="margin: 0; color: #d4af37; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;"> Andamento Societário</h3>
         </div>
         <table style="width: 100%; border-collapse: collapse;">
           <tbody>
@@ -167,7 +167,7 @@ export async function enviarRelatorioDiario({
 
               <div style="background-color: #0d1b2a; border: 1px solid #1b263b; border-radius: 8px; overflow: hidden; margin-bottom: 30px;">
                 <div style="background-color: #1b263b; padding: 12px 15px; border-bottom: 1px solid #2d3748;">
-                  <h3 style="margin: 0; color: #a855f7; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">👥 Status da Equipe</h3>
+                  <h3 style="margin: 0; color: #a855f7; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Status da Equipe</h3>
                 </div>
                 <table style="width: 100%; border-collapse: collapse;">
                   <tbody>
