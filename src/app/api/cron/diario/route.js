@@ -23,11 +23,13 @@ export async function GET(req) {
     const { data: processosSocietarios } = await supabase.from('processos_societarios').select('*');
 
     const equipeTracking = [
+      { nomeBusca: 'Victor (Admin)', nome: 'Victor', setor: 'Gestão/Admin' },
+      { nomeBusca: 'Lucas (Financeiro)', nome: 'Lucas', setor: 'Financeiro' },
+      { nomeBusca: 'Vanessa (Contábil)', nome: 'Vanessa', setor: 'Contábil' },
       { nomeBusca: 'Maria (Societário)', nome: 'Maria', setor: 'Societário' },
       { nomeBusca: 'Helena (Societário e Suporte)', nome: 'Helena', setor: 'Societário e Suporte' },
       { nomeBusca: 'Luiza (Fiscal)', nome: 'Luiza', setor: 'Fiscal' },
       { nomeBusca: 'Nogueira (Fiscal)', nome: 'Nogueira', setor: 'Fiscal' },
-      { nomeBusca: 'Vanessa (Contábil)', nome: 'Vanessa', setor: 'Contábil' },
       { nomeBusca: 'Karen (RH)', nome: 'Karen', setor: 'RH' },
       { nomeBusca: 'Beatriz (Suporte)', nome: 'Beatriz', setor: 'Suporte' }
     ];
