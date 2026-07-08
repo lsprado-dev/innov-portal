@@ -296,6 +296,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [mostrarFormLink, setMostrarFormLink] = useState(false);
   const [formLink, setFormLink] = useState({ titulo: '', url: '', descricao: '', regime_alvo: 'Todos' });
   const [linkEditando, setLinkEditando] = useState(null); // Memória para saber se estamos editando
+  const [progressoLink, setProgressoLink] = useState(null); // NOVO: Controle da barra de loading de 2 fases
 
   // ESTADOS PARA VÍNCULO DE MÚLTIPLOS CNPJS (ACCOUNT SWITCHER)
   const [mostrarFormVinculo, setMostrarFormVinculo] = useState(false);
@@ -1283,7 +1284,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSalvandoSenha(false);
   }
 
-  // ===============================================
+ // ===============================================
   // GESTÃO DE LINKS ÚTEIS (COM ESPELHAMENTO GLOBAL)
   // ===============================================
   async function handleSalvarLink(e) {
@@ -1292,7 +1293,6 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     setSubindoArquivo(true);
     
-    // Identifica se é o Mestre de Obras (Lsprado)
     const isCoringa = cliente?.cnpj?.replace(/\D/g, '') === '50457640000101' || cliente?.nome_empresa?.toLowerCase().includes('lsprado');
     const regimeAlvo = formLink.regime_alvo || 'Todos';
 
@@ -1314,10 +1314,13 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (!error) {
       
-      // 🚀 MÁGICA: Espelhar nos clientes corretos
       if (isCoringa) {
-        const { data: allClients } = await supabase.from('clientes').select('id, links, regime_tributario');
+        const { data: allClients } = await supabase.from('clientes').select('id, links, regime_tributario, nome_empresa');
         
+        const paraAdicionar = [];
+        const paraRemover = [];
+
+        // Separa os clientes nas suas respectivas filas
         for (const c of allClients) {
           if (c.id === id) continue; // Pula o próprio Lsprado
 
@@ -1325,25 +1328,46 @@ export default function MensalistaView({ params: paramsPromise }) {
           const hasLink = linksDoCliente.some(l => l.id === novoLink.id);
           const deveTerLink = regimeAlvo === 'Todos' || c.regime_tributario === regimeAlvo;
 
-          let precisaAtualizar = false;
-
           if (deveTerLink) {
+             // Se não tem ou se os dados do link mudaram (edição), vai pra fila de atualização
+             if (!hasLink || JSON.stringify(linksDoCliente.find(l => l.id === novoLink.id)) !== JSON.stringify(novoLink)) {
+                paraAdicionar.push(c);
+             }
+          } else if (hasLink) {
+             // Se tem o link mas o regime_alvo mudou e ele não tem mais direito, remove
+             paraRemover.push(c);
+          }
+        }
+
+        const totalFases = (paraAdicionar.length > 0 ? 1 : 0) + (paraRemover.length > 0 ? 1 : 0);
+        let faseAtual = 1;
+
+        // ETAPA 1: ADICIONANDO / ATUALIZANDO
+        if (paraAdicionar.length > 0) {
+          for (let i = 0; i < paraAdicionar.length; i++) {
+            const c = paraAdicionar[i];
+            setProgressoLink({ fase: faseAtual, totalFases, nomeFase: 'Aplicando link', atual: i + 1, total: paraAdicionar.length, texto: c.nome_empresa });
+            
+            let linksDoCliente = c.links || [];
+            const hasLink = linksDoCliente.some(l => l.id === novoLink.id);
             if (hasLink) {
               linksDoCliente = linksDoCliente.map(l => l.id === novoLink.id ? novoLink : l);
-              precisaAtualizar = true;
             } else {
               linksDoCliente.push(novoLink);
-              precisaAtualizar = true;
             }
-          } else {
-            // Tem o link, mas a regra mudou e ele não tem mais direito a ver
-            if (hasLink) {
-              linksDoCliente = linksDoCliente.filter(l => l.id !== novoLink.id);
-              precisaAtualizar = true;
-            }
+            await supabase.from('clientes').update({ links: linksDoCliente }).eq('id', c.id);
           }
+          faseAtual++;
+        }
 
-          if (precisaAtualizar) {
+        // ETAPA 2: REMOVENDO ANTIGOS (Se aplicável)
+        if (paraRemover.length > 0) {
+          for (let i = 0; i < paraRemover.length; i++) {
+            const c = paraRemover[i];
+            setProgressoLink({ fase: faseAtual, totalFases, nomeFase: 'Limpando link', atual: i + 1, total: paraRemover.length, texto: c.nome_empresa });
+            
+            let linksDoCliente = c.links || [];
+            linksDoCliente = linksDoCliente.filter(l => l.id !== novoLink.id);
             await supabase.from('clientes').update({ links: linksDoCliente }).eq('id', c.id);
           }
         }
@@ -1354,6 +1378,7 @@ export default function MensalistaView({ params: paramsPromise }) {
       setFormLink({ titulo: '', url: '', descricao: '', regime_alvo: 'Todos' });
       setLinkEditando(null);
       setMostrarFormLink(false);
+      setProgressoLink(null);
     } else { 
       mostrarToast('Erro ao salvar link: ' + error.message, 'erro'); 
     }
@@ -1371,10 +1396,13 @@ export default function MensalistaView({ params: paramsPromise }) {
       
       if (!error) { 
         if (isCoringa) {
-          const { data: allClients } = await supabase.from('clientes').select('id, links');
-          for (const c of allClients) {
-            if (c.id === id) continue;
-            if (c.links && c.links.some(l => l.id === linkId)) {
+          const { data: allClients } = await supabase.from('clientes').select('id, links, nome_empresa');
+          const paraRemover = allClients.filter(c => c.id !== id && c.links && c.links.some(l => l.id === linkId));
+          
+          if (paraRemover.length > 0) {
+            for (let i = 0; i < paraRemover.length; i++) {
+              const c = paraRemover[i];
+              setProgressoLink({ fase: 1, totalFases: 1, nomeFase: 'Excluindo Globalmente', atual: i + 1, total: paraRemover.length, texto: c.nome_empresa });
               const novaListaDele = c.links.filter(l => l.id !== linkId);
               await supabase.from('clientes').update({ links: novaListaDele }).eq('id', c.id);
             }
@@ -1383,6 +1411,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         mostrarToast('Link removido com sucesso.', 'sucesso'); 
         setCliente({ ...cliente, links: novaLista }); 
       }
+      setProgressoLink(null);
       setSubindoArquivo(false);
     });
   }
@@ -3167,11 +3196,42 @@ export default function MensalistaView({ params: paramsPromise }) {
       )}
 
       {/* 🛑 A TRAVA ANTI-DEDO NERVOSO (Overlay Global de Processamento) */}
-      {subindoArquivo && (
-        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center">
-          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200">
-            <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
-            <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+      {(subindoArquivo || progressoLink) && (
+        <div className="fixed inset-0 z-[99999999] bg-[#0d1b2a]/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#1b263b] p-8 rounded-2xl border border-[#d4af37]/40 flex flex-col items-center gap-5 shadow-[0_0_60px_rgba(212,175,55,0.2)] animate-in zoom-in duration-200 w-full max-w-sm">
+
+            {progressoLink ? (
+              <div className="w-full flex flex-col items-center">
+                <div className="text-5xl mb-4 animate-bounce drop-shadow-lg">🔗</div>
+                <h3 className="text-white font-black text-lg mb-2 tracking-wide text-center">Sincronizando Links</h3>
+
+                <div className="bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/50 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest mb-4 text-center">
+                  Fase {progressoLink.fase} de {progressoLink.totalFases}: {progressoLink.nomeFase}
+                </div>
+
+                <p className="text-[#d4af37] font-black text-3xl mb-4">{Math.round((progressoLink.atual / progressoLink.total) * 100)}%</p>
+
+                <div className="w-full bg-zinc-800 rounded-full h-3.5 mb-3 overflow-hidden border border-zinc-700 shadow-inner">
+                  <div 
+                    className="bg-gradient-to-r from-yellow-600 to-[#d4af37] h-full rounded-full transition-all duration-300 relative overflow-hidden" 
+                    style={{ width: `${(progressoLink.atual / progressoLink.total) * 100}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_linear_infinite]"></div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-zinc-400 truncate w-full text-center">Cliente: <strong className="text-zinc-200">{progressoLink.texto}</strong></p>
+                <p className="text-[10px] text-zinc-500 mt-2 font-bold bg-[#0d1b2a] px-3 py-1 rounded-full border border-zinc-800 uppercase tracking-widest">
+                  {progressoLink.atual} de {progressoLink.total}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="w-14 h-14 border-4 border-zinc-700 border-t-[#d4af37] rounded-full animate-spin shadow-[0_0_15px_rgba(212,175,55,0.2)] mt-2"></div>
+                <p className="text-[#d4af37] font-black tracking-widest uppercase text-sm mt-2 animate-pulse drop-shadow-md">A processar...</p>
+              </>
+            )}
+
           </div>
         </div>
       )}
