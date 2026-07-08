@@ -136,9 +136,7 @@ export default function AdminPage() {
 
   // ESTADOS DE AGRUPAMENTO E MODAIS
   const [agruparPorEmpresa, setAgruparPorEmpresa] = useState(false);
-  const [agruparPorTitulo, setAgruparPorTitulo] = useState(false);
   const [empresaExpandida, setEmpresaExpandida] = useState(null);
-  const [tituloExpandido, setTituloExpandido] = useState(null);
   const [automacaoExpandida, setAutomacaoExpandida] = useState(null);
   const [mostrarModalClientes, setMostrarModalClientes] = useState(false);
 
@@ -1591,7 +1589,7 @@ export default function AdminPage() {
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
   // NOVO: Filtrar alertas para não poluir a tela. Gestores veem tudo, responsáveis veem os seus.
   const alertasPermitidos = eGestor ? alertas : alertas.filter(a => a.responsavel === operador || !a.responsavel);
-  const alertasPendentes = alertasPermitidos.filter(a => a.status === 'pendente' && (a.tipo_alerta === 'cobranca' || !a.tipo_alerta)).length;
+  const alertasPendentes = alertasPermitidos.filter(a => a.status === 'pendente').length;
   
   const demandasPendentesAgrupadas = LISTA_COLABORADORES.map(colab => {
     return { nome: colab, tarefas: demandasVisiveis.filter(d => d.status === 'pendente' && d.atribuido_para === colab) }
@@ -1679,38 +1677,6 @@ export default function AdminPage() {
         </div>
       );
     }
-
-    if (agruparPorTitulo) {
-      const agrupado = {};
-      lista.forEach(a => {
-        const t = a.titulo || 'Sem Título';
-        if (!agrupado[t]) agrupado[t] = [];
-        agrupado[t].push(a);
-      });
-
-      return (
-        <div className="divide-y divide-zinc-800/50">
-          {Object.keys(agrupado).sort().map(titulo => (
-            <div key={titulo} className="flex flex-col">
-              <button onClick={() => setTituloExpandido(tituloExpandido === titulo ? null : titulo)} className="w-full flex items-center justify-between p-4 bg-[#1b263b] hover:bg-zinc-800/50 transition focus:outline-none">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-blue-400 flex-shrink-0 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  <span className="font-bold text-white text-sm">{titulo}</span>
-                  <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/30">{agrupado[titulo].length} registo(s)</span>
-                </div>
-                <span className="text-zinc-500 text-xs font-bold">{tituloExpandido === titulo ? 'Ocultar ▲' : 'Ver Histórico ▼'}</span>
-              </button>
-              {tituloExpandido === titulo && (
-                <div className="p-4 bg-[#0d1b2a]/60 border-t border-zinc-800/50 space-y-3">
-                  {agrupado[titulo].map(alerta => renderCard(alerta))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
     return <div className="divide-y divide-zinc-800">{lista.map(alerta => renderCard(alerta))}</div>;
   };
 
@@ -2928,38 +2894,26 @@ export default function AdminPage() {
             {/* ÁREA DE HISTÓRICO DIVIDIDA EM 4 ABAS LÓGICAS */}
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 shadow-2xl">
               
-              <div id="area-lista-alertas" className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col gap-4 rounded-t-xl">
+              <div id="area-lista-alertas" className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col xl:flex-row justify-between items-center gap-4 rounded-t-xl">
+                <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full xl:w-auto overflow-x-auto hide-scrollbar">
+                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_avisos'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_avisos' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Histórico Avisos</button>
+                  <button onClick={() => { setSubAbaAlerta('agendados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
+                  <button onClick={() => { setSubAbaAlerta('recorrentes'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
+                  <button onClick={() => { setSubAbaAlerta('atrasados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
+                </div>
                 
-                {/* LINHA DE BUSCA E AGRUPAMENTO */}
-                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 w-full">
-                  <div className="flex items-center gap-2 flex-wrap w-full xl:w-auto">
-                    {subAbaAlerta !== 'recorrentes' && (
-                      <>
-                        <label className="flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-4 py-2 rounded-lg border border-zinc-700 w-full sm:w-auto">
-                          <input type="checkbox" checked={agruparPorEmpresa} onChange={e => { setAgruparPorEmpresa(e.target.checked); setAgruparPorTitulo(false); setEmpresaExpandida(null); }} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
-                          <IconCompany /> Agrupar por Empresa
-                        </label>
-                        <label className="flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-4 py-2 rounded-lg border border-zinc-700 w-full sm:w-auto">
-                          <input type="checkbox" checked={agruparPorTitulo} onChange={e => { setAgruparPorTitulo(e.target.checked); setAgruparPorEmpresa(false); setTituloExpandido(null); }} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
-                          <svg className="w-4 h-4 text-[#d4af37] flex-shrink-0 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Agrupar por Título
-                        </label>
-                      </>
-                    )}
-                  </div>
-                  <div className="relative w-full xl:w-80">
-                    <input type="text" placeholder="Procurar cobrança, aviso ou empresa..." value={buscaAlerta} onChange={(e) => setBuscaAlerta(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+                <div className="flex items-center gap-3 w-full xl:w-auto flex-col sm:flex-row">
+                  {subAbaAlerta !== 'recorrentes' && (
+                    <label className="flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition whitespace-nowrap bg-zinc-800/50 px-4 py-2.5 sm:py-2 rounded-lg border border-zinc-700 w-full sm:w-auto">
+                      <input type="checkbox" checked={agruparPorEmpresa} onChange={e => { setAgruparPorEmpresa(e.target.checked); setEmpresaExpandida(null); }} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
+                      <IconCompany /> Agrupar por Empresa
+                    </label>
+                  )}
+                  <div className="relative w-full sm:w-64">
+                    <input type="text" placeholder="Procurar cobrança..." value={buscaAlerta} onChange={(e) => setBuscaAlerta(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 sm:py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
                   </div>
                 </div>
-
-                {/* LINHA DOS BOTÕES DE ABAS (FLEX WRAP PARA NÃO ARRASTAR) */}
-                <div className="flex flex-wrap bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full gap-1">
-                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
-                  <button onClick={() => { setSubAbaAlerta('historico_avisos'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_avisos' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Histórico Avisos</button>
-                  <button onClick={() => { setSubAbaAlerta('agendados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
-                  <button onClick={() => { setSubAbaAlerta('recorrentes'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
-                  <button onClick={() => { setSubAbaAlerta('atrasados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
-                </div>
-
               </div>
 
               <div className="divide-y divide-zinc-800">
