@@ -500,29 +500,21 @@ export default function AdminPage() {
     });
   }
 
-  // Função para aplicar Negrito, Itálico e Sublinhado na caixa de texto
+  // Função para aplicar Negrito, Itálico e Sublinhado VISUALMENTE
   function aplicarFormatacaoTexto(tag) {
-    const textarea = document.getElementById('campo-mensagem-alerta');
-    if (!textarea) return;
+    let comando = '';
+    if (tag === 'b') comando = 'bold';
+    if (tag === 'i') comando = 'italic';
+    if (tag === 'u') comando = 'underline';
     
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const texto = formAlerta.mensagem;
+    // Aplica o formato nativo do navegador (WYSIWYG)
+    document.execCommand(comando, false, null);
     
-    const textoSelecionado = texto.substring(start, end);
-    const antes = texto.substring(0, start);
-    const depois = texto.substring(end);
-    
-    if (start === end) return mostrarToast('Selecione uma palavra ou frase para formatar!', 'aviso');
-
-    let novoTexto = '';
-    if (tag === 'b') novoTexto = `${antes}<b>${textoSelecionado}</b>${depois}`;
-    if (tag === 'i') novoTexto = `${antes}<i>${textoSelecionado}</i>${depois}`;
-    if (tag === 'u') novoTexto = `${antes}<u>${textoSelecionado}</u>${depois}`;
-    
-    setFormAlerta({ ...formAlerta, mensagem: novoTexto });
-    
-    setTimeout(() => { textarea.focus(); }, 10);
+    // Atualiza o estado para salvar no banco
+    const editor = document.getElementById('campo-mensagem-alerta');
+    if (editor) {
+      setFormAlerta({ ...formAlerta, mensagem: editor.innerHTML });
+    }
   }
 
   async function handleCriarAlerta(e) {
@@ -555,13 +547,13 @@ export default function AdminPage() {
       tipo_documento: formAlerta.tipo_documento,
       titulo: formAlerta.titulo,
       mensagem: formAlerta.mensagem,
-      prazo: isRecorrente ? null : formAlerta.prazo,
+      prazo: isRecorrente ? null : (formAlerta.prazo || null),
       data_vencimento: isRecorrente ? null : (formAlerta.data_vencimento || null),
       repetir_mensalmente: formAlerta.repetir_mensalmente,
       dia_recorrencia: isRecorrente && formAlerta.dia_recorrencia ? parseInt(formAlerta.dia_recorrencia) : null,
       dia_vencimento: isRecorrente && formAlerta.dia_vencimento ? parseInt(formAlerta.dia_vencimento) : null,
       enviado_email: formAlerta.enviar_email,
-      data_envio_programado: isAgendadoFuturo ? formAlerta.data_envio_programado : null,
+      data_envio_programado: isAgendadoFuturo ? (formAlerta.data_envio_programado || null) : null,
       status: novoStatus,
       tipo_alerta: formAlerta.tipo_alerta // NOVO: Salva se é Lembrete ou Cobrança
     }));
@@ -2764,26 +2756,28 @@ export default function AdminPage() {
                     
                     {/* BARRA DE FERRAMENTAS ESTILO WORD */}
                     <div className="flex gap-1 bg-[#0d1b2a] border border-zinc-800 p-1 rounded-md shadow-inner">
-                      <button type="button" onClick={() => aplicarFormatacaoTexto('b')} className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-[#d4af37] hover:bg-zinc-800 rounded font-serif font-bold text-xs transition" title="Negrito">B</button>
-                      <button type="button" onClick={() => aplicarFormatacaoTexto('i')} className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-[#d4af37] hover:bg-zinc-800 rounded font-serif italic text-xs transition" title="Itálico">I</button>
-                      <button type="button" onClick={() => aplicarFormatacaoTexto('u')} className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-[#d4af37] hover:bg-zinc-800 rounded font-serif underline text-xs transition" title="Sublinhado">U</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); aplicarFormatacaoTexto('b'); }} className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-[#d4af37] hover:bg-zinc-800 rounded font-serif font-bold text-xs transition" title="Negrito">B</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); aplicarFormatacaoTexto('i'); }} className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-[#d4af37] hover:bg-zinc-800 rounded font-serif italic text-xs transition" title="Itálico">I</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); aplicarFormatacaoTexto('u'); }} className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-[#d4af37] hover:bg-zinc-800 rounded font-serif underline text-xs transition" title="Sublinhado">U</button>
                     </div>
                   </div>
                   
-                  {/* CAIXA QUE EXPANDE SOZINHA */}
-                  <textarea 
+                  {/* EDITOR VISUAL MÁGICO (Substitui o Textarea) */}
+                  <div 
                     id="campo-mensagem-alerta"
-                    placeholder="Ex: Por favor, enviar os extratos ou boletos..." 
-                    value={formAlerta.mensagem} 
-                    onChange={e => {
-                      setFormAlerta({...formAlerta, mensagem: e.target.value});
-                      // Mágica para expandir a caixa conforme digita
-                      e.target.style.height = 'auto';
-                      e.target.style.height = (e.target.scrollHeight) + 'px';
-                    }} 
-                    className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none resize-none overflow-hidden min-h-[80px]"
-                  ></textarea>
-                  <p className="text-[10px] text-zinc-500 mt-1">Selecione o texto e use os botões acima para formatar (O formato aparecerá como código, mas o cliente verá formatado).</p>
+                    contentEditable
+                    suppressContentEditableWarning={true}
+                    ref={(el) => {
+                      if (el && document.activeElement !== el && el.innerHTML !== formAlerta.mensagem) {
+                        el.innerHTML = formAlerta.mensagem;
+                      }
+                    }}
+                    onInput={e => setFormAlerta({...formAlerta, mensagem: e.currentTarget.innerHTML})}
+                    className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none min-h-[100px] cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-500 empty:before:pointer-events-none"
+                    data-placeholder="Ex: Por favor, enviar os extratos ou boletos..."
+                    style={{ outline: 'none', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                  ></div>
+                  <p className="text-[10px] text-zinc-500 mt-1">Selecione o texto e use os botões acima para formatar visualmente e ver o resultado na hora.</p>
                 </div>
 
                 {/* BLOCO 3: DATAS E RECORRÊNCIA */}
