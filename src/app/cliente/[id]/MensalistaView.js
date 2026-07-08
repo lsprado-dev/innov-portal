@@ -79,6 +79,12 @@ const IconChatList = () => <svg className="w-6 h-6 text-[#d4af37]" fill="none" s
 const IconEye = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" /></svg>;
 const IconRestore = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>;
 
+// NOVOS ÍCONES DE BANNER (Substituindo Emojis)
+const IconAlertRed = () => <svg className="w-8 h-8 text-red-500 flex-shrink-0 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
+const IconWarningOrange = () => <svg className="w-8 h-8 text-orange-500 flex-shrink-0 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const IconCheckGreen = () => <svg className="w-8 h-8 text-emerald-500 flex-shrink-0 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const IconInfoBlue = () => <svg className="w-8 h-8 text-blue-400 flex-shrink-0 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+
 // NOVOS ÍCONES PARA LINKS ÚTEIS
 const IconLinkTab = () => <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>;
 const IconCopy = () => <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>;
@@ -279,6 +285,7 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   const [alertasGlobaisPendentes, setAlertasGlobaisPendentes] = useState(0);
   const [alertasGlobaisAtrasados, setAlertasGlobaisAtrasados] = useState(0); // NOVO: Conta quem perdeu o prazo
+  const [alertasGlobaisLembretes, setAlertasGlobaisLembretes] = useState(0); // NOVO: Conta avisos pendentes
   const [pedidosResolvidosNaoLidos, setPedidosResolvidosNaoLidos] = useState(0); // NOVO: Banner verde
   const [subAbaSolicitacao, setSubAbaSolicitacao] = useState('ativas'); // NOVO: Filtro de abas
 
@@ -500,15 +507,21 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   async function atualizarBadgeGlobal(clienteId) {
     if (!clienteId) return;
-    const { data } = await supabase.from('alertas_clientes').select('id, prazo').eq('cliente_id', clienteId).eq('status', 'pendente');
+    const { data } = await supabase.from('alertas_clientes').select('id, prazo, tipo_alerta').eq('cliente_id', clienteId).eq('status', 'pendente');
     if (data) {
+      const cobrancas = data.filter(a => a.tipo_alerta === 'cobranca' || !a.tipo_alerta);
+      const lembretes = data.filter(a => a.tipo_alerta === 'lembrete');
+
       const hoje = new Date().toISOString().split('T')[0];
-      const atrasados = data.filter(a => a.prazo && a.prazo < hoje).length;
+      const atrasados = cobrancas.filter(a => a.prazo && a.prazo < hoje).length;
+      
       setAlertasGlobaisAtrasados(atrasados);
-      setAlertasGlobaisPendentes(data.length - atrasados); 
+      setAlertasGlobaisPendentes(cobrancas.length - atrasados); 
+      setAlertasGlobaisLembretes(lembretes.length);
     } else {
       setAlertasGlobaisPendentes(0);
       setAlertasGlobaisAtrasados(0);
+      setAlertasGlobaisLembretes(0);
     }
 
     // Busca tickets resolvidos que o cliente ainda não viu
@@ -1962,7 +1975,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         {!isInterno && alertasGlobaisAtrasados > 0 && (
           <div className="mb-4 bg-red-500/10 border border-red-500/40 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(239,68,68,0.15)] animate-in fade-in slide-in-from-top-4 duration-500">
              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <span className="text-2xl animate-pulse">🚨</span>
+                <IconAlertRed />
                 <div>
                    <h3 className="text-red-400 font-bold text-sm">Você possui {alertasGlobaisAtrasados} pendência(s) em ATRASO!</h3>
                    <p className="text-xs text-red-200/70">O prazo expirou. Por favor, verificar pendência(s).</p>
@@ -1975,9 +1988,9 @@ export default function MensalistaView({ params: paramsPromise }) {
         )}
 
         {!isInterno && alertasGlobaisPendentes > 0 && (
-          <div className="mb-8 bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(249,115,22,0.1)] animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="mb-4 bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(249,115,22,0.1)] animate-in fade-in slide-in-from-top-4 duration-500">
              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <span className="text-2xl animate-bounce">⚠️</span>
+                <IconWarningOrange />
                 <div>
                    <h3 className="text-orange-400 font-bold text-sm">Você possui {alertasGlobaisPendentes} pendência(s) no prazo</h3>
                    <p className="text-xs text-orange-200/70">Acesse a aba para enviar os documentos solicitados ou marcar como realizado.</p>
@@ -1989,10 +2002,26 @@ export default function MensalistaView({ params: paramsPromise }) {
           </div>
         )}
 
+        {/* BANNER AZUL DE AVISOS */}
+        {!isInterno && alertasGlobaisLembretes > 0 && (
+          <div className="mb-4 bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(59,130,246,0.1)] animate-in fade-in slide-in-from-top-4 duration-500">
+             <div className="flex items-center gap-3 w-full sm:w-auto">
+                <IconInfoBlue />
+                <div>
+                   <h3 className="text-blue-400 font-bold text-sm">Você possui {alertasGlobaisLembretes} novo(s) aviso(s)!</h3>
+                   <p className="text-xs text-blue-200/70">Acesse para conferir os recados ou lembretes da nossa equipa.</p>
+                </div>
+             </div>
+             <button onClick={() => { setAbaPrincipal('avisos'); rolarPara('conteudo-abas'); }} className="w-full sm:w-auto bg-blue-500 text-white font-bold px-6 py-2.5 rounded-lg text-xs hover:bg-blue-600 transition shadow-md whitespace-nowrap">
+                Ler Avisos
+             </button>
+          </div>
+        )}
+
         {!isInterno && pedidosResolvidosNaoLidos > 0 && (
           <div className="mb-8 bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-in fade-in slide-in-from-top-4 duration-500">
              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <span className="text-2xl animate-bounce">✅</span>
+                <IconCheckGreen />
                 <div>
                    <h3 className="text-emerald-400 font-bold text-sm">Você possui {pedidosResolvidosNaoLidos} solicitação(ões) respondida(s)!</h3>
                    <p className="text-xs text-emerald-200/70">A equipa atendeu ao seu pedido. Clique para conferir a resposta e baixar anexos se houver.</p>
@@ -2016,10 +2045,20 @@ export default function MensalistaView({ params: paramsPromise }) {
             <IconChatTab /> {isInterno ? 'Histórico de Solicitações' : 'Solicitações'}
           </button>
           <button onClick={() => { setAbaPrincipal('alertas'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'alertas' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
-            <IconBellTab /> {isInterno ? 'Documentos Solicitados' : 'Alertas / Cobranças'}
+            <IconBellTab /> {isInterno ? 'Cobranças' : 'Cobranças / Pendências'}
             {alertasGlobaisPendentes > 0 && (
               <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-red-500 text-white font-black shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse border border-red-400">
                 {alertasGlobaisPendentes}
+              </span>
+            )}
+          </button>
+
+          <button onClick={() => { setAbaPrincipal('avisos'); rolarPara('conteudo-abas'); }} className={`pb-3 text-sm font-bold transition-all px-2 border-b-2 flex items-center ${abaPrincipal === 'avisos' ? 'border-[#d4af37] text-[#d4af37]' : 'border-transparent text-zinc-400 hover:text-white'}`}>
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Avisos
+            {alertasGlobaisLembretes > 0 && (
+              <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-blue-500 text-white font-black shadow-[0_0_10px_rgba(59,130,246,0.8)] animate-pulse border border-blue-400">
+                {alertasGlobaisLembretes}
               </span>
             )}
           </button>
@@ -2679,10 +2718,10 @@ export default function MensalistaView({ params: paramsPromise }) {
             </div>
 
             <div className="space-y-4">
-              {alertas.length === 0 ? (
+              {alertas.filter(a => a.tipo_alerta === 'cobranca' || !a.tipo_alerta).length === 0 ? (
                 <p className="text-zinc-500 text-sm">Nenhuma pendência neste momento. Tudo em dia!</p>
               ) : (
-                alertas.map(alerta => (
+                alertas.filter(a => a.tipo_alerta === 'cobranca' || !a.tipo_alerta).map(alerta => (
                   <div key={alerta.id} className={`p-6 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${alerta.status === 'pendente' ? 'bg-[#0d1b2a] border-orange-500/40 shadow-[0_0_15px_rgba(249,115,22,0.05)]' : 'bg-[#0d1b2a]/50 border-emerald-500/20 opacity-70'}`}>
                     <div className="flex-1 w-full md:pr-6">
                       
@@ -2746,6 +2785,57 @@ export default function MensalistaView({ params: paramsPromise }) {
                             Concluído sem arquivos
                           </span>
                         )
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            ABA NOVA: AVISOS E LEMBRETES (AZUL)
+        ========================================== */}
+        {abaPrincipal === 'avisos' && (
+          <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
+            <div className="border-b border-zinc-800 pb-4 mb-6">
+              <h3 className="text-xl font-bold text-blue-400 capitalize flex items-center gap-2">
+                 <IconInfoBlue /> Mural de Avisos
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1">Confira os recados e comunicados importantes deixados pela equipa.</p>
+            </div>
+
+            <div className="space-y-4">
+              {alertas.filter(a => a.tipo_alerta === 'lembrete').length === 0 ? (
+                <p className="text-zinc-500 text-sm">Nenhum aviso no mural.</p>
+              ) : (
+                alertas.filter(a => a.tipo_alerta === 'lembrete').map(alerta => (
+                  <div key={alerta.id} className={`p-6 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${alerta.status === 'pendente' ? 'bg-[#0d1b2a] border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.05)]' : 'bg-[#0d1b2a]/50 border-blue-500/20 opacity-70'}`}>
+                    <div className="flex-1 w-full md:pr-6">
+                      <div className="flex flex-wrap items-center gap-3 mb-3">
+                        <span className={`text-[10px] font-extrabold px-3 py-1 rounded uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-blue-500 text-white shadow-sm' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
+                          {alerta.status === 'pendente' ? 'Não Lido' : 'Visualizado'}
+                        </span>
+                      </div>
+                      
+                      <h4 className="text-lg font-bold text-white mb-2">{alerta.titulo}</h4>
+                      {alerta.mensagem && <p className="text-sm text-zinc-300 leading-relaxed mb-3 whitespace-pre-wrap">{alerta.mensagem}</p>}
+                      
+                      <p className="text-[10px] font-semibold text-zinc-500 border-t border-zinc-800/80 pt-2 inline-block">
+                        Enviado pela Innovative em {formatarDataHoraEnviado(alerta.criado_em)}
+                      </p>
+                    </div>
+                    
+                    <div className="mt-4 md:mt-0 w-full md:w-auto flex flex-col gap-3 min-w-[240px]">
+                      {alerta.status === 'pendente' && !isInterno ? (
+                        <button onClick={() => handleConcluirDemanda0Arquivo(alerta)} disabled={subindoArquivo} className="block w-full text-center bg-blue-500 text-white font-extrabold px-6 py-3.5 rounded-lg text-sm hover:bg-blue-600 transition shadow-[0_0_15px_rgba(59,130,246,0.3)] whitespace-nowrap">
+                          {subindoArquivo ? 'A processar...' : 'Marcar como Lido'}
+                        </button>
+                      ) : (
+                        <span className="w-full text-center whitespace-nowrap text-xs bg-zinc-800 text-zinc-400 px-4 py-3 rounded-lg font-bold shadow-sm cursor-not-allowed">
+                          Recado Visualizado
+                        </span>
                       )}
                     </div>
                   </div>

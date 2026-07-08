@@ -173,11 +173,12 @@ export default function AdminPage() {
     dia_recorrencia: '',
     dia_vencimento: '',
     enviar_email: true,
-    enviar_push: true, // NOVO: Gatilho do Push na cobrança
+    enviar_push: true,
     enviar_agora: true,
     data_envio_programado: '',
     exibir_prazo_email: true,
-    exibir_vencimento_email: true
+    exibir_vencimento_email: true,
+    tipo_alerta: 'cobranca' // NOVO: Separa Cobrança de Lembrete
   });
   
   // NOVOS ESTADOS DA CENTRAL DE DISPARO
@@ -502,7 +503,10 @@ export default function AdminPage() {
     e.preventDefault();
     if (!formAlerta.titulo) return mostrarToast('O Título é obrigatório.', 'erro'); 
 
-    if (!formAlerta.repetir_mensalmente && !formAlerta.prazo) return mostrarToast('O Prazo p/ Confirmação é obrigatório para cobranças pontuais.', 'erro'); 
+    // O Prazo só é obrigatório se for COBRANÇA. Lembretes não exigem prazo!
+    if (formAlerta.tipo_alerta === 'cobranca' && !formAlerta.repetir_mensalmente && !formAlerta.prazo) {
+       return mostrarToast('O Prazo p/ Confirmação é obrigatório para cobranças.', 'erro'); 
+    }
 
     if (formAlerta.repetir_mensalmente && !formAlerta.dia_recorrencia) return mostrarToast('Por favor, informe em que DIA DO MÊS a automação deve enviar o alerta.', 'erro');
     
@@ -521,7 +525,7 @@ export default function AdminPage() {
 
     const disparos = clientesAlvo.map(c => ({
       cliente_id: c.id,
-      responsavel: formAlerta.responsavel || operador, // NOVO: Salva quem vai cuidar desta cobrança
+      responsavel: formAlerta.responsavel || operador,
       tipo_documento: formAlerta.tipo_documento,
       titulo: formAlerta.titulo,
       mensagem: formAlerta.mensagem,
@@ -532,7 +536,8 @@ export default function AdminPage() {
       dia_vencimento: isRecorrente && formAlerta.dia_vencimento ? parseInt(formAlerta.dia_vencimento) : null,
       enviado_email: formAlerta.enviar_email,
       data_envio_programado: isAgendadoFuturo ? formAlerta.data_envio_programado : null,
-      status: novoStatus
+      status: novoStatus,
+      tipo_alerta: formAlerta.tipo_alerta // NOVO: Salva se é Lembrete ou Cobrança
     }));
     
     const { error } = await supabase.from('alertas_clientes').insert(disparos);
@@ -586,9 +591,9 @@ export default function AdminPage() {
             }
           }
         }
-        // MÁGICA 1: Dispara o PUSH para a lista de cobrança!
+        // MÁGICA 1: Dispara o PUSH GENÉRICO para a lista de cobrança!
         if (formAlerta.enviar_push) {
-           dispararPush(clientesAlvo.map(c => c.id), formAlerta.titulo, formAlerta.mensagem);
+           dispararPush(clientesAlvo.map(c => c.id), 'Novo Aviso Disponível', 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.');
         }
         
         mostrarToast(`Criado! Avisos disparados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
@@ -600,7 +605,7 @@ export default function AdminPage() {
         mostrarToast(`Cobrança publicada APENAS no portal.`, 'aviso');
       }
 
-      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true });
+      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true, tipo_alerta: 'cobranca' });
       carregarDados();
     } else {
 
@@ -2633,9 +2638,19 @@ export default function AdminPage() {
             {/* FORMULÁRIO DE CRIAÇÃO E AUTOMATIZAÇÃO */}
             {modoAlertaTopo === 'cobrancas' && (
             <div className="bg-[#1b263b] p-6 md:p-8 rounded-xl border border-zinc-800 shadow-xl animate-in fade-in">
-              <h2 className="text-xl font-bold text-[#d4af37] mb-6 flex items-center gap-2"><IconBell /> Painel Avançado de Cobranças</h2>
+              <h2 className="text-xl font-bold text-[#d4af37] mb-6 flex items-center gap-2"><IconBell /> Publicar Cobranças ou Avisos</h2>
               <form onSubmit={handleCriarAlerta} className="space-y-6">
                 
+                {/* NOVO: SELETOR DE TIPO (COBRANÇA OU LEMBRETE) */}
+                <div className="flex bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full mb-6">
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'cobranca'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all ${formAlerta.tipo_alerta === 'cobranca' ? 'bg-orange-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                    <IconBell /> Solicitar Documento / Cobrança
+                  </button>
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'lembrete'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all ${formAlerta.tipo_alerta === 'lembrete' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                    <IconInboxMini /> Enviar Aviso / Lembrete
+                  </button>
+                </div>
+
                 {/* BLOCO 1: DESTINATÁRIOS (NOVA LÓGICA DE SELEÇÃO RÁPIDA) */}
                 <div className="bg-[#0d1b2a] p-5 rounded-lg border border-zinc-800 shadow-inner">
                   <label className="block text-xs font-bold text-zinc-400 uppercase mb-4 border-b border-zinc-800 pb-2">1. Selecionar Destinatários</label>
