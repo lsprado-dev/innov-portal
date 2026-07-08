@@ -294,7 +294,8 @@ export default function MensalistaView({ params: paramsPromise }) {
   
   // ESTADOS DOS LINKS ÚTEIS
   const [mostrarFormLink, setMostrarFormLink] = useState(false);
-  const [formLink, setFormLink] = useState({ titulo: '', url: '', descricao: '' });
+  const [formLink, setFormLink] = useState({ titulo: '', url: '', descricao: '', regime_alvo: 'Todos' });
+  const [linkEditando, setLinkEditando] = useState(null); // Memória para saber se estamos editando
 
   // ESTADOS PARA VÍNCULO DE MÚLTIPLOS CNPJS (ACCOUNT SWITCHER)
   const [mostrarFormVinculo, setMostrarFormVinculo] = useState(false);
@@ -1283,39 +1284,105 @@ export default function MensalistaView({ params: paramsPromise }) {
   }
 
   // ===============================================
-  // GESTÃO DE LINKS ÚTEIS
+  // GESTÃO DE LINKS ÚTEIS (COM ESPELHAMENTO GLOBAL)
   // ===============================================
-  async function handleAdicionarLink(e) {
+  async function handleSalvarLink(e) {
     e.preventDefault();
-    // A interrogação (?.) previne erros caso o campo esteja vazio
     if (!formLink.titulo?.trim() || !formLink.url?.trim()) return;
 
     setSubindoArquivo(true);
-    // Salva com segurança mesmo se a descrição for vazia
-    const novoLink = { id: Date.now().toString(), titulo: formLink.titulo.trim(), url: formLink.url.trim(), descricao: formLink.descricao?.trim() || '' };
-    const linksAtuais = cliente.links || [];
-    const novaLista = [...linksAtuais, novoLink];
+    
+    // Identifica se é o Mestre de Obras (Lsprado)
+    const isCoringa = cliente?.cnpj?.replace(/\D/g, '') === '50457640000101' || cliente?.nome_empresa?.toLowerCase().includes('lsprado');
+    const regimeAlvo = formLink.regime_alvo || 'Todos';
 
-    const { error } = await supabase.from('clientes').update({ links: novaLista }).eq('id', id);
+    const novoLink = { 
+      id: linkEditando || Date.now().toString(), 
+      titulo: formLink.titulo.trim(), 
+      url: formLink.url.trim(), 
+      descricao: formLink.descricao?.trim() || '',
+      regime_alvo: regimeAlvo,
+      is_global: isCoringa
+    };
+
+    const linksAtuais = cliente.links || [];
+    const novaListaLsprado = linkEditando 
+      ? linksAtuais.map(l => l.id === linkEditando ? novoLink : l) 
+      : [...linksAtuais, novoLink];
+
+    const { error } = await supabase.from('clientes').update({ links: novaListaLsprado }).eq('id', id);
 
     if (!error) {
-      mostrarToast('Link adicionado com sucesso!', 'sucesso');
-      setCliente({ ...cliente, links: novaLista });
-      setFormLink({ titulo: '', url: '', descricao: '' });
+      
+      // 🚀 MÁGICA: Espelhar nos clientes corretos
+      if (isCoringa) {
+        const { data: allClients } = await supabase.from('clientes').select('id, links, regime_tributario');
+        
+        for (const c of allClients) {
+          if (c.id === id) continue; // Pula o próprio Lsprado
+
+          let linksDoCliente = c.links || [];
+          const hasLink = linksDoCliente.some(l => l.id === novoLink.id);
+          const deveTerLink = regimeAlvo === 'Todos' || c.regime_tributario === regimeAlvo;
+
+          let precisaAtualizar = false;
+
+          if (deveTerLink) {
+            if (hasLink) {
+              linksDoCliente = linksDoCliente.map(l => l.id === novoLink.id ? novoLink : l);
+              precisaAtualizar = true;
+            } else {
+              linksDoCliente.push(novoLink);
+              precisaAtualizar = true;
+            }
+          } else {
+            // Tem o link, mas a regra mudou e ele não tem mais direito a ver
+            if (hasLink) {
+              linksDoCliente = linksDoCliente.filter(l => l.id !== novoLink.id);
+              precisaAtualizar = true;
+            }
+          }
+
+          if (precisaAtualizar) {
+            await supabase.from('clientes').update({ links: linksDoCliente }).eq('id', c.id);
+          }
+        }
+      }
+
+      mostrarToast(linkEditando ? 'Link atualizado com sucesso!' : 'Link adicionado com sucesso!', 'sucesso');
+      setCliente({ ...cliente, links: novaListaLsprado });
+      setFormLink({ titulo: '', url: '', descricao: '', regime_alvo: 'Todos' });
+      setLinkEditando(null);
       setMostrarFormLink(false);
     } else { 
-      // AGORA ELE VAI TE CONTAR O MOTIVO EXATO DO ERRO!
-      mostrarToast('Erro ao adicionar link: ' + error.message, 'erro'); 
+      mostrarToast('Erro ao salvar link: ' + error.message, 'erro'); 
     }
     setSubindoArquivo(false);
   }
 
   function handleRemoverLink(linkId) {
-    confirmarAcao('Excluir Link', 'Tem certeza que deseja remover este acesso rápido?', async () => {
+    const isCoringa = cliente?.cnpj?.replace(/\D/g, '') === '50457640000101' || cliente?.nome_empresa?.toLowerCase().includes('lsprado');
+    const msg = isCoringa ? 'Este link global será apagado de TODOS os clientes do sistema. Continuar?' : 'Tem certeza que deseja remover este acesso rápido?';
+
+    confirmarAcao(isCoringa ? 'Excluir Link Global' : 'Excluir Link', msg, async () => {
       setSubindoArquivo(true);
       const novaLista = (cliente.links || []).filter(l => l.id !== linkId);
       const { error } = await supabase.from('clientes').update({ links: novaLista }).eq('id', id);
-      if (!error) { mostrarToast('Link removido.', 'sucesso'); setCliente({ ...cliente, links: novaLista }); }
+      
+      if (!error) { 
+        if (isCoringa) {
+          const { data: allClients } = await supabase.from('clientes').select('id, links');
+          for (const c of allClients) {
+            if (c.id === id) continue;
+            if (c.links && c.links.some(l => l.id === linkId)) {
+              const novaListaDele = c.links.filter(l => l.id !== linkId);
+              await supabase.from('clientes').update({ links: novaListaDele }).eq('id', c.id);
+            }
+          }
+        }
+        mostrarToast('Link removido com sucesso.', 'sucesso'); 
+        setCliente({ ...cliente, links: novaLista }); 
+      }
       setSubindoArquivo(false);
     });
   }
@@ -2670,15 +2737,15 @@ export default function MensalistaView({ params: paramsPromise }) {
                 <p className="text-xs text-zinc-400 mt-1">Acessos rápidos a sistemas, portais de faturação ou formulários externos.</p>
               </div>
               {isInterno && !mostrarFormLink && (
-                <button onClick={() => setMostrarFormLink(true)} className="bg-zinc-800 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-zinc-700 transition shadow-md whitespace-nowrap">
+                <button onClick={() => { setFormLink({ titulo: '', url: '', descricao: '', regime_alvo: 'Todos' }); setLinkEditando(null); setMostrarFormLink(true); }} className="bg-zinc-800 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-zinc-700 transition shadow-md whitespace-nowrap">
                   + Adicionar Link
                 </button>
               )}
             </div>
 
             {isInterno && mostrarFormLink && (
-              <form onSubmit={handleAdicionarLink} className="mb-8 bg-[#0d1b2a] p-6 rounded-xl border border-[#d4af37]/30 shadow-lg animate-in fade-in">
-                <h4 className="text-sm font-bold text-[#d4af37] mb-4">Cadastrar Novo Link</h4>
+              <form onSubmit={handleSalvarLink} className="mb-8 bg-[#0d1b2a] p-6 rounded-xl border border-[#d4af37]/30 shadow-lg animate-in fade-in">
+                <h4 className="text-sm font-bold text-[#d4af37] mb-4">{linkEditando ? 'Editar Acesso Rápido' : 'Cadastrar Novo Link'}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                   <div>
                     <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">Título do Sistema</label>
@@ -2692,11 +2759,26 @@ export default function MensalistaView({ params: paramsPromise }) {
                     <label className="block text-xs font-bold text-zinc-400 uppercase mb-1.5">Descrição (Opcional)</label>
                     <input type="text" placeholder="Ex: Utilize este portal para emitir os seus recibos..." value={formLink.descricao} onChange={e => setFormLink({...formLink, descricao: e.target.value})} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] outline-none" />
                   </div>
+
+                  {/* CAIXA MÁGICA: Só aparece se for o Lsprado */}
+                  {(cliente?.cnpj?.replace(/\D/g, '') === '50457640000101' || cliente?.nome_empresa?.toLowerCase().includes('lsprado')) && (
+                    <div className="md:col-span-2 mt-2 p-4 bg-[#1b263b] rounded-lg border border-purple-500/30 shadow-inner">
+                      <label className="block text-xs font-bold text-purple-400 uppercase mb-2">📡 Espelhamento Global (Regime Tributário)</label>
+                      <select value={formLink.regime_alvo} onChange={e => setFormLink({...formLink, regime_alvo: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:border-purple-400 outline-none cursor-pointer">
+                        <option value="Todos">Visível para TODOS os Clientes</option>
+                        <option value="Simples Nacional">Visível APENAS para Simples Nacional</option>
+                        <option value="Lucro Presumido">Visível APENAS para Lucro Presumido</option>
+                        <option value="Lucro Real">Visível APENAS para Lucro Real</option>
+                      </select>
+                      <p className="text-[10px] text-zinc-400 mt-2 font-medium">Ao salvar, este link será criado, atualizado ou removido do painel dos clientes de forma 100% automática com base nesta regra.</p>
+                    </div>
+                  )}
+
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
-                  <button type="button" onClick={() => setMostrarFormLink(false)} className="px-5 py-2.5 bg-zinc-800 text-zinc-300 text-sm font-bold rounded-lg hover:bg-zinc-700 transition">Cancelar</button>
+                  <button type="button" onClick={() => { setMostrarFormLink(false); setLinkEditando(null); setFormLink({ titulo: '', url: '', descricao: '', regime_alvo: 'Todos' }); }} className="px-5 py-2.5 bg-zinc-800 text-zinc-300 text-sm font-bold rounded-lg hover:bg-zinc-700 transition">Cancelar</button>
                   <button type="submit" disabled={subindoArquivo} className="px-6 py-2.5 bg-[#d4af37] text-[#0d1b2a] text-sm font-extrabold rounded-lg hover:bg-yellow-500 shadow-lg transition">
-                    {subindoArquivo ? 'A processar...' : 'Guardar Link'}
+                    {subindoArquivo ? 'A Sincronizar...' : 'Guardar Link'}
                   </button>
                 </div>
               </form>
@@ -2712,7 +2794,12 @@ export default function MensalistaView({ params: paramsPromise }) {
                 cliente.links.map(link => (
                   <div key={link.id} className="bg-[#0d1b2a] border border-zinc-800 p-6 rounded-xl flex flex-col justify-between group hover:border-[#d4af37]/50 transition-all shadow-md">
                     <div className="mb-6">
-                      <h4 className="text-white font-bold text-lg mb-1">{link.titulo}</h4>
+                      <div className="flex justify-between items-start mb-1">
+                        <h4 className="text-white font-bold text-lg">{link.titulo}</h4>
+                        {(cliente?.cnpj?.replace(/\D/g, '') === '50457640000101' || cliente?.nome_empresa?.toLowerCase().includes('lsprado')) && link.regime_alvo && (
+                           <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded uppercase font-bold tracking-wider ml-2 whitespace-nowrap">{link.regime_alvo}</span>
+                        )}
+                      </div>
                       {link.descricao && <p className="text-xs text-zinc-400 leading-relaxed mb-3">{link.descricao}</p>}
                       <div className="bg-[#1b263b] px-3 py-2 rounded border border-zinc-800/80 cursor-pointer hover:bg-zinc-800 transition" onClick={() => copiarParaTransferencia(link.url)} title="Clique para copiar">
                         <p className="text-[11px] text-[#d4af37] font-mono truncate select-none">{link.url}</p>
@@ -2720,16 +2807,21 @@ export default function MensalistaView({ params: paramsPromise }) {
                     </div>
                     
                     <div className="flex gap-2 w-full mt-auto pt-5 border-t border-zinc-800/60">
-                      <button onClick={() => copiarParaTransferencia(link.url)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-sm">
+                      <button onClick={() => copiarParaTransferencia(link.url)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-sm">
                         <IconCopy /> Copiar
                       </button>
-                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center text-center">
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-3 py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center text-center">
                         <IconExternal /> Acessar
                       </a>
                       {isInterno && (
-                        <button onClick={() => handleRemoverLink(link.id)} className="px-4 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg text-xs font-bold transition">
-                          Excluir
-                        </button>
+                        <>
+                          <button onClick={() => { setFormLink({ titulo: link.titulo, url: link.url, descricao: link.descricao, regime_alvo: link.regime_alvo || 'Todos' }); setLinkEditando(link.id); setMostrarFormLink(true); }} className="px-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white rounded-lg text-xs font-bold transition">
+                            Editar
+                          </button>
+                          <button onClick={() => handleRemoverLink(link.id)} className="px-3 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white rounded-lg text-xs font-bold transition">
+                            Excluir
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
