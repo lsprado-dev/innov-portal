@@ -123,7 +123,7 @@ export default function AdminPage() {
  const [abaAtiva, setAbaAtiva] = useState('ativos');
   const [subAbaAtivos, setSubAbaAtivos] = useState('mensalistas'); 
   const [subAbaDemanda, setSubAbaDemanda] = useState('pendentes'); 
-  const [subAbaAlerta, setSubAbaAlerta] = useState('historico_geral'); 
+  const [subAbaAlerta, setSubAbaAlerta] = useState('historico_cobrancas'); 
   
   // NOVO ESTADO: Guarda os processos ativos de todos os clientes
   const [processosSocietarios, setProcessosSocietarios] = useState([]);
@@ -1604,7 +1604,8 @@ export default function AdminPage() {
     return nomeEmpresa.includes(termo) || tituloAlerta.includes(termo);
   });
 
-  const alertasHistoricoGeral = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado');
+  const alertasHistoricoCobrancas = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && (a.tipo_alerta === 'cobranca' || !a.tipo_alerta));
+  const alertasHistoricoAvisos = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && a.tipo_alerta === 'lembrete');
   const alertasAgendados = alertasFiltradosGerais.filter(a => a.status === 'programado');
   const alertasRecorrentes = alertasFiltradosGerais.filter(a => a.status === 'recorrente');
   const alertasAtrasados = alertasHistoricoGeral.filter(a => {
@@ -2895,7 +2896,8 @@ export default function AdminPage() {
               
               <div id="area-lista-alertas" className="bg-[#0d1b2a] px-5 py-4 border-b border-zinc-800 flex flex-col xl:flex-row justify-between items-center gap-4 rounded-t-xl">
                 <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full xl:w-auto overflow-x-auto hide-scrollbar">
-                  <button onClick={() => { setSubAbaAlerta('historico_geral'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_geral' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_avisos'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_avisos' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Histórico Avisos</button>
                   <button onClick={() => { setSubAbaAlerta('agendados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
                   <button onClick={() => { setSubAbaAlerta('recorrentes'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
                   <button onClick={() => { setSubAbaAlerta('atrasados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
@@ -2915,15 +2917,14 @@ export default function AdminPage() {
               </div>
 
               <div className="divide-y divide-zinc-800">
-                {subAbaAlerta === 'historico_geral' && renderLista(alertasHistoricoGeral, (alerta) => {
+                {subAbaAlerta === 'historico_cobrancas' && renderLista(alertasHistoricoCobrancas, (alerta) => {
                   const prazo = calcularPrazo(alerta.prazo);
                   return (
                     <div key={alerta.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${alerta.status === 'respondido' ? 'opacity-50 bg-[#0d1b2a]/40' : 'bg-[#1b263b] hover:bg-zinc-800/20'}`}>
                       <div className="min-w-0 flex-1 w-full">
                         <div className="flex gap-2 items-center mb-1 flex-wrap">
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>{alerta.status === 'pendente' ? 'Aguardando' : 'Respondido'}</span>
+                          <span className={`px-2 py-0.5 rounded border uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>{alerta.status === 'pendente' ? 'Aguardando' : 'Respondido'}</span>
                           
-                          {/* ETIQUETA CLARA DE COMO FOI ENVIADO */}
                           {alerta.enviado_email ? (
                             <span className="text-[10px] font-bold text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30 flex items-center whitespace-nowrap"><IconMail /> E-mail e Portal</span>
                           ) : (
@@ -2931,14 +2932,13 @@ export default function AdminPage() {
                           )}
                           
                           <span className="text-xs font-bold text-zinc-300 truncate max-w-full">{alerta.clientes?.nome_empresa}</span>
-{alerta.responsavel && <span className="text-[10px] bg-[#1b263b] text-zinc-400 px-2 py-0.5 rounded border border-zinc-700 whitespace-nowrap">Resp: {alerta.responsavel.split(' ')[0]}</span>}
+                          {alerta.responsavel && <span className="text-[10px] bg-[#1b263b] text-zinc-400 px-2 py-0.5 rounded border border-zinc-700 whitespace-nowrap">Resp: {alerta.responsavel.split(' ')[0]}</span>}
                         </div>
                         <p className="text-sm font-medium text-[#d4af37] mt-2 mb-1 truncate">{alerta.titulo} <span className="text-xs text-zinc-500 ml-1 font-normal">({alerta.tipo_documento})</span></p>
                         <div className="flex gap-3 items-center flex-wrap">
                           {alerta.status !== 'respondido' && <p className={`text-xs ${prazo.cor}`}><IconMiniClock /> Limite: {alerta.prazo ? new Date(alerta.prazo).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--'}</p>}
                           {alerta.data_vencimento && <p className="text-[11px] text-red-400 font-semibold border-l border-zinc-700 pl-3">Vencimento: {new Date(alerta.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</p>}
                           
-                          {/* O NOVO VISTO AZUL DE LEITURA (SABER SE ELE LEU) */}
                           {alerta.visualizado_em && (
                             <p className="text-[11px] text-blue-400 font-bold border-l border-zinc-700 pl-3 flex items-center" title="Cliente abriu a notificação no portal">
                               <IconEye /> Visto em: {formatarDataHora(alerta.visualizado_em)}
@@ -2951,11 +2951,45 @@ export default function AdminPage() {
                         
                         {alerta.status === 'respondido' && alerta.caminho_arquivo && (
                           <>
-                            <button onClick={(e) => { e.preventDefault(); visualizarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded text-xs font-bold text-white transition">Visualizar</button>
+                            <button onClick={(e) => { e.preventDefault(); visualizarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded text-xs font-bold text-white transition">Visualizar</button>
                             <button onClick={(e) => { e.preventDefault(); baixarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2 rounded text-xs font-bold transition">Baixar</button>
                           </>
                         )}
                         
+                        <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {subAbaAlerta === 'historico_avisos' && renderLista(alertasHistoricoAvisos, (alerta) => {
+                  return (
+                    <div key={alerta.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${alerta.status === 'respondido' ? 'opacity-50 bg-[#0d1b2a]/40' : 'bg-[#1b263b] hover:bg-zinc-800/20'}`}>
+                      <div className="min-w-0 flex-1 w-full">
+                        <div className="flex gap-2 items-center mb-1 flex-wrap">
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>{alerta.status === 'pendente' ? 'Não Lido' : 'Lido'}</span>
+                          
+                          {alerta.enviado_email ? (
+                            <span className="text-[10px] font-bold text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30 flex items-center whitespace-nowrap"><IconMail /> E-mail e Portal</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700 flex items-center whitespace-nowrap"><IconGlobe /> Apenas Portal</span>
+                          )}
+                          
+                          <span className="text-xs font-bold text-zinc-300 truncate max-w-full">{alerta.clientes?.nome_empresa}</span>
+                          {alerta.responsavel && <span className="text-[10px] bg-[#1b263b] text-zinc-400 px-2 py-0.5 rounded border border-zinc-700 whitespace-nowrap">Resp: {alerta.responsavel.split(' ')[0]}</span>}
+                        </div>
+                        <p className="text-sm font-medium text-[#d4af37] mt-2 mb-1 truncate">{alerta.titulo} <span className="text-xs text-zinc-500 ml-1 font-normal">({alerta.tipo_documento})</span></p>
+                        <div className="flex gap-3 items-center flex-wrap">
+                          {alerta.data_vencimento && <p className="text-[11px] text-red-400 font-semibold">Vencimento/Evento: {new Date(alerta.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</p>}
+                          {alerta.visualizado_em && (
+                            <p className="text-[11px] text-blue-400 font-bold flex items-center" title="Cliente abriu a notificação no portal">
+                              <IconEye /> Visto em: {formatarDataHora(alerta.visualizado_em)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
+                        <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
                         <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
                       </div>
                     </div>
