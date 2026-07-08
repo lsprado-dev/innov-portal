@@ -580,16 +580,26 @@ export default function MensalistaView({ params: paramsPromise }) {
         }
       } else { setPedidos([]); }
     } 
-    else if (abaPrincipal === 'alertas') {
+    else if (abaPrincipal === 'alertas' || abaPrincipal === 'avisos') {
       const { data } = await supabase.from('alertas_clientes').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
       if (data) {
         setAlertas(data);
         const tipoSalvo = localStorage.getItem('usuario_tipo');
         if (tipoSalvo !== 'interno') {
-          const naoLidos = data.filter(a => !a.visualizado_em && a.status === 'pendente').map(a => a.id);
+          // Identifica se o cliente está abrindo a aba de Cobranças ou de Avisos
+          const isAviso = abaPrincipal === 'avisos';
+          
+          const naoLidos = data.filter(a => {
+            if (a.visualizado_em || a.status !== 'pendente') return false;
+            // Marca como visto apenas o que corresponde à aba atual
+            if (isAviso) return a.tipo_alerta === 'lembrete';
+            return a.tipo_alerta === 'cobranca' || !a.tipo_alerta;
+          }).map(a => a.id);
+
           if (naoLidos.length > 0) {
             await supabase.from('alertas_clientes').update({ visualizado_em: new Date().toISOString() }).in('id', naoLidos);
-            await registrarAuditoria('ALERTA_VISUALIZADO', `O cliente visualizou ${naoLidos.length} cobrança(s)/pendência(s) pendente(s) no portal.`);
+            const nomeAuditoria = isAviso ? 'Aviso(s)' : 'Cobrança(s)';
+            await registrarAuditoria('ALERTA_VISUALIZADO', `O cliente visualizou ${naoLidos.length} ${nomeAuditoria} no portal.`);
           }
         }
       } else { setAlertas([]); }
