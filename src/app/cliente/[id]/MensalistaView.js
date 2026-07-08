@@ -192,6 +192,10 @@ export default function MensalistaView({ params: paramsPromise }) {
   // ESTADOS DA TRÉPLICA (RESPONDER POR BAIXO DO CARD)
   const [chamadoReabrindo, setChamadoReabrindo] = useState(null);
   const [textoReplica, setTextoReplica] = useState('');
+  
+  // ESTADOS DO MURAL DE AVISOS
+  const [subAbaAviso, setSubAbaAviso] = useState('ativos');
+  const [expandidosAvisos, setExpandidosAvisos] = useState({});
 
   // NOVO: ESTADOS DO MODAL DE DÚVIDA RÁPIDA NO ARQUIVO
   const [modalDuvidaArquivo, setModalDuvidaArquivo] = useState({ aberto: false, arquivo: null, texto: '' });
@@ -288,6 +292,8 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [alertasGlobaisLembretes, setAlertasGlobaisLembretes] = useState(0); // NOVO: Conta avisos pendentes
   const [pedidosResolvidosNaoLidos, setPedidosResolvidosNaoLidos] = useState(0); // NOVO: Banner verde
   const [subAbaSolicitacao, setSubAbaSolicitacao] = useState('ativas'); // NOVO: Filtro de abas
+  const [subAbaAvisos, setSubAbaAvisos] = useState('recentes'); // NOVO: Filtro do Mural de Avisos
+  const [avisosExpandidos, setAvisosExpandidos] = useState({}); // NOVO: Controle de abrir/fechar recados
 
   // ESTADOS DO MODAL DE PERFIL E SENHA
   const [mostrarModalPerfil, setMostrarModalPerfil] = useState(false);
@@ -1570,6 +1576,16 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(false);
   }
 
+  async function handleMoverAvisoHistorico(alerta) {
+    setSubindoArquivo(true);
+    const { error } = await supabase.from('alertas_clientes').update({ status: 'historico' }).eq('id', alerta.id);
+    if (!error) {
+      mostrarToast('Aviso guardado no histórico!', 'sucesso');
+      await carregarDadosDaAba();
+    }
+    setSubindoArquivo(false);
+  }
+
   function adicionarMaisUm() { setEnviosPre([...enviosPre, { id: Date.now(), descricao: '', arquivo: null, departamento: 'Contábil' }]); }
   function removerLineEnvio(linhaId) { if (enviosPre.length === 1) return; setEnviosPre(enviosPre.filter(item => item.id !== linhaId)); }
   function alterarDescricao(linhaId, texto) { setEnviosPre(enviosPre.map(item => item.id === linhaId ? { ...item, descricao: texto } : item)); }
@@ -2825,53 +2841,120 @@ export default function MensalistaView({ params: paramsPromise }) {
         ========================================== */}
         {abaPrincipal === 'avisos' && (
           <div className="bg-[#1b263b] p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
-            <div className="border-b border-zinc-800 pb-4 mb-6">
-              <h3 className="text-xl font-bold text-blue-400 capitalize flex items-center gap-2">
-                 <IconInfoBlue /> Mural de Avisos
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">Confira os recados e comunicados importantes deixados pela equipa.</p>
+            <div className="border-b border-zinc-800 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-blue-400 capitalize flex items-center gap-2">
+                   <IconInfoBlue /> Mural de Avisos
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">Confira os recados e comunicados importantes deixados pela equipa.</p>
+              </div>
+              <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-800 w-full sm:w-auto">
+                <button onClick={() => setSubAbaAviso('ativos')} className={`flex-1 sm:flex-none px-6 py-2 rounded-md text-xs font-bold transition-all ${subAbaAviso === 'ativos' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>Recentes</button>
+                <button onClick={() => setSubAbaAviso('historico')} className={`flex-1 sm:flex-none px-6 py-2 rounded-md text-xs font-bold transition-all ${subAbaAviso === 'historico' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>Histórico</button>
+              </div>
             </div>
 
             <div className="space-y-4">
-              {alertas.filter(a => a.tipo_alerta === 'lembrete').length === 0 ? (
-                <p className="text-zinc-500 text-sm">Nenhum aviso no mural.</p>
-              ) : (
-                alertas.filter(a => a.tipo_alerta === 'lembrete').map(alerta => (
-                  <div key={alerta.id} className={`p-6 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${alerta.status === 'pendente' ? 'bg-[#0d1b2a] border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.05)]' : 'bg-[#0d1b2a]/50 border-blue-500/20 opacity-70'}`}>
-                    <div className="flex-1 w-full md:pr-6 min-w-0">
-                      <div className="flex flex-wrap items-center gap-3 mb-3">
-                        <span className={`text-[10px] font-extrabold px-3 py-1 rounded uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-blue-500 text-white shadow-sm' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
-                          {alerta.status === 'pendente' ? 'Não Lido' : 'Visualizado'}
-                        </span>
+              {(() => {
+                const todosAvisos = alertas.filter(a => a.tipo_alerta === 'lembrete');
+                const hojeApp = new Date();
+
+                const ativos = [];
+                const historico = [];
+
+                todosAvisos.forEach(a => {
+                  if (a.status === 'historico') {
+                    historico.push(a);
+                    return;
+                  }
+
+                  const diffCriacao = (hojeApp - new Date(a.criado_em)) / (1000 * 3600 * 24);
+                  const diffVisto = a.visualizado_em ? (hojeApp - new Date(a.visualizado_em)) / (1000 * 3600 * 24) : 0;
+                  
+                  if (a.status === 'pendente') {
+                    // Mágica 1: Não leu em 45 dias? Arquiva.
+                    if (diffCriacao >= 45) historico.push(a);
+                    else ativos.push(a);
+                  } else if (a.status === 'respondido') {
+                    // Mágica 2: Já passou 15 dias da criação E 1 dia da leitura? Arquiva.
+                    if ((diffCriacao >= 15 && diffVisto >= 1) || diffCriacao >= 45) {
+                      historico.push(a);
+                    } else {
+                      ativos.push(a);
+                    }
+                  } else {
+                    historico.push(a);
+                  }
+                });
+
+                const listaExibicao = subAbaAviso === 'ativos' ? ativos : historico;
+
+                if (listaExibicao.length === 0) return <p className="text-zinc-500 text-sm py-8 text-center bg-[#0d1b2a] rounded-xl border border-zinc-800">Nenhum aviso nesta categoria.</p>;
+
+                return listaExibicao.map(alerta => {
+                  // Efeito Sanfona: Se tiver só 1, fica aberto. Se tiver vários, respeita o clique.
+                  const isExpanded = listaExibicao.length === 1 || expandidosAvisos[alerta.id];
+                  
+                  return (
+                    <div key={alerta.id} className={`p-6 rounded-xl border flex flex-col gap-4 transition-all duration-300 ${alerta.status === 'pendente' ? 'bg-[#0d1b2a] border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.05)]' : 'bg-[#0d1b2a]/50 border-blue-500/20 opacity-80 hover:opacity-100'}`}>
+                      
+                      {/* HEADER DO AVISO */}
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-3 mb-2">
+                            <span className={`text-[10px] font-extrabold px-3 py-1 rounded uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-blue-500 text-white shadow-sm' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
+                              {alerta.status === 'pendente' ? 'Não Lido' : (alerta.status === 'historico' || subAbaAviso === 'historico' ? 'No Histórico' : 'Lido')}
+                            </span>
+                            <span className="text-[10px] font-semibold text-zinc-500 border-l border-zinc-800/80 pl-3">
+                              {formatarDataHoraEnviado(alerta.criado_em)}
+                            </span>
+                          </div>
+                          
+                          <h4 className={`text-lg font-bold text-white break-words pr-4 ${!isExpanded ? 'truncate' : ''}`}>{alerta.titulo}</h4>
+                        </div>
+
+                        <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0 flex-shrink-0">
+                          {listaExibicao.length > 1 && (
+                            <button onClick={() => setExpandidosAvisos(prev => ({...prev, [alerta.id]: !prev[alerta.id]}))} className="flex-1 md:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 px-4 py-2.5 rounded text-zinc-300 hover:text-white font-bold transition border border-zinc-700 shadow-sm whitespace-nowrap">
+                              {isExpanded ? 'Ocultar ▲' : 'Ver Detalhes ▼'}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      
-                      <h4 className="text-lg font-bold text-white mb-2 break-words">{alerta.titulo}</h4>
-                      {alerta.mensagem && (
-                        <div 
-                          className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1 break-words [word-break:break-word]" 
-                          dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
-                        />
+
+                      {/* CORPO DO AVISO (Expansível) */}
+                      {isExpanded && (
+                        <div className="border-t border-zinc-800/60 pt-4 mt-2 animate-in fade-in slide-in-from-top-2">
+                          {alerta.mensagem && (
+                            <div 
+                              className="text-sm text-zinc-300 leading-relaxed mb-5 space-y-1 break-words [word-break:break-word]" 
+                              dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
+                            />
+                          )}
+                          
+                          <div className="flex flex-col sm:flex-row gap-3 items-center justify-end bg-[#1b263b]/50 p-3 rounded-lg border border-zinc-800/50">
+                            {alerta.status === 'pendente' && !isInterno ? (
+                              <button onClick={() => handleMarcarAvisoLido(alerta)} disabled={subindoArquivo} className="w-full sm:w-auto text-center bg-blue-500 text-white font-extrabold px-6 py-2.5 rounded-lg text-xs hover:bg-blue-600 transition shadow-[0_0_15px_rgba(59,130,246,0.3)] whitespace-nowrap">
+                                {subindoArquivo ? 'A processar...' : 'Marcar como Lido'}
+                              </button>
+                            ) : (
+                              <span className="w-full sm:w-auto text-center whitespace-nowrap text-xs text-zinc-500 font-bold px-4 py-2">
+                                ✓ Aviso Lido
+                              </span>
+                            )}
+
+                            {!isInterno && alerta.status !== 'historico' && subAbaAviso !== 'historico' && (
+                              <button onClick={() => handleMoverAvisoHistorico(alerta)} disabled={subindoArquivo} className="w-full sm:w-auto text-center bg-zinc-800 text-zinc-400 font-bold px-6 py-2.5 rounded-lg text-xs hover:bg-zinc-700 hover:text-white transition border border-zinc-700 whitespace-nowrap shadow-sm">
+                                Mover para Histórico
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      
-                      <p className="text-[10px] font-semibold text-zinc-500 border-t border-zinc-800/80 pt-2 inline-block">
-                        Enviado pela Innovative em {formatarDataHoraEnviado(alerta.criado_em)}
-                      </p>
                     </div>
-                    
-                    <div className="mt-4 md:mt-0 w-full md:w-auto flex flex-col gap-3 min-w-[240px]">
-                      {alerta.status === 'pendente' && !isInterno ? (
-                        <button onClick={() => handleMarcarAvisoLido(alerta)} disabled={subindoArquivo} className="block w-full text-center bg-blue-500 text-white font-extrabold px-6 py-3.5 rounded-lg text-sm hover:bg-blue-600 transition shadow-[0_0_15px_rgba(59,130,246,0.3)] whitespace-nowrap">
-                          {subindoArquivo ? 'A processar...' : 'Marcar como Lido'}
-                        </button>
-                      ) : (
-                        <span className="w-full text-center whitespace-nowrap text-xs bg-zinc-800 text-zinc-400 px-4 py-3 rounded-lg font-bold shadow-sm cursor-not-allowed">
-                          Recado Visualizado
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+                  );
+                });
+              })()}
             </div>
           </div>
         )}
