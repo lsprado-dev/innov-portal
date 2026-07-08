@@ -1608,7 +1608,7 @@ export default function AdminPage() {
   const alertasHistoricoAvisos = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && a.tipo_alerta === 'lembrete');
   const alertasAgendados = alertasFiltradosGerais.filter(a => a.status === 'programado');
   const alertasRecorrentes = alertasFiltradosGerais.filter(a => a.status === 'recorrente');
-  const alertasAtrasados = alertasHistoricoGeral.filter(a => {
+  const alertasAtrasados = alertasHistoricoCobrancas.filter(a => {
     if (a.status === 'respondido') return false;
     if (!a.prazo) return false;
     const calc = calcularPrazo(a.prazo);
