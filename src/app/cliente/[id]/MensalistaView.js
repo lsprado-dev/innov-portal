@@ -2744,7 +2744,7 @@ export default function MensalistaView({ params: paramsPromise }) {
               ) : (
                 alertas.filter(a => a.tipo_alerta === 'cobranca' || !a.tipo_alerta).map(alerta => (
                   <div key={alerta.id} className={`p-6 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${alerta.status === 'pendente' ? 'bg-[#0d1b2a] border-orange-500/40 shadow-[0_0_15px_rgba(249,115,22,0.05)]' : 'bg-[#0d1b2a]/50 border-emerald-500/20 opacity-70'}`}>
-                    <div className="flex-1 w-full md:pr-6">
+                    <div className="flex-1 w-full md:pr-6 min-w-0">
                       
                       <div className="flex flex-wrap items-center gap-3 mb-3">
                         <span className={`text-[10px] font-extrabold px-3 py-1 rounded uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-orange-500 text-black shadow-sm' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'}`}>
@@ -2753,15 +2753,15 @@ export default function MensalistaView({ params: paramsPromise }) {
                         
                         {alerta.status === 'pendente' && alerta.prazo && (
                           <span className="text-xs font-black text-white bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)] border border-red-600 px-3 py-1 rounded-md uppercase tracking-wider animate-pulse">
-                            🚨 Prazo {formatarPrazoSemAno(alerta.prazo)}
+                             Prazo {formatarPrazoSemAno(alerta.prazo)}
                           </span>
                         )}
                       </div>
                       
-                      <h4 className="text-lg font-bold text-white mb-2">{alerta.titulo}</h4>
+                      <h4 className="text-lg font-bold text-white mb-2 break-words">{alerta.titulo}</h4>
                       {alerta.mensagem && (
                         <div 
-                          className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1" 
+                          className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1 break-words [word-break:break-word]" 
                           dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
                         />
                       )}
@@ -2838,17 +2838,17 @@ export default function MensalistaView({ params: paramsPromise }) {
               ) : (
                 alertas.filter(a => a.tipo_alerta === 'lembrete').map(alerta => (
                   <div key={alerta.id} className={`p-6 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${alerta.status === 'pendente' ? 'bg-[#0d1b2a] border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.05)]' : 'bg-[#0d1b2a]/50 border-blue-500/20 opacity-70'}`}>
-                    <div className="flex-1 w-full md:pr-6">
+                    <div className="flex-1 w-full md:pr-6 min-w-0">
                       <div className="flex flex-wrap items-center gap-3 mb-3">
                         <span className={`text-[10px] font-extrabold px-3 py-1 rounded uppercase whitespace-nowrap ${alerta.status === 'pendente' ? 'bg-blue-500 text-white shadow-sm' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
                           {alerta.status === 'pendente' ? 'Não Lido' : 'Visualizado'}
                         </span>
                       </div>
                       
-                      <h4 className="text-lg font-bold text-white mb-2">{alerta.titulo}</h4>
+                      <h4 className="text-lg font-bold text-white mb-2 break-words">{alerta.titulo}</h4>
                       {alerta.mensagem && (
                         <div 
-                          className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1" 
+                          className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1 break-words [word-break:break-word]" 
                           dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
                         />
                       )}
