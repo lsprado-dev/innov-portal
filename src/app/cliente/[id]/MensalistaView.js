@@ -2699,7 +2699,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                       </div>
                       
                       <h4 className="text-lg font-bold text-white mb-2">{alerta.titulo}</h4>
-                      {alerta.mensagem && <p className="text-sm text-zinc-300 leading-relaxed mb-3">{alerta.mensagem}</p>}
+                      {alerta.mensagem && <p className="text-sm text-zinc-300 leading-relaxed mb-3 whitespace-pre-wrap">{alerta.mensagem}</p>}
                       
                       <p className="text-[10px] font-semibold text-zinc-500 border-t border-zinc-800/80 pt-2 inline-block">
                         Enviado pela Innovative em {formatarDataHoraEnviado(alerta.criado_em)}

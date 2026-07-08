@@ -573,7 +573,7 @@ export default function AdminPage() {
                   cliente_nome: cli.nome_empresa,
                   cliente_email: cli.email,
                   titulo: formAlerta.titulo,
-                  mensagem: formAlerta.mensagem,
+                  mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'), // MÁGICA: Converte Enters para quebras HTML
                   tipo_documento: formAlerta.tipo_documento,
                   exibir_prazo_email: formAlerta.exibir_prazo_email,
                   exibir_vencimento_email: formAlerta.exibir_vencimento_email,
