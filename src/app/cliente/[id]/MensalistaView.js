@@ -1549,6 +1549,17 @@ export default function MensalistaView({ params: paramsPromise }) {
     }, 'sucesso');
   }
 
+  async function handleMarcarAvisoLido(alerta) {
+    setSubindoArquivo(true);
+    const { error } = await supabase.from('alertas_clientes').update({ status: 'respondido' }).eq('id', alerta.id);
+    if (!error) {
+      mostrarToast('Aviso marcado como lido!', 'sucesso');
+      await carregarDadosDaAba();
+      atualizarBadgeGlobal(id);
+    }
+    setSubindoArquivo(false);
+  }
+
   function adicionarMaisUm() { setEnviosPre([...enviosPre, { id: Date.now(), descricao: '', arquivo: null, departamento: 'Contábil' }]); }
   function removerLineEnvio(linhaId) { if (enviosPre.length === 1) return; setEnviosPre(enviosPre.filter(item => item.id !== linhaId)); }
   function alterarDescricao(linhaId, texto) { setEnviosPre(enviosPre.map(item => item.id === linhaId ? { ...item, descricao: texto } : item)); }
@@ -2825,7 +2836,12 @@ export default function MensalistaView({ params: paramsPromise }) {
                       </div>
                       
                       <h4 className="text-lg font-bold text-white mb-2">{alerta.titulo}</h4>
-                      {alerta.mensagem && <p className="text-sm text-zinc-300 leading-relaxed mb-3 whitespace-pre-wrap">{alerta.mensagem}</p>}
+                      {alerta.mensagem && (
+                        <div 
+                          className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1" 
+                          dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
+                        />
+                      )}
                       
                       <p className="text-[10px] font-semibold text-zinc-500 border-t border-zinc-800/80 pt-2 inline-block">
                         Enviado pela Innovative em {formatarDataHoraEnviado(alerta.criado_em)}
@@ -2834,7 +2850,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                     
                     <div className="mt-4 md:mt-0 w-full md:w-auto flex flex-col gap-3 min-w-[240px]">
                       {alerta.status === 'pendente' && !isInterno ? (
-                        <button onClick={() => handleConcluirDemanda0Arquivo(alerta)} disabled={subindoArquivo} className="block w-full text-center bg-blue-500 text-white font-extrabold px-6 py-3.5 rounded-lg text-sm hover:bg-blue-600 transition shadow-[0_0_15px_rgba(59,130,246,0.3)] whitespace-nowrap">
+                        <button onClick={() => handleMarcarAvisoLido(alerta)} disabled={subindoArquivo} className="block w-full text-center bg-blue-500 text-white font-extrabold px-6 py-3.5 rounded-lg text-sm hover:bg-blue-600 transition shadow-[0_0_15px_rgba(59,130,246,0.3)] whitespace-nowrap">
                           {subindoArquivo ? 'A processar...' : 'Marcar como Lido'}
                         </button>
                       ) : (

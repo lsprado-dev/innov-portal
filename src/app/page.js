@@ -2780,12 +2780,14 @@ export default function AdminPage() {
 
                 {/* BLOCO 3: DATAS E RECORRÊNCIA */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-800 pt-5">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-2" title="Até quando o cliente deve enviar ou confirmar">Prazo p/ Confirmação</label>
-                    <input type="date" value={formAlerta.prazo} onChange={e => setFormAlerta({...formAlerta, prazo: e.target.value})} disabled={formAlerta.repetir_mensalmente} required={!formAlerta.repetir_mensalmente} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30 cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-2" title="Caso seja uma cobrança (DAS, Boleto, etc)">Data de Vencimento</label>
+                  {formAlerta.tipo_alerta === 'cobranca' && (
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-400 uppercase mb-2" title="Até quando o cliente deve enviar ou confirmar">Prazo p/ Confirmação</label>
+                      <input type="date" value={formAlerta.prazo} onChange={e => setFormAlerta({...formAlerta, prazo: e.target.value})} disabled={formAlerta.repetir_mensalmente} required={!formAlerta.repetir_mensalmente && formAlerta.tipo_alerta === 'cobranca'} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30 cursor-pointer" />
+                    </div>
+                  )}
+                  <div className={formAlerta.tipo_alerta === 'lembrete' ? 'md:col-span-2' : ''}>
+                    <label className="block text-xs font-bold text-zinc-400 uppercase mb-2" title="Caso seja uma cobrança (DAS, Boleto, etc) ou data de evento">Data de Vencimento / Evento (Opcional)</label>
                     <input type="date" value={formAlerta.data_vencimento} onChange={e => setFormAlerta({...formAlerta, data_vencimento: e.target.value})} disabled={formAlerta.repetir_mensalmente} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:border-[#d4af37] focus:outline-none disabled:opacity-30 cursor-pointer" />
                   </div>
                   <div>
