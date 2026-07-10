@@ -376,7 +376,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   
   // NOVO: Estados para edição manual do cliente pelo Admin na página do cliente
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
-  const [formEditar, setFormEditar] = useState({ nome_empresa: '', nome_contato: '', email: '', celular: '' });
+  const [formEditar, setFormEditar] = useState({ nome_empresa: '', nome_contato: '', email: '', celular: '', dia_vencimento: 20 });
 
   async function handleSalvarEdicaoManual(e) {
     e.preventDefault();
@@ -386,7 +386,8 @@ export default function MensalistaView({ params: paramsPromise }) {
       nome_empresa: formEditar.nome_empresa,
       nome_contato: formEditar.nome_contato,
       email: formEditar.email,
-      celular: formEditar.celular
+      celular: formEditar.celular,
+      dia_vencimento: parseInt(formEditar.dia_vencimento, 10)
     }).eq('id', id);
 
     if (!error) {
@@ -1978,7 +1979,8 @@ export default function MensalistaView({ params: paramsPromise }) {
                           nome_empresa: cliente.nome_empresa || '',
                           nome_contato: cliente.nome_contato || '',
                           email: cliente.email || '',
-                          celular: cliente.celular || ''
+                          celular: cliente.celular || '',
+                          dia_vencimento: cliente.dia_vencimento || 20
                         });
                         setModalEditarCliente(true);
                       }
@@ -2170,10 +2172,19 @@ const isMesAntigoPago = ['01', '02', '03', '04'].includes(mes.id);
 const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnviado || pagoManualmente || isMesAntigoPago);
                     const emAtraso =  boletoInter && boletoInter.status === 'atrasado';
 
-                    // Lógica mágica de datas
+                    // Lógica de Ciclos de Vencimento Dinâmicos
+                    const diaVencimento = cliente?.dia_vencimento || 20;
+                    let diaAbertura = 10;
+                    if (diaVencimento === 26) diaAbertura = 15;
+                    else if (diaVencimento === 30) diaAbertura = 20;
+                    else if (diaVencimento === 10) diaAbertura = 1;
+
+                    // Lógica mágica de datas (Agora calculando sobre o MÊS DE PAGAMENTO)
                     const hoje = new Date();
-                    // MÁGICA 3: O Javascript começa os meses do zero (- 1 resolve o bug de Janeiro)
-                    const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10) - 1, 10);
+                    // MÁGICA 4: O mês de pagamento é o Mês Seguinte ao da Referência. 
+                    // Como o JS começa os meses em 0, e nosso mes.id começa em '01', 
+                    // parseInt(mes.id, 10) bate EXATAMENTE com o index do mês de pagamento! (ex: mes.id '07' (Julho) -> index 7 = Agosto)
+                    const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10), diaAbertura);
                     dataLiberacao.setHours(0, 0, 0, 0); 
                     
                     const estaLiberado = hoje >= dataLiberacao || !!boletoInter;
@@ -2199,7 +2210,7 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                           <div className="flex-1">
                             <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : emAtraso ? 'text-red-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
                             <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento 20 de ${mes.pag}`}
+                              {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento ${diaVencimento} de ${mes.pag}`}
                             </p>
                             {isPago && (
                               <div className="mt-2">
@@ -2280,7 +2291,7 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                             </div>
                           ) : (
                             <div className="flex flex-col gap-2 mt-1">
-                              <span className="block text-center text-[10px] text-zinc-600 py-2 border border-zinc-800/30 rounded font-bold">Abre dia 10/{String(mesAbertura).padStart(2, '0')}</span>
+                              <span className="block text-center text-[10px] text-zinc-600 py-2 border border-zinc-800/30 rounded font-bold">Abre dia {String(diaAbertura).padStart(2, '0')}/{String(mesAbertura).padStart(2, '0')}</span>
                             </div>
                           )}
                         </div>
@@ -3604,6 +3615,20 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                     className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-[#d4af37] uppercase mb-1">Ciclo de Mensalidade</label>
+                <select 
+                  value={formEditar.dia_vencimento} 
+                  onChange={(e) => setFormEditar({...formEditar, dia_vencimento: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37] cursor-pointer"
+                >
+                  <option value="20">Padrão - Vence dia 20 (Abre dia 10)</option>
+                  <option value="26">Especial - Vence dia 26 (Abre dia 15)</option>
+                  <option value="30">Especial - Vence dia 30 (Abre dia 20)</option>
+                  <option value="10">Especial - Vence dia 10 (Abre dia 01)</option>
+                </select>
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-zinc-800 mt-2">
