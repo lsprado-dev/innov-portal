@@ -186,6 +186,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [pedidos, setPedidos] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [itensLixeira, setItensLixeira] = useState([]);
+  const [boletosDaAPI, setBoletosDaAPI] = useState([]); // NOVO: Guarda os boletos carregados da tabela boletos_api
   const [novoPedido, setNovoPedido] = useState('');
   const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
   const [arquivoPedido, setArquivoPedido] = useState(null); // NOVO: Anexo no ticket do cliente
@@ -540,17 +541,20 @@ export default function MensalistaView({ params: paramsPromise }) {
     setCarregandoConteudo(true); // <--- Inicia a animação de loading
     try {
       if (abaPrincipal === 'pastas' && pastaAtiva) {
-        // MÁGICA: Prepara as 3 consultas e dispara juntas em paralelo (Muito mais rápido!)
+        // MÁGICA: Prepara as consultas e dispara juntas em paralelo (Muito mais rápido!)
       const reqPastas = supabase.from('pastas_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).order('nome');
       const reqArquivos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
       const reqFinanceiro = pastaAtiva === 'financeiro' ? supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id) : Promise.resolve({ data: null });
+      const reqBoletosInter = pastaAtiva === 'financeiro' ? supabase.from('boletos_api').select('*').eq('cliente_id', id) : Promise.resolve({ data: null }); // NOVO: Puxa boletos_api em paralelo
 
-      const [resPastas, resArquivos, resFinanceiro] = await Promise.all([reqPastas, reqArquivos, reqFinanceiro]);
+      const [resPastas, resArquivos, resFinanceiro, resBoletos] = await Promise.all([reqPastas, reqArquivos, reqFinanceiro, reqBoletosInter]);
 
       if (resPastas.data) setPastas(resPastas.data);
       else setPastas([]);
 
       if (resFinanceiro.data) setMensalidadesPagas(resFinanceiro.data.map(p => p.mes_ref));
+      if (resBoletos && resBoletos.data) setBoletosDaAPI(resBoletos.data); // NOVO: Popula o estado financeiro automático
+      else if (pastaAtiva === 'financeiro') setBoletosDaAPI([]);
 
       if (resArquivos.data) {
         setArquivos(resArquivos.data);
@@ -2155,22 +2159,28 @@ export default function MensalistaView({ params: paramsPromise }) {
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {CICLO_FINANCEIRO.map((mes) => {
+                    const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); // NOVO: Busca se há boleto real emitido pela API do Inter
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
                     const pagoManualmente = mensalidadesPagas.includes(mes.ref);
-                    const isPago = comprovanteEnviado || pagoManualmente;
+                    
+                    // Se tiver boleto da API, assume o status dela. Senão, mantém a retrocompatibilidade manual.
+                    const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnviado || pagoManualmente);
+                    const emAtraso =  boletoInter && boletoInter.status === 'atrasado';
 
                     // Lógica mágica de datas
                     const hoje = new Date();
                     const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10), 10);
                     dataLiberacao.setHours(0, 0, 0, 0); 
                     
-                    const estaLiberado = hoje >= dataLiberacao;
+                    const estaLiberado = hoje >= dataLiberacao || !!boletoInter; // Libera o card se passou da data OU se já tem boleto gerado
                     const mesAbertura = (parseInt(mes.id, 10) + 1) > 12 ? 1 : (parseInt(mes.id, 10) + 1);
 
                     // Estilização inteligente do Card
                     let estiloCard = '';
                     if (isPago) {
                       estiloCard = 'bg-emerald-500/10 border-emerald-500/40';
+                    } else if (emAtraso) {
+                      estiloCard = 'bg-red-500/5 border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.05)]';
                     } else if (estaLiberado) {
                       estiloCard = 'bg-[#0d1b2a] border-zinc-700 shadow-[0_0_15px_rgba(212,175,55,0.05)]'; 
                     } else {
@@ -2185,13 +2195,18 @@ export default function MensalistaView({ params: paramsPromise }) {
                           
                           {/* LADO ESQUERDO */}
                           <div className="flex-1">
-                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
-                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              Vencimento 20 de {mes.pag}
+                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : emAtraso ? 'text-red-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
+                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento 20 de ${mes.pag}`}
                             </p>
                             {isPago && (
                               <div className="mt-2">
                                 <span className="bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Pago</span>
+                              </div>
+                            )}
+                            {emAtraso && (
+                              <div className="mt-2">
+                                <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse">Atrasado</span>
                               </div>
                             )}
                           </div>
@@ -2199,12 +2214,12 @@ export default function MensalistaView({ params: paramsPromise }) {
                           {/* LADO DIREITO */}
                           {(estaLiberado || isPago) && (
                             <div className="pointer-events-auto flex-shrink-0 z-10 pt-0.5">
-                              <label className={`flex items-center gap-2 ${comprovanteEnviado ? 'cursor-default' : 'cursor-pointer'} group`} title={comprovanteEnviado ? "Pago via comprovante" : "Marcar como pago manualmente"}>
+                              <label className={`flex items-center gap-2 ${(comprovanteEnviado || boletoInter) ? 'cursor-default' : 'cursor-pointer'} group`} title={comprovanteEnviado ? "Pago via comprovante" : boletoInter ? "Gerenciado automaticamente pelo Inter" : "Marcar como pago manualmente"}>
                                 <span className={`text-[10px] font-bold text-white transition-all opacity-0 group-hover:opacity-100 ${isPago ? 'group-hover:text-emerald-400' : 'group-hover:text-[#d4af37]'}`}>Pago</span>
                                 <input 
                                   type="checkbox" 
                                   checked={isPago} 
-                                  disabled={!!comprovanteEnviado}
+                                  disabled={!!comprovanteEnviado || !!boletoInter} // Bloqueia clique se for boleto real da API para o Webhook dar a baixa
                                   onChange={() => togglePagoManual(mes.ref, isPago)} 
                                   className="w-5 h-5 cursor-pointer transition-colors"
                                   style={{ accentColor: isPago ? '#10b981' : '#d4af37' }} 
@@ -2216,7 +2231,40 @@ export default function MensalistaView({ params: paramsPromise }) {
                         </div>
                         
                         <div className="mt-2">
-                          {comprovanteEnviado ? (
+                          {/* SE EXISTIR BOLETO DA API DO INTER: EXIBE ROTA AUTOMÁTICA */}
+                          {boletoInter ? (
+                            <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
+                              {boletoInter.status !== 'pago' ? (
+                                <>
+                                  <a 
+                                    href={boletoInter.url_pdf} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="block w-full text-center text-[11px] bg-[#d4af37] text-[#0d1b2a] py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-md"
+                                  >
+                                    Ver / Baixar Boleto
+                                  </a>
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      if (boletoInter.linha_digitavel) {
+                                        navigator.clipboard.writeText(boletoInter.linha_digitavel);
+                                        mostrarToast('Código do boleto copiado!', 'sucesso');
+                                      }
+                                    }}
+                                    className="block w-full text-center text-[10px] border border-zinc-600 text-zinc-300 py-1 rounded font-medium hover:bg-zinc-800 hover:text-white transition"
+                                  >
+                                    Copiar Código
+                                  </button>
+                                </>
+                              ) : (
+                                <div className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded text-center border border-emerald-500/20">
+                                  Compensado via API Inter ✓
+                                </div>
+                              )}
+                            </div>
+                          ) : comprovanteEnviado ? (
+                            /* CASO CONTRÁRIO: MANTÉM O SEU LINDO SVALUAGUARDA MANUAL ANTIGO */
                             <div className="flex flex-col gap-2 mt-1">
                               <div className="flex gap-1.5">
                                 <button onClick={() => visualizarDocumento(comprovanteEnviado.caminho_storage)} className="flex-1 text-[11px] border border-emerald-500/50 text-emerald-400 py-1.5 rounded font-bold shadow-sm hover:bg-emerald-500 hover:text-black transition pointer-events-auto">Visualizar</button>
@@ -2230,19 +2278,37 @@ export default function MensalistaView({ params: paramsPromise }) {
                             </div>
                           ) : estaLiberado ? (
                             <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
-                              <label className="block text-center text-[11px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition cursor-pointer shadow-sm">
+                              
+                              {/* 🚨 AVISO DE SEGURANÇA (VISÃO ADMIN VS CLIENTE) */}
+                              {isInterno ? (
+                                <div className="bg-red-500/10 border border-red-500/30 p-1.5 rounded text-center">
+                                  <p className="text-[9px] font-bold text-red-400 uppercase" title="Boleto não emitido ou CNPJ divergente no Inter">⚠ Boleto API Não Encontrado</p>
+                                </div>
+                              ) : (
+                                <div className="bg-orange-500/10 border border-orange-500/30 p-1.5 rounded text-center">
+                                  <p className="text-[10px] font-bold text-orange-400">Boleto indisponível</p>
+                                </div>
+                              )}
+
+                              {!isPago && !isInterno && (
+                                <button 
+                                  onClick={() => {
+                                    setNovoPedido(`Olá equipe! Não estou localizando o meu boleto referente ao mês de ${mes.ref} no painel. Podem verificar a emissão, por favor?`);
+                                    setDepartamentoPedido('Financeiro');
+                                    setAbaPrincipal('solicitacoes');
+                                    rolarPara('nova-solicitacao-form');
+                                    mostrarToast('Preenchemos um ticket para você! Basta clicar em enviar.', 'aviso');
+                                  }}
+                                  className="block w-full text-center text-[10px] border border-orange-500/50 text-orange-400 bg-orange-500/10 py-1.5 rounded font-bold hover:bg-orange-500 hover:text-white transition shadow-sm"
+                                >
+                                  Abrir Ticket p/ Financeiro
+                                </button>
+                              )}
+
+                              <label className="block text-center text-[10px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition cursor-pointer shadow-sm mt-1">
                                 {subindoArquivo ? 'Aguarde...' : '+ Anexar Comprovante'}
                                 <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => handleUploadFinanceiro(e, mes.ref)} disabled={subindoArquivo} />
                               </label>
-                              {!isPago && (
-                                <button 
-                                  onClick={() => handleSolicitarBoleto(mes.ref)} 
-                                  disabled={subindoArquivo || boletosSolicitados.includes(mes.ref)} 
-                                  className={`block w-full text-center text-[10px] border py-1.5 rounded font-bold transition ${boletosSolicitados.includes(mes.ref) ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10 cursor-not-allowed' : 'border-zinc-600 text-zinc-300 hover:bg-zinc-800 hover:text-white'}`}
-                                >
-                                  {boletosSolicitados.includes(mes.ref) ? 'Solicitação Enviada ✓' : 'Solicitar Boleto'}
-                                </button>
-                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col gap-2 mt-1">
