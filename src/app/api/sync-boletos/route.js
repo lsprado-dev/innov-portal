@@ -82,8 +82,11 @@ export async function GET() {
         let statusInterno = 'pendente'; 
         const sit = dadosCobranca.situacao;
         
-        if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO') {
-            statusInterno = 'pago';
+        // Verifica se tem indicativo de PIX na resposta do Inter de forma à prova de falhas
+        const isPix = sit === 'RECEBIDO_PIX' || JSON.stringify(cob).includes('"PIX"');
+
+        if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO' || sit === 'RECEBIDO_PIX') {
+            statusInterno = isPix ? 'pago via pix' : 'pago';
         } else if (sit === 'VENCIDO' || sit === 'ATRASADO' || sit === 'EXPIRADO' || sit === 'CANCELADO' || sit === 'BAIXADO') {
             statusInterno = 'expirado';
         }

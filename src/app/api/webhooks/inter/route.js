@@ -12,15 +12,21 @@ export async function POST(request) {
     
     // O Inter manda um array de eventos
     for (const evento of body) {
-      if (evento.situacao === 'RECEBIDO' || evento.situacao === 'PAGO') {
+      const sit = evento.situacao;
+      
+      // Verifica se foi pago por qualquer via (Boleto, PIX ou Baixa Manual no App do Inter)
+      if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'RECEBIDO_PIX' || sit === 'MARCADO_RECEBIDO') {
         // A V3 envia codigoSolicitacao no lugar de nossoNumero
         const idCobranca = evento.codigoSolicitacao || evento.nossoNumero;
         
-        // Dá baixa automática no boleto do cliente!
+        // Verifica se na notificação em tempo real veio a flag de PIX
+        const isPix = sit === 'RECEBIDO_PIX' || JSON.stringify(evento).includes('"PIX"');
+        
+        // Dá baixa automática no boleto do cliente com o status correto!
         await supabaseAdmin
           .from('boletos_api')
           .update({ 
-            status: 'pago', 
+            status: isPix ? 'pago via pix' : 'pago', 
             data_pagamento: new Date().toISOString()
           })
           .eq('nosso_numero', idCobranca); 
