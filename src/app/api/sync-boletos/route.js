@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
-import { getInterToken } from '../../../lib/inter';
+
+// Ajuste da importação (Tente usar o atalho @/ padrão do Next.js)
+// Se o @/ não funcionar no seu projeto, mude para: import { getInterToken } from '../../../../lib/inter';
+import { getInterToken } from '@/lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -29,7 +32,6 @@ export async function GET() {
     const anoAtual = new Date().getFullYear().toString(); 
     let cobrancasInter = [];
 
-    // MÁGICA: Divide o ano em 4 blocos de 90 dias e filtra pela DATA DE VENCIMENTO!
     const trimestres = [
       { ini: `${anoAtual}-01-01`, fim: `${anoAtual}-03-31` },
       { ini: `${anoAtual}-04-01`, fim: `${anoAtual}-06-30` },
@@ -67,7 +69,6 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      // Trava de segurança extra
       if (!dadosCobranca.dataVencimento || !dadosCobranca.dataVencimento.startsWith(anoAtual)) continue;
 
       const documentoPagador = dadosCobranca.pagador?.cpfCnpj || '';
@@ -79,13 +80,12 @@ export async function GET() {
       });
 
       if (clienteMatch) {
-        // NEW
         let statusInterno = 'pendente'; 
         const sit = dadosCobranca.situacao;
         
         if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO') statusInterno = 'pago';
         else if (sit === 'VENCIDO' || sit === 'ATRASADO' || sit === 'EXPIRADO') statusInterno = 'expirado';
-        else if (sit === 'CANCELADO') continue; // Removemos o EXPIRADO daqui para que ele vá para o seu painel!
+        else if (sit === 'CANCELADO') continue; 
 
         const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
         const idCobranca = dadosCobranca.codigoSolicitacao || cob.codigoSolicitacao || dadosBoleto.nossoNumero;
