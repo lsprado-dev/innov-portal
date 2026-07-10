@@ -2172,10 +2172,11 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
 
                     // Lógica mágica de datas
                     const hoje = new Date();
-                    const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10), 10);
+                    // MÁGICA 3: O Javascript começa os meses do zero (- 1 resolve o bug de Janeiro)
+                    const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10) - 1, 10);
                     dataLiberacao.setHours(0, 0, 0, 0); 
                     
-                    const estaLiberado = hoje >= dataLiberacao || !!boletoInter; // Libera o card se passou da data OU se já tem boleto gerado
+                    const estaLiberado = hoje >= dataLiberacao || !!boletoInter;
                     const mesAbertura = (parseInt(mes.id, 10) + 1) > 12 ? 1 : (parseInt(mes.id, 10) + 1);
 
                     // Estilização inteligente do Card
@@ -2193,10 +2194,8 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                     return (
                       <div key={mes.id} className={`p-4 rounded-xl border flex flex-col justify-between h-44 transition-all relative ${estiloCard}`}>
                         
-                        {/* Cabeçalho do Card: Nome travado na esquerda, Checkbox na direita */}
+                        {/* Cabeçalho do Card */}
                         <div className="flex justify-between items-start gap-2">
-                          
-                          {/* LADO ESQUERDO */}
                           <div className="flex-1">
                             <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : emAtraso ? 'text-red-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
                             <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
@@ -2214,7 +2213,6 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                             )}
                           </div>
 
-                          {/* LADO DIREITO */}
                           {(estaLiberado || isPago) && (
                             <div className="pointer-events-auto flex-shrink-0 z-10 pt-0.5">
                               <label className={`flex items-center gap-2 ${(comprovanteEnviado || boletoInter) ? 'cursor-default' : 'cursor-pointer'} group`} title={comprovanteEnviado ? "Pago via comprovante" : boletoInter ? "Gerenciado automaticamente pelo Inter" : "Marcar como pago manualmente"}>
@@ -2222,7 +2220,7 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                                 <input 
                                   type="checkbox" 
                                   checked={isPago} 
-                                  disabled={!!comprovanteEnviado || !!boletoInter} // Bloqueia clique se for boleto real da API para o Webhook dar a baixa
+                                  disabled={!!comprovanteEnviado || !!boletoInter} 
                                   onChange={() => togglePagoManual(mes.ref, isPago)} 
                                   className="w-5 h-5 cursor-pointer transition-colors"
                                   style={{ accentColor: isPago ? '#10b981' : '#d4af37' }} 
@@ -2230,7 +2228,6 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                               </label>
                             </div>
                           )}
-                          
                         </div>
                         
                         <div className="mt-2">
@@ -2239,31 +2236,11 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                             <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
                               {boletoInter.status !== 'pago' ? (
                                 <>
-                                  <a 
-                                    href={boletoInter.url_pdf} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="block w-full text-center text-[11px] bg-[#d4af37] text-[#0d1b2a] py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-md"
-                                  >
-                                    Ver / Baixar Boleto
-                                  </a>
-                                  <button 
-                                    type="button"
-                                    onClick={() => {
-                                      if (boletoInter.linha_digitavel) {
-                                        navigator.clipboard.writeText(boletoInter.linha_digitavel);
-                                        mostrarToast('Código do boleto copiado!', 'sucesso');
-                                      }
-                                    }}
-                                    className="block w-full text-center text-[10px] border border-zinc-600 text-zinc-300 py-1 rounded font-medium hover:bg-zinc-800 hover:text-white transition"
-                                  >
-                                    Copiar Código
-                                  </button>
+                                  <a href={boletoInter.url_pdf} target="_blank" rel="noopener noreferrer" className="block w-full text-center text-[11px] bg-[#d4af37] text-[#0d1b2a] py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-md">Ver / Baixar Boleto</a>
+                                  <button type="button" onClick={() => { if (boletoInter.linha_digitavel) { navigator.clipboard.writeText(boletoInter.linha_digitavel); mostrarToast('Código copiado!', 'sucesso'); } }} className="block w-full text-center text-[10px] border border-zinc-600 text-zinc-300 py-1 rounded font-medium hover:bg-zinc-800 hover:text-white transition">Copiar Código</button>
                                 </>
                               ) : (
-                                <div className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded text-center border border-emerald-500/20">
-                                  Compensado via API Inter ✓
-                                </div>
+                                <div className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded text-center border border-emerald-500/20">Compensado via API Inter ✓</div>
                               )}
                             </div>
                           ) : comprovanteEnviado ? (
@@ -2283,29 +2260,17 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                             <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
                               
                               {/* 🚨 AVISO DE SEGURANÇA (VISÃO ADMIN VS CLIENTE) */}
-                              {isInterno ? (
-                                <div className="bg-red-500/10 border border-red-500/30 p-1.5 rounded text-center">
-                                  <p className="text-[9px] font-bold text-red-400 uppercase" title="Boleto não emitido ou CNPJ divergente no Inter">⚠ Boleto API Não Encontrado</p>
-                                </div>
-                              ) : (
-                                <div className="bg-orange-500/10 border border-orange-500/30 p-1.5 rounded text-center">
-                                  <p className="text-[10px] font-bold text-orange-400">Boleto indisponível</p>
-                                </div>
-                              )}
-
-                              {!isPago && !isInterno && (
-                                <button 
-                                  onClick={() => {
-                                    setNovoPedido(`Olá equipe! Não estou localizando o meu boleto referente ao mês de ${mes.ref} no painel. Podem verificar a emissão, por favor?`);
-                                    setDepartamentoPedido('Financeiro');
-                                    setAbaPrincipal('solicitacoes');
-                                    rolarPara('nova-solicitacao-form');
-                                    mostrarToast('Preenchemos um ticket para você! Basta clicar em enviar.', 'aviso');
-                                  }}
-                                  className="block w-full text-center text-[10px] border border-orange-500/50 text-orange-400 bg-orange-500/10 py-1.5 rounded font-bold hover:bg-orange-500 hover:text-white transition shadow-sm"
-                                >
-                                  Abrir Ticket p/ Financeiro
-                                </button>
+                              {!isPago && (
+                                <>
+                                  {isInterno ? (
+                                    <div className="bg-red-500/10 border border-red-500/30 p-1.5 rounded text-center"><p className="text-[9px] font-bold text-red-400 uppercase">⚠ Boleto API Não Encontrado</p></div>
+                                  ) : (
+                                    <div className="bg-orange-500/10 border border-orange-500/30 p-1.5 rounded text-center"><p className="text-[10px] font-bold text-orange-400">Boleto indisponível</p></div>
+                                  )}
+                                  {!isInterno && (
+                                    <button onClick={() => { setNovoPedido(`Não estou localizando o boleto de ${mes.ref}. Podem verificar?`); setDepartamentoPedido('Financeiro'); setAbaPrincipal('solicitacoes'); rolarPara('nova-solicitacao-form'); mostrarToast('Ticket preenchido!', 'aviso'); }} className="block w-full text-center text-[10px] border border-orange-500/50 text-orange-400 bg-orange-500/10 py-1.5 rounded font-bold hover:bg-orange-500 hover:text-white transition">Abrir Ticket p/ Financeiro</button>
+                                  )}
+                                </>
                               )}
 
                               <label className="block text-center text-[10px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition cursor-pointer shadow-sm mt-1">
@@ -2315,9 +2280,7 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                             </div>
                           ) : (
                             <div className="flex flex-col gap-2 mt-1">
-                              <span className="block text-center text-[10px] text-zinc-600 py-2 border border-zinc-800/30 rounded font-bold">
-                                Abre dia 10/{String(mesAbertura).padStart(2, '0')}
-                              </span>
+                              <span className="block text-center text-[10px] text-zinc-600 py-2 border border-zinc-800/30 rounded font-bold">Abre dia 10/{String(mesAbertura).padStart(2, '0')}</span>
                             </div>
                           )}
                         </div>

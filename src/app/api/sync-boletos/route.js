@@ -26,21 +26,29 @@ export async function GET() {
     const key = Buffer.from(process.env.INTER_KEY_BASE64, 'base64').toString('ascii');
     const httpsAgent = new https.Agent({ cert, key });
 
-    // 1. Busca exatamente 90 dias pro passado e 90 dias pro futuro
     const hojeData = new Date();
     const futuroData = new Date(hojeData.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const passadoData = new Date(hojeData.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const anoAtual = hojeData.getFullYear().toString(); // Pegamos "2026"
+    const anoAtual = hojeData.getFullYear().toString(); 
 
-    const response = await axios.get(
-      `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${passadoData}&dataFinal=${futuroData}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        httpsAgent
-      }
-    );
-        
-    const cobrancasInter = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
+    let cobrancasInter = [];
+    let paginaAtual = 0;
+    let totalPaginas = 1;
+
+    // 🚀 MÁGICA 1: Loop de Paginação (Folheia todas as páginas de 100 em 100 até o fim!)
+    while (paginaAtual < totalPaginas) {
+      const response = await axios.get(
+        `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${passadoData}&dataFinal=${futuroData}&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
+        { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
+      );
+      
+      const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
+      cobrancasInter.push(...lista);
+
+      totalPaginas = response.data.totalPages || 1;
+      paginaAtual++;
+    }
+
     const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf');
     let importados = 0;
 
@@ -48,7 +56,7 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      // TRAVA MÁGICA: Ignora qualquer boleto que não seja deste ano! (Mata o bug de 2025)
+      // Trava de segurança: Ignora boletos de anos anteriores ou sem data
       if (!dadosCobranca.dataVencimento || !dadosCobranca.dataVencimento.startsWith(anoAtual)) continue;
 
       const documentoPagador = dadosCobranca.pagador?.cpfCnpj || '';
@@ -60,10 +68,13 @@ export async function GET() {
       });
 
       if (clienteMatch) {
-        let statusInterno = 'pendente';
-        if (dadosCobranca.situacao === 'RECEBIDO' || dadosCobranca.situacao === 'PAGO') statusInterno = 'pago';
-        if (dadosCobranca.situacao === 'VENCIDO' || dadosCobranca.situacao === 'ATRASADO') statusInterno = 'atrasado';
-        if (dadosCobranca.situacao === 'CANCELADO' || dadosCobranca.situacao === 'EXPIRADO') continue;
+        // 🚀 MÁGICA 2: Mapeamento de Status Completo (PIX, Manual e Atrasos)
+        let statusInterno = 'pendente'; // A RECEBER (Em Aberto)
+        const sit = dadosCobranca.situacao;
+        
+        if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO') statusInterno = 'pago';
+        if (sit === 'VENCIDO' || sit === 'ATRASADO') statusInterno = 'atrasado';
+        if (sit === 'CANCELADO' || sit === 'EXPIRADO') continue; // Limpa os cancelados/expirados da tela
 
         const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
         const idCobranca = dadosCobranca.codigoSolicitacao || cob.codigoSolicitacao || dadosBoleto.nossoNumero;
@@ -85,7 +96,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ success: true, message: `${importados} boletos do ciclo atual identificados e sincronizados!` });
+    return NextResponse.json({ success: true, message: `${importados} boletos atualizados e sincronizados!` });
   } catch (error) {
     return NextResponse.json({ error: error.response?.data || error.message }, { status: 500 });
   }
