@@ -32,21 +32,41 @@ export async function GET() {
     const key = Buffer.from(process.env.INTER_KEY_BASE64, 'base64').toString('ascii');
     const httpsAgent = new https.Agent({ cert, key });
 
-    // 2. Busca os boletos emitidos nos últimos 60 dias até 60 dias no futuro
-    const hoje = new Date();
-    const dataFinal = new Date(hoje.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; 
-    const dataInicial = new Date(hoje.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // 2. MÁGICA RETROATIVA: Busca o passado (1 ano inteiro em blocos de 90 dias para não bloquear a API) e o futuro
+    let cobrancasInter = [];
+    
+    // Cria 5 janelas de tempo (4 pro passado de 90 dias + 1 pro futuro)
+    const janelasDeBusca = [];
+    
+    // Janela Futura (hoje até +90 dias)
+    const hojeData = new Date();
+    const futuroData = new Date(hojeData.getTime() + 90 * 24 * 60 * 60 * 1000);
+    janelasDeBusca.push({ inicio: hojeData.toISOString().split('T')[0], fim: futuroData.toISOString().split('T')[0] });
 
-    // Chamada à V3 do Banco Inter
-    const response = await axios.get(
-      `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${dataInicial}&dataFinal=${dataFinal}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        httpsAgent
+    // Janelas Passadas (Volta 360 dias)
+    for (let i = 0; i < 4; i++) {
+      const fimPassado = new Date(hojeData.getTime() - (i * 90) * 24 * 60 * 60 * 1000);
+      const inicioPassado = new Date(hojeData.getTime() - ((i + 1) * 90) * 24 * 60 * 60 * 1000);
+      janelasDeBusca.push({ inicio: inicioPassado.toISOString().split('T')[0], fim: fimPassado.toISOString().split('T')[0] });
+    }
+
+    // Varre todas as janelas de tempo pedindo os boletos pro Inter
+    for (const janela of janelasDeBusca) {
+      try {
+        const response = await axios.get(
+          `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${janela.inicio}&dataFinal=${janela.fim}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            httpsAgent
+          }
+        );
+        if (response.data.cobrancas) {
+          cobrancasInter.push(...response.data.cobrancas);
+        }
+      } catch (err) {
+        console.error(`Aviso: Falha ao buscar janela ${janela.inicio} a ${janela.fim}`);
       }
-    );
-
-    const cobrancasInter = response.data.cobrancas || [];
+    }
 
     // 3. Puxa a lista de todos os seus clientes para fazer o "Match"
     const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf');
