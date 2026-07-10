@@ -8,12 +8,12 @@ export async function getInterToken() {
   const httpsAgent = new https.Agent({ cert, key });
 
   const response = await axios.post(
-    'https://cdws.inter.co/oauth/v2/token',
+    'https://cdpj.partners.bancointer.com.br/oauth/v2/token',
     new URLSearchParams({
       client_id: process.env.INTER_CLIENT_ID,
       client_secret: process.env.INTER_CLIENT_SECRET,
       grant_type: 'client_credentials',
-      scope: 'boleto-cobranca.read boleto-cobranca.write'
+      scope: 'boleto-cobranca.read boleto-cobranca.write cobranca.read cobranca.write'
     }).toString(),
     {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

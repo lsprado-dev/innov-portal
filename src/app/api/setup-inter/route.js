@@ -12,7 +12,7 @@ export async function GET() {
 
     // Registra a URL do seu sistema no Banco Inter
     await axios.put(
-      'https://cdws.inter.co/cobranca/v2/boletos/webhook',
+      'https://cdpj.partners.bancointer.com.br/cobranca/v3/webhook',
       // ATENÇÃO: Confirme se este é o domínio correto do seu projeto na Vercel!
       { webhookUrl: 'https://portal.innovbusiness.com.br/api/webhooks/inter' }, 
       {
