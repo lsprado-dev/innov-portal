@@ -944,9 +944,12 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(true);
     let sucessoCount = 0;
 
-    // MÁGICA DE PERFORMANCE: Dispara todos os uploads simultaneamente!
-    const resultados = await Promise.all(files.map(file => fazerUploadUnitario(file, subpastaAtiva)));
-    sucessoCount = resultados.filter(sucesso => sucesso).length;
+    // MÁGICA: Processa em lotes de 3 em 3 para não estourar o limite do Google Drive / Vercel
+    for (let i = 0; i < files.length; i += 3) {
+      const lote = files.slice(i, i + 3);
+      const resultados = await Promise.all(lote.map(file => fazerUploadUnitario(file, subpastaAtiva)));
+      sucessoCount += resultados.filter(sucesso => sucesso).length;
+    }
 
     if (sucessoCount > 0) {
       mostrarToast(`${sucessoCount} documento(s) publicado(s) com sucesso!`, 'sucesso');

@@ -27,17 +27,7 @@ const encriptarSenha = (text) => {
 
 
 
-const LISTA_COLABORADORES = [
-  'Victor (Admin)',
-  'Maria (Societário)',
-  'Helena (Societário e Suporte)',
-  'Luiza (Fiscal)',
-  'Nogueira (Fiscal)',
-  'Vanessa (Contábil)',
-  'Karen (RH)',
-  'Beatriz (Suporte)',
-  'Lucas (Financeiro)'
-];
+const LISTA_COLABORADORES = Object.keys(OBTER_EMAIL_FUNCIONARIO);
 
 // Componentes de Ícones Premium (SVG)
 const IconUsers = () => <svg className="w-7 h-7 text-[#d4af37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
@@ -133,6 +123,8 @@ export default function AdminPage() {
 
   // ESTADO DE SAÚDE DO SISTEMA
   const [totalArquivosSistema, setTotalArquivosSistema] = useState(0);
+  const [totalArquivosSupabase, setTotalArquivosSupabase] = useState(0);
+  const [totalArquivosDrive, setTotalArquivosDrive] = useState(0);
 
   // ESTADOS DE AGRUPAMENTO E MODAIS
   const [agruparPorEmpresa, setAgruparPorEmpresa] = useState(false);
@@ -312,10 +304,20 @@ export default function AdminPage() {
 
   async function carregarDadosDaAba(pagina = 0, recarregar = false) {
     if (pagina === 0) {
-      supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).then(r => {
-        supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).then(e => {
-          setTotalArquivosSistema((r.count || 0) + (e.count || 0));
-        });
+      // Conta arquivos que NÃO estão no Google Drive (Foram pro Supabase)
+      const reqArqSupa = supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).not('caminho_storage', 'ilike', 'DRIVE:%');
+      const reqEnvSupa = supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).not('caminho_storage', 'ilike', 'DRIVE:%');
+      
+      // Conta arquivos que ESTÃO no Google Drive
+      const reqArqDrive = supabase.from('arquivos_portal').select('id', { count: 'exact', head: true }).ilike('caminho_storage', 'DRIVE:%');
+      const reqEnvDrive = supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).ilike('caminho_storage', 'DRIVE:%');
+
+      Promise.all([reqArqSupa, reqEnvSupa, reqArqDrive, reqEnvDrive]).then(res => {
+        const supaCount = (res[0].count || 0) + (res[1].count || 0);
+        const driveCount = (res[2].count || 0) + (res[3].count || 0);
+        setTotalArquivosSupabase(supaCount);
+        setTotalArquivosDrive(driveCount);
+        setTotalArquivosSistema(supaCount + driveCount);
       });
       // Puxa a contagem sem quebrar o array real da tela!
       supabase.from('solicitacoes_cadastro').select('id', { count: 'exact', head: true }).then(r => {
@@ -900,19 +902,21 @@ export default function AdminPage() {
   }
 
   async function sincronizarDriveClientesAntigos() {
+    // 🛑 TRAVA FANTASMA: Checa em background antes de mostrar qualquer loading
+    setSubindo(true);
+    const { data: checkClientes } = await supabase.from('clientes').select('id').is('id_drive_raiz', null).limit(1);
+    const { data: checkPastas } = await supabase.from('pastas_portal').select('id').is('id_drive_pasta', null).limit(1);
+    setSubindo(false);
+
+    if ((!checkClientes || checkClientes.length === 0) && (!checkPastas || checkPastas.length === 0)) {
+       return mostrarToast('Tudo 100% alinhado! Nenhuma gaveta ou pasta pendente no momento.', 'sucesso');
+    }
+
     confirmarAcao(
       'Sincronizador Inteligente (Google Drive)', 
       'Deseja iniciar a sincronização de múltiplas fases? O sistema criará as estruturas raiz das empresas e, em seguida, fará o mapeamento profundo de todas as subpastas.', 
       async () => {
         setSubindo(true);
-        
-        // 🛑 TRAVA FANTASMA: Se não houver nada a fazer, não mostra barra nenhuma!
-        const { data: checkClientes } = await supabase.from('clientes').select('id').is('id_drive_raiz', null).limit(1);
-        const { data: checkPastas } = await supabase.from('pastas_portal').select('id').is('id_drive_pasta', null).limit(1);
-        if ((!checkClientes || checkClientes.length === 0) && (!checkPastas || checkPastas.length === 0)) {
-           setSubindo(false);
-           return mostrarToast('Tudo 100% alinhado! Nenhuma gaveta pendente no momento.', 'sucesso');
-        }
 
         let sucessoCount = 0;
         let subpastasSincronizadas = 0;
@@ -1075,8 +1079,6 @@ export default function AdminPage() {
           mostrarToast(`${sucessoCount} novas gavetas de empresas geradas no Drive!`, 'sucesso');
         } else if (subpastasSincronizadas > 0) {
           mostrarToast(`${subpastasSincronizadas} subpastas e documentos sincronizados no Drive!`, 'sucesso');
-        } else if (!ultimoErro) {
-          mostrarToast('O seu portal e Google Drive já estão 100% alinhados!', 'aviso');
         } else if (ultimoErro) {
           mostrarToast(`Falha no banco ou sistema: ${ultimoErro}`, 'erro');
         }
@@ -1183,6 +1185,36 @@ export default function AdminPage() {
     } catch(e) { console.error('Erro clone Lsprado:', e); }
   }
 
+  async function inicializarPastasDrive(clienteId, nomeEmpresa, mensagemSucesso) {
+    mostrarToast('Criando pastas no Google Drive... Aguarde.', 'aviso');
+    try {
+      const resDrive = await fetch('/api/drive/criar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nomeEmpresa })
+      });
+      const dataDrive = await resDrive.json();
+      
+      if (dataDrive.success) {
+         await supabase.from('clientes').update({
+            id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
+            id_drive_contabil: dataDrive.folders.pasta_cont_bil,
+            id_drive_fiscal: dataDrive.folders.pasta_fiscal,
+            id_drive_rh: dataDrive.folders.pasta_dp___rh,
+            id_drive_contratos: dataDrive.folders.pasta_contratos,
+            id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
+            id_drive_enviados: dataDrive.folders.pasta_documentos_enviados,
+            id_drive_lixeira: dataDrive.folders.pasta_lixeira
+         }).eq('id', clienteId);
+         
+         await clonarPastasLsprado(clienteId);
+         mostrarToast(mensagemSucesso, 'sucesso');
+      }
+    } catch (e) {
+      console.error("Erro na integração com Drive:", e);
+    }
+  }
+
   // Lógica Unificada para criação de cliente MANUAL
   async function handleAdicionarManual(e) {
     e.preventDefault();
@@ -1222,37 +1254,7 @@ export default function AdminPage() {
       const { data: novoClienteInserido, error } = await supabase.from('clientes').insert([payload]).select().single();
       if (!error && novoClienteInserido) {
         
-        // --- 🚀 MÁGICA DO GOOGLE DRIVE ---
-        mostrarToast('Criando pastas no Google Drive... Aguarde.', 'aviso');
-        try {
-          const resDrive = await fetch('/api/drive/criar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nomeEmpresa: formManual.nome_empresa })
-          });
-          const dataDrive = await resDrive.json();
-          
-          if (dataDrive.success) {
-             await supabase.from('clientes').update({
-                id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
-                id_drive_contabil: dataDrive.folders.pasta_cont_bil,
-                id_drive_fiscal: dataDrive.folders.pasta_fiscal,
-                id_drive_rh: dataDrive.folders.pasta_dp___rh,
-                id_drive_contratos: dataDrive.folders.pasta_contratos, // <-- Gaveta Contratos
-                id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
-                id_drive_enviados: dataDrive.folders.pasta_documentos_enviados, // <-- Gaveta Enviados
-                id_drive_lixeira: dataDrive.folders.pasta_lixeira
-             }).eq('id', novoClienteInserido.id);
-             
-             // 🚀 MÁGICA: Clona a árvore do Lsprado na mesma hora!
-             await clonarPastasLsprado(novoClienteInserido.id);
-             
-             mostrarToast('Cliente criado e pastas padrão clonadas!', 'sucesso');
-          }
-        } catch (e) {
-          console.error("Erro na integração com Drive:", e);
-        }
-        // --- FIM DA MÁGICA ---
+        await inicializarPastasDrive(novoClienteInserido.id, formManual.nome_empresa, 'Cliente criado e pastas padrão clonadas!');
 
         mostrarToast('Cliente cadastrado com sucesso!', 'sucesso');
         setModalAdicionar(false);
@@ -1433,37 +1435,7 @@ export default function AdminPage() {
 
       if (!error && novoCliente) { 
         
-        // --- 🚀 MÁGICA DO GOOGLE DRIVE ---
-        mostrarToast('Criando pastas no Google Drive... Aguarde.', 'aviso');
-        try {
-          const resDrive = await fetch('/api/drive/criar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nomeEmpresa: solicitacao.nome_empresa })
-          });
-          const dataDrive = await resDrive.json();
-          
-          if (dataDrive.success) {
-             await supabase.from('clientes').update({
-                id_drive_raiz: dataDrive.folders.pasta_raiz_cliente,
-                id_drive_contabil: dataDrive.folders.pasta_cont_bil,
-                id_drive_fiscal: dataDrive.folders.pasta_fiscal,
-                id_drive_rh: dataDrive.folders.pasta_dp___rh,
-                id_drive_contratos: dataDrive.folders.pasta_contratos, // <-- Gaveta Contratos
-                id_drive_recebidos: dataDrive.folders.pasta_documentos_recebidos,
-                id_drive_enviados: dataDrive.folders.pasta_documentos_enviados, // <-- Gaveta Enviados
-                id_drive_lixeira: dataDrive.folders.pasta_lixeira
-             }).eq('id', novoCliente.id);
-             
-             // 🚀 MÁGICA: Clona a árvore do Lsprado ao ativar o cadastro!
-             await clonarPastasLsprado(novoCliente.id);
-             
-             mostrarToast('Cliente ativado e pastas padrão clonadas!', 'sucesso');
-          }
-        } catch (e) {
-          console.error("Erro na integração com Drive:", e);
-        }
-        // --- FIM DA MÁGICA ---
+        await inicializarPastasDrive(novoCliente.id, solicitacao.nome_empresa, 'Cliente ativado e pastas padrão clonadas!');
 
         // Se a pessoa pediu para criar essa conta NOVA mas atrelada à conta DELE, faz a conexão:
         if (solicitacao.tipo_solicitacao === 'novo_vinculo' && solicitacao.vinculo_origem_id) {
@@ -1732,17 +1704,17 @@ export default function AdminPage() {
   // ======================================================================
   // CÁLCULO DE SAÚDE DE ARMAZENAMENTO (Estimativa Profissional)
   // Baseado na cota básica de segurança (2GB = 2048MB)
-  // Assumindo média de 1.5MB por arquivo (Imagens, PDFs, Docs)
+  // Assumindo média de 1.5MB SOMENTE para arquivos salvos no Supabase Backup
   // ======================================================================
   const LIMITE_ARMAZENAMENTO_MB = 2048; 
   const MEDIA_TAMANHO_ARQUIVO_MB = 1.5; 
-  const usoArmazenamentoMB = totalArquivosSistema * MEDIA_TAMANHO_ARQUIVO_MB;
+  const usoArmazenamentoMB = totalArquivosSupabase * MEDIA_TAMANHO_ARQUIVO_MB;
   const porcentagemUso = Math.min((usoArmazenamentoMB / LIMITE_ARMAZENAMENTO_MB) * 100, 100);
   const circunferencia = 2 * Math.PI * 36;
   const offsetDash = circunferencia - (porcentagemUso / 100) * circunferencia;
   
-  let corGradienteInicio = "#10b981"; // Verde Seguro (Início do Degradê)
-  let corGradienteFim = "#059669";    // Verde Seguro (Fim do Degradê)
+  let corGradienteInicio = "#10b981"; // Verde Seguro
+  let corGradienteFim = "#059669";    
   
   if (porcentagemUso >= 90) {
     corGradienteInicio = "#ef4444"; // Vermelho Alerta Máximo
@@ -2064,45 +2036,52 @@ export default function AdminPage() {
                 
                 {/* Textos do Espaço */}
                 <div className="flex-1 text-center sm:text-left w-full">
-                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">Armazenamento Usado (Estimativa)</p>
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">Espaço Usado (Supabase DB)</p>
                   <p className="text-2xl font-black text-white mb-1">
                     {usoArmazenamentoMB < 1024 ? usoArmazenamentoMB.toFixed(0) + ' MB' : (usoArmazenamentoMB / 1024).toFixed(2) + ' GB'}
-                    <span className="text-xs text-zinc-500 font-normal ml-1">/ 2 GB (Cota de Segurança)</span>
+                    <span className="text-xs text-zinc-500 font-normal ml-1">/ 2 GB (Backup)</span>
                   </p>
-                  <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-2">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: corGradienteInicio, color: corGradienteInicio }}></span>
-                    <p className="text-xs font-medium text-zinc-300">{totalArquivosSistema} arquivos no banco de dados</p>
+                  <div className="flex flex-col xl:flex-row gap-2 mt-3 justify-center sm:justify-start">
+                    <div className="flex items-center gap-1.5 bg-[#0d1b2a] border border-[#34d399]/30 px-2 py-1 rounded-md w-max">
+                      <span className="w-2 h-2 rounded-full bg-[#34d399]"></span>
+                      <span className="text-[10px] text-zinc-300"><strong className="text-white">{totalArquivosSupabase}</strong> no Supabase</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-[#0d1b2a] border border-[#d4af37]/30 px-2 py-1 rounded-md w-max">
+                      <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
+                      <span className="text-[10px] text-zinc-300"><strong className="text-white">{totalArquivosDrive}</strong> no G. Drive</span>
+                    </div>
                   </div>
                 </div>
               </div>
               
               {/* CARD 3: ATALHOS PARA OS SERVIDORES */}
+              <div className="grid grid-cols-1 gap-3">
+
+                {/* NOVO BOTÃO DO DRIVE COM MÁSCARA DOURADA (Sempre visível para admins) */}
+                <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
+                  <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      backgroundColor: '#d4af37',
+                      WebkitMaskImage: 'url("https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg")',
+                      WebkitMaskSize: 'contain',
+                      WebkitMaskRepeat: 'no-repeat',
+                      WebkitMaskPosition: 'center',
+                      maskImage: 'url("https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg")',
+                      maskSize: 'contain',
+                      maskRepeat: 'no-repeat',
+                      maskPosition: 'center'
+                    }}></div>
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-[11px] font-bold text-[#d4af37] uppercase truncate">Sincronizar G. Drive</p>
+                    <p className="text-[10px] text-zinc-500 truncate">Esvaziar fila de pastas</p>
+                  </div>
+                </button>
+
               {eGestor && (
-                <div className="grid grid-cols-1 gap-3">
-
-                {/* NOVO BOTÃO DO DRIVE COM MÁSCARA DOURADA */}
-                  <button onClick={sincronizarDriveClientesAntigos} className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-[#d4af37]/20 hover:border-[#d4af37] shadow-md flex items-center gap-3 transition-all group w-full text-left">
-                    <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
-                      <div style={{
-                        width: '20px',
-                        height: '20px',
-                        backgroundColor: '#d4af37',
-                        WebkitMaskImage: 'url("https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg")',
-                        WebkitMaskSize: 'contain',
-                        WebkitMaskRepeat: 'no-repeat',
-                        WebkitMaskPosition: 'center',
-                        maskImage: 'url("https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg")',
-                        maskSize: 'contain',
-                        maskRepeat: 'no-repeat',
-                        maskPosition: 'center'
-                      }}></div>
-                    </div>
-                    <div className="overflow-hidden">
-                      <p className="text-[11px] font-bold text-[#d4af37] uppercase truncate">Sincronizar G. Drive</p>
-                      <p className="text-[10px] text-zinc-500 truncate">Esvaziar fila de pastas</p>
-                    </div>
-                  </button>
-
+                <>
                   {/* BOTÃO SUPABASE COM MÁSCARA */}
                   <a href="https://supabase.com/dashboard/projects" target="_blank" rel="noopener noreferrer" className="bg-[#0d1b2a] hover:bg-[#1b263b] p-3.5 rounded-xl border border-emerald-500/20 hover:border-emerald-500 shadow-md flex items-center gap-3 transition-all group">
                     <div style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', flexShrink: 0 }} className="flex items-center justify-center bg-zinc-800 rounded-full border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
@@ -2148,9 +2127,10 @@ export default function AdminPage() {
                       <p className="text-[10px] text-zinc-500 truncate">Painel Vercel</p>
                     </div>
                   </a>
-                </div>
+                </>
               )}
             </div>
+          </div>
 
             {/* TABELA DE LOGS */}
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl mb-6">
