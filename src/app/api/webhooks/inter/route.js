@@ -12,8 +12,9 @@ export async function POST(request) {
     
     // O Inter manda um array de eventos
     for (const evento of body) {
-      if (evento.situacao === 'RECEBIDO') {
-        const nossoNumero = evento.nossoNumero;
+      if (evento.situacao === 'RECEBIDO' || evento.situacao === 'PAGO') {
+        // A V3 envia codigoSolicitacao no lugar de nossoNumero
+        const idCobranca = evento.codigoSolicitacao || evento.nossoNumero;
         
         // Dá baixa automática no boleto do cliente!
         await supabaseAdmin
@@ -22,7 +23,7 @@ export async function POST(request) {
             status: 'pago', 
             data_pagamento: new Date().toISOString()
           })
-          .eq('nosso_numero', nossoNumero); 
+          .eq('nosso_numero', idCobranca); 
       }
     }
 

@@ -60,9 +60,11 @@ export async function GET() {
             httpsAgent
           }
         );
-        if (response.data.cobrancas) {
-          cobrancasInter.push(...response.data.cobrancas);
-        }
+        
+        // MÁGICA DE PREVENÇÃO: Aceita qualquer formato que o Inter V3 decida devolver
+        const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
+        cobrancasInter.push(...lista);
+
       } catch (err) {
         console.error(`Aviso: Falha ao buscar janela ${janela.inicio} a ${janela.fim}`);
       }
@@ -74,8 +76,12 @@ export async function GET() {
 
     // 4. Analisa cada boleto retornado pelo banco
     for (const cob of cobrancasInter) {
-      // Pega o CPF/CNPJ do pagador do boleto lá no Inter (vem só com números)
-      const documentoPagador = cob.pagador?.cpfCnpj || '';
+      // Na V3 do Inter, os dados vêm dentro de "gavetas"
+      const dadosCobranca = cob.cobranca || cob;
+      const dadosBoleto = cob.boleto || cob;
+
+      // Pega o CPF/CNPJ do pagador do boleto lá no Inter
+      const documentoPagador = dadosCobranca.pagador?.cpfCnpj || '';
       if (!documentoPagador) continue;
       
       // Mágica 2: Acha o cliente no seu banco ignorando os pontos e traços do CNPJ
@@ -88,25 +94,29 @@ export async function GET() {
       if (clienteMatch) {
         // Traduz a situação do banco para a linguagem do seu portal
         let statusInterno = 'pendente';
-        if (cob.situacao === 'RECEBIDO') statusInterno = 'pago';
-        if (cob.situacao === 'VENCIDO') statusInterno = 'atrasado';
-        if (cob.situacao === 'CANCELADO') continue; // Pula os boletos cancelados
+        if (dadosCobranca.situacao === 'RECEBIDO' || dadosCobranca.situacao === 'PAGO') statusInterno = 'pago';
+        if (dadosCobranca.situacao === 'VENCIDO' || dadosCobranca.situacao === 'ATRASADO') statusInterno = 'atrasado';
+        if (dadosCobranca.situacao === 'CANCELADO' || dadosCobranca.situacao === 'EXPIRADO') continue;
 
-        const mesRefCorreto = obterMesRef(cob.dataVencimento);
+        const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
 
-        // O Inter não manda o link do PDF direto na lista. Vamos criar a nossa própria rota interna pra puxar o PDF depois!
-        const linkMagicoPDF = `/api/boletos/pdf?nossoNumero=${cob.nossoNumero}`;
+        // O identificador mudou de nossoNumero para codigoSolicitacao na V3
+        const idCobranca = dadosCobranca.codigoSolicitacao || cob.codigoSolicitacao || dadosBoleto.nossoNumero;
+        const linhaDigitavel = dadosBoleto.linhaDigitavel || '';
 
-        // 5. Cadastra ou atualiza o boleto na tabela do Supabase (Aquele Unique serve pra não duplicar)
+        // O link gerador de PDF agora vai usar esse código novo da V3!
+        const linkMagicoPDF = `/api/boletos/pdf?nossoNumero=${idCobranca}`;
+
+        // 5. Cadastra ou atualiza o boleto na tabela
         await supabaseAdmin.from('boletos_api').upsert({
           cliente_id: clienteMatch.id,
           mes_ref: mesRefCorreto,
-          nosso_numero: cob.nossoNumero,
-          linha_digitavel: cob.linhaDigitavel,
+          nosso_numero: idCobranca, // Salva o codigoSolicitacao no banco para o Webhook bater certinho!
+          linha_digitavel: linhaDigitavel,
           url_pdf: linkMagicoPDF,
-          valor: cob.valorNominal,
+          valor: dadosCobranca.valorNominal || dadosCobranca.valorTotal || 0,
           status: statusInterno,
-          data_vencimento: cob.dataVencimento
+          data_vencimento: dadosCobranca.dataVencimento
         }, { onConflict: 'nosso_numero' });
 
         importados++;
