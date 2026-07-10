@@ -944,10 +944,9 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(true);
     let sucessoCount = 0;
 
-    for (const file of files) {
-      const uploaded = await fazerUploadUnitario(file, subpastaAtiva);
-      if (uploaded) sucessoCount++;
-    }
+    // MÁGICA DE PERFORMANCE: Dispara todos os uploads simultaneamente!
+    const resultados = await Promise.all(files.map(file => fazerUploadUnitario(file, subpastaAtiva)));
+    sucessoCount = resultados.filter(sucesso => sucesso).length;
 
     if (sucessoCount > 0) {
       mostrarToast(`${sucessoCount} documento(s) publicado(s) com sucesso!`, 'sucesso');

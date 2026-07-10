@@ -263,27 +263,42 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const tipoUsuario = localStorage.getItem('usuario_tipo');
-    const nomeUsuario = localStorage.getItem('usuario_nome');
-    const idUsuario = localStorage.getItem('usuario_id');
-    
-    if (tipoUsuario === 'cliente' && idUsuario) {
-      router.push(`/cliente/${idUsuario}`);
-      return;
-    } 
-    
-    const colaboradorValido = LISTA_COLABORADORES.includes(nomeUsuario);
-    
-    if (tipoUsuario !== 'interno' || !colaboradorValido) {
-      localStorage.clear();
-      router.push('/login');
-    } else {
+    async function validarAcessoAdmin() {
+      const tipoUsuario = localStorage.getItem('usuario_tipo');
+      const nomeUsuario = localStorage.getItem('usuario_nome');
+      const idUsuario = localStorage.getItem('usuario_id');
+      const token = localStorage.getItem('supabase_token');
+      
+      if (tipoUsuario === 'cliente' && idUsuario) {
+        router.push(`/cliente/${idUsuario}`);
+        return;
+      } 
+      
+      const colaboradorValido = LISTA_COLABORADORES.includes(nomeUsuario);
+      
+      // Checagem primária de segurança
+      if (tipoUsuario !== 'interno' || !colaboradorValido || !token) {
+        localStorage.clear();
+        router.push('/login');
+        return;
+      }
+
+      // BLINDAGEM MÁXIMA: Bate no banco e testa se o token do usuário permite ler clientes (Se o RLS bloquear, ele é expulso)
+      const { error } = await supabase.from('clientes').select('id').limit(1);
+      if (error) {
+        localStorage.clear();
+        router.push('/login');
+        return;
+      }
+
       if (nomeUsuario) {
         setOperador(nomeUsuario);
         setFormAlerta(prev => ({ ...prev, responsavel: nomeUsuario }));
       }
       setAutenticando(false);
     }
+    
+    validarAcessoAdmin();
   }, [router]);
 
   // Carregamento inteligente com reset de paginação

@@ -3,6 +3,7 @@ import { useEffect, useState, use } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { enviarEmailDemanda } from '../../lib/email';
+import { dispararPush } from '../../lib/push';
 
 // ==========================================
 // ÍCONES PREMIUM (SVG)
