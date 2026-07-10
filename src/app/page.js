@@ -519,15 +519,23 @@ export default function AdminPage() {
     });
   }
 
-  // Função para aplicar Negrito, Itálico e Sublinhado VISUALMENTE
+  
+  // Função para aplicar Negrito, Itálico e Sublinhado VISUALMENTE (Moderna e Segura)
   function aplicarFormatacaoTexto(tag) {
-    let comando = '';
-    if (tag === 'b') comando = 'bold';
-    if (tag === 'i') comando = 'italic';
-    if (tag === 'u') comando = 'underline';
-    
-    // Aplica o formato nativo do navegador (WYSIWYG)
-    document.execCommand(comando, false, null);
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+
+    try {
+      // Tenta usar a API moderna de Range
+      const range = selection.getRangeAt(0);
+      const newNode = document.createElement(tag);
+      newNode.appendChild(range.extractContents());
+      range.insertNode(newNode);
+    } catch (e) {
+      // Fallback seguro para navegadores antigos
+      let comando = tag === 'b' ? 'bold' : tag === 'i' ? 'italic' : 'underline';
+      document.execCommand(comando, false, null);
+    }
     
     // Atualiza o estado para salvar no banco
     const editor = document.getElementById('campo-mensagem-alerta');
@@ -713,9 +721,10 @@ export default function AdminPage() {
     let caminhoArquivo = null;
     let nomeOriginal = null;
 
+    
     if (arquivo) {
-      if (arquivo.size > 15 * 1024 * 1024) {
-        mostrarToast('O arquivo excede o limite de 15MB.', 'erro');
+      if (arquivo.size > 4.4 * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite de 4.4MB.', 'erro');
         setSubindo(false);
         return;
       }

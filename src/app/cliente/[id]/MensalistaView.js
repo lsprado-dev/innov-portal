@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { enviarEmailDemanda } from '../../lib/email'; 
 import { inscreverAparelho, dispararPush } from '../../lib/push'; 
+import DOMPurify from 'dompurify'; 
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -244,8 +245,8 @@ export default function MensalistaView({ params: paramsPromise }) {
     let nomeOriginal = null;
 
     if (arquivo) {
-      if (arquivo.size > 15 * 1024 * 1024) {
-        mostrarToast('O arquivo excede o limite de 15MB.', 'erro');
+      if (arquivo.size > 4.4 * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite de 4.4MB.', 'erro');
         setSubindoArquivo(false);
         return;
       }
@@ -862,8 +863,8 @@ export default function MensalistaView({ params: paramsPromise }) {
   // ===============================================
   
   async function fazerUploadUnitario(file, targetPastaId, directDriveId = null) {
-    if (file.size > 15 * 1024 * 1024) {
-      mostrarToast(`Ignorado: "${file.name}" excede 15MB.`, 'erro');
+    if (file.size > 4.4 * 1024 * 1024) {
+      mostrarToast(`Ignorado: "${file.name}" excede 4.4MB.`, 'erro');
       return false;
     }
 
@@ -971,7 +972,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   async function handleUploadFinanceiro(e, mesRef) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) return mostrarToast('O arquivo excede 15MB.', 'erro');
+    if (file.size > 4.4 * 1024 * 1024) return mostrarToast('O arquivo excede 4.4MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -1600,7 +1601,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (validos.length === 0) return mostrarToast('Preencha a descrição e selecione um arquivo.', 'erro');
 
     for (const item of validos) {
-      if (item.arquivo.size > 15 * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede 15MB.`, 'erro');
+      if (item.arquivo.size > 4.4 * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede 4.4MB.`, 'erro');
     }
 
     setSubindoArquivo(true);
@@ -1661,8 +1662,8 @@ export default function MensalistaView({ params: paramsPromise }) {
     let nomeOriginal = null;
 
     if (arquivoPedido) {
-      if (arquivoPedido.size > 15 * 1024 * 1024) {
-        mostrarToast('O arquivo excede o limite de 15MB.', 'erro');
+      if (arquivoPedido.size > 4.4 * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite de 4.4MB.', 'erro');
         setSubindoArquivo(false); return;
       }
       const timestamp = Date.now();
@@ -2780,7 +2781,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                       {alerta.mensagem && (
                         <div 
                           className="text-sm text-zinc-300 leading-relaxed mb-3 space-y-1 break-words [word-break:break-word]" 
-                          dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(alerta.mensagem.replace(/\n/g, '<br>')) }}
                         />
                       )}
                       
@@ -2930,7 +2931,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                           {alerta.mensagem && (
                             <div 
                               className="text-sm text-zinc-300 leading-relaxed mb-5 space-y-1 break-words [word-break:break-word]" 
-                              dangerouslySetInnerHTML={{ __html: alerta.mensagem.replace(/\n/g, '<br>') }}
+                              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(alerta.mensagem.replace(/\n/g, '<br>')) }}
                             />
                           )}
                           

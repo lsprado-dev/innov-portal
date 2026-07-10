@@ -11,14 +11,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
         
         // Só injeta o cabeçalho se o token de cliente realmente existir
         if (token) {
-          options.headers = options.headers || {};
-          
-          // Modifica diretamente sem clonar, protegendo a apikey do Supabase
-          if (typeof options.headers.set === 'function') {
-            options.headers.set('Authorization', `Bearer ${token}`);
-          } else {
-            options.headers['Authorization'] = `Bearer ${token}`;
-          }
+          // CLONA os headers para evitar mutação do singleton no lado do servidor/cliente
+          const newHeaders = new Headers(options.headers || {});
+          newHeaders.set('Authorization', `Bearer ${token}`);
+          options.headers = newHeaders;
         }
       }
           

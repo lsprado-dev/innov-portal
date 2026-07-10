@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { enviarEmailDemanda } from '../../lib/email';
 import { dispararPush } from '../../lib/push';
+import DOMPurify from 'dompurify';
 
 // ==========================================
 // ÍCONES PREMIUM (SVG)
@@ -104,7 +105,7 @@ export default function EspecialView({ params }) {
   async function handleUploadAdminDoc(e, procId = null) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) return mostrarToast('Arquivo excede 15MB.', 'erro');
+    if (file.size > 4.4 * 1024 * 1024) return mostrarToast('Arquivo excede 4.4MB.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -479,7 +480,7 @@ export default function EspecialView({ params }) {
   async function handleEnviarDocumento(e, departamentoDestino) {
     e.preventDefault();
     if (!arquivoDoc || !descricaoDoc.trim()) return mostrarToast('Preencha a descrição e selecione o arquivo.', 'erro');
-    if (arquivoDoc.size > 15 * 1024 * 1024) return mostrarToast('Arquivo excede 15MB.', 'erro');
+    if (arquivoDoc.size > 4.4 * 1024 * 1024) return mostrarToast('Arquivo excede 4.4MB.', 'erro');
 
     setSubindoArquivo(true);
     
