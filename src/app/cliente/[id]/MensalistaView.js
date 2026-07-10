@@ -635,7 +635,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
   }
 
-  async function togglePagoManual(mesRef, estaPago) {
+    async function togglePagoManual(mesRef, estaPago) {
     if (estaPago) {
       await supabase.from('mensalidades_status').delete().match({ cliente_id: id, mes_ref: mesRef });
       setMensalidadesPagas(prev => prev.filter(m => m !== mesRef));
@@ -643,6 +643,21 @@ export default function MensalistaView({ params: paramsPromise }) {
       await supabase.from('mensalidades_status').insert([{ cliente_id: id, mes_ref: mesRef }]);
       setMensalidadesPagas(prev => [...prev, mesRef]);
     }
+  }
+
+  async function handleBaixaManualBoleto(boleto) {
+    confirmarAcao('Baixa Manual', 'Deseja marcar este boleto como pago manualmente (Ex: Recebido via PIX na conta)?', async () => {
+      setSubindoArquivo(true);
+      const { error } = await supabase.from('boletos_api').update({ status: 'pago via pix' }).eq('nosso_numero', boleto.nosso_numero);
+      if (!error) {
+        mostrarToast('Baixa manual realizada com sucesso!', 'sucesso');
+        await registrarAuditoria('BOLETO_BAIXA_MANUAL', `Deu baixa manual no boleto Ref: ${boleto.mes_ref}.`);
+        await carregarDadosDaAba();
+      } else {
+        mostrarToast('Erro ao dar baixa: ' + error.message, 'erro');
+      }
+      setSubindoArquivo(false);
+    });
   }
 
   // ===============================================
@@ -1475,6 +1490,22 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(false);
   }
 
+  // Função Exclusiva do Admin para alterar o Ciclo do Financeiro
+  async function handleAlterarDiaVencimento(novoDia) {
+    setSubindoArquivo(true);
+    const diaNum = parseInt(novoDia, 10);
+    const { error } = await supabase.from('clientes').update({ dia_vencimento: diaNum }).eq('id', id);
+
+    if (!error) {
+      setCliente({ ...cliente, dia_vencimento: diaNum });
+      mostrarToast(`Vencimento atualizado para o dia ${diaNum}!`, 'sucesso');
+      await registrarAuditoria('CLIENTE_EDITADO', `Alterou o dia de vencimento para ${diaNum}.`);
+    } else {
+      mostrarToast('Erro ao atualizar vencimento: ' + error.message, 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
   function handleLogout() {
     localStorage.removeItem('usuario_nome'); localStorage.removeItem('usuario_tipo'); localStorage.removeItem('usuario_id');
     router.push('/login');
@@ -2154,41 +2185,59 @@ export default function MensalistaView({ params: paramsPromise }) {
 
             {pastaAtiva === 'financeiro' ? (
               <div className="bg-[#1b263b] p-8 rounded-xl border border-[#d4af37]/30 shadow-xl mb-10">
-                <div className="border-b border-zinc-800 pb-4 mb-6">
-                  <h3 className="text-xl font-bold text-[#d4af37]">Controle Mensalidades</h3>
-                  <p className="text-sm text-zinc-400 mt-1">Este controle é manual e serve para sua organização, permitindo acompanhar os meses já pagos e armazenar os comprovantes. Basta marcar o check da competência paga e caso deseje, anexar o comprovante.</p>
+                <div className="border-b border-zinc-800 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-[#d4af37]">Controle Mensalidades</h3>
+                    <p className="text-sm text-zinc-400 mt-1">Acompanhe os meses pagos, visualize os boletos e anexe comprovantes.</p>
+                  </div>
+                  {isInterno && (
+                    <div className="flex items-center gap-2 bg-[#0d1b2a] p-2.5 rounded-lg border border-zinc-700 shadow-sm">
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase">Trocar Vencimento:</span>
+                      <select 
+                        value={cliente?.dia_vencimento || 20} 
+                        onChange={(e) => handleAlterarDiaVencimento(e.target.value)}
+                        disabled={subindoArquivo}
+                        className="bg-[#1b263b] text-[#d4af37] px-2 py-1.5 rounded text-xs font-bold border border-[#d4af37]/30 cursor-pointer focus:outline-none"
+                      >
+                        <option value="20">Dia 20 (Abre dia 10)</option>
+                        <option value="26">Dia 26 (Abre dia 15)</option>
+                        <option value="30">Dia 30 (Abre dia 20)</option>
+                        <option value="10">Dia 10 (Abre dia 01)</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  // NEW (Versão corrigida, unificada e sem duplicidades)
                   {CICLO_FINANCEIRO.map((mes) => {
-                    const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); // NOVO: Busca se há boleto real emitido pela API do Inter
+                    const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); 
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
                     const pagoManualmente = mensalidadesPagas.includes(mes.ref);
-                    
-                    // Força os meses 01 (Janeiro), 02 (Fevereiro), 03 (Março) e 04 (Abril) a aparecerem pagos sempre.
-const isMesAntigoPago = ['01', '02', '03', '04'].includes(mes.id);
 
-// Se tiver boleto da API, assume o status dela. Senão, mantém a retrocompatibilidade manual + Força os antigos.
-const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnviado || pagoManualmente || isMesAntigoPago);
-                    const emAtraso =  boletoInter && boletoInter.status === 'atrasado';
-
-                    // Lógica de Ciclos de Vencimento Dinâmicos
+                    // 1. Lógica de Ciclos de Vencimento Dinâmicos
                     const diaVencimento = cliente?.dia_vencimento || 20;
                     let diaAbertura = 10;
                     if (diaVencimento === 26) diaAbertura = 15;
                     else if (diaVencimento === 30) diaAbertura = 20;
                     else if (diaVencimento === 10) diaAbertura = 1;
 
-                    // Lógica mágica de datas (Agora calculando sobre o MÊS DE PAGAMENTO)
+                    // 2. Lógica Mágica de Datas
                     const hoje = new Date();
-                    // MÁGICA 4: O mês de pagamento é o Mês Seguinte ao da Referência. 
-                    // Como o JS começa os meses em 0, e nosso mes.id começa em '01', 
-                    // parseInt(mes.id, 10) bate EXATAMENTE com o index do mês de pagamento! (ex: mes.id '07' (Julho) -> index 7 = Agosto)
-                    const dataLiberacao = new Date(hoje.getFullYear(), parseInt(mes.id, 10), diaAbertura);
+                    const mesPagamentoIndex = parseInt(mes.id, 10); 
+                    const dataLiberacao = new Date(hoje.getFullYear(), mesPagamentoIndex, diaAbertura);
                     dataLiberacao.setHours(0, 0, 0, 0); 
                     
                     const estaLiberado = hoje >= dataLiberacao || !!boletoInter;
-                    const mesAbertura = (parseInt(mes.id, 10) + 1) > 12 ? 1 : (parseInt(mes.id, 10) + 1);
+                    const mesAbertura = dataLiberacao.getMonth() + 1; 
+
+                    // 3. Atualizando as lógicas de Status Definitivas (SEM DUPLICAR)
+                    const isPagoAPI = boletoInter && (boletoInter.status === 'pago' || boletoInter.status === 'pago via pix');
+                    const isMesAntigoPago = ['01', '02', '03', '04'].includes(mes.id);
+                    
+                    const isPago = isPagoAPI || comprovanteEnviado || pagoManualmente || isMesAntigoPago;
+                    const emAtraso = boletoInter && (boletoInter.status === 'atrasado' || boletoInter.status === 'expirado');
+                    const emAberto = boletoInter && boletoInter.status === 'pendente';
 
                     // Estilização inteligente do Card
                     let estiloCard = '';
@@ -2212,14 +2261,22 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                             <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
                               {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento ${diaVencimento} de ${mes.pag}`}
                             </p>
+                            
                             {isPago && (
                               <div className="mt-2">
-                                <span className="bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Pago</span>
+                                <span className="bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
+                                  {boletoInter?.status === 'pago via pix' ? 'Pago via PIX' : 'Pago'}
+                                </span>
                               </div>
                             )}
                             {emAtraso && (
                               <div className="mt-2">
-                                <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse">Atrasado</span>
+                                <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse">Expirado</span>
+                              </div>
+                            )}
+                            {emAberto && !isPago && !emAtraso && (
+                              <div className="mt-2">
+                                <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Em Aberto</span>
                               </div>
                             )}
                           </div>
@@ -2245,13 +2302,21 @@ const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnvia
                           {/* SE EXISTIR BOLETO DA API DO INTER: EXIBE ROTA AUTOMÁTICA */}
                           {boletoInter ? (
                             <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
-                              {boletoInter.status !== 'pago' ? (
+                              {!isPagoAPI ? (
                                 <>
                                   <a href={boletoInter.url_pdf} target="_blank" rel="noopener noreferrer" className="block w-full text-center text-[11px] bg-[#d4af37] text-[#0d1b2a] py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-md">Ver / Baixar Boleto</a>
                                   <button type="button" onClick={() => { if (boletoInter.linha_digitavel) { navigator.clipboard.writeText(boletoInter.linha_digitavel); mostrarToast('Código copiado!', 'sucesso'); } }} className="block w-full text-center text-[10px] border border-zinc-600 text-zinc-300 py-1 rounded font-medium hover:bg-zinc-800 hover:text-white transition">Copiar Código</button>
+                                  
+                                  {isInterno && (
+                                    <button type="button" onClick={() => handleBaixaManualBoleto(boletoInter)} className="block w-full text-center text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 py-1.5 rounded font-bold hover:bg-emerald-500 hover:text-black transition">
+                                      Dar Baixa Manual (PIX)
+                                    </button>
+                                  )}
                                 </>
                               ) : (
-                                <div className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded text-center border border-emerald-500/20">Compensado via API Inter ✓</div>
+                                <div className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 p-2 rounded text-center border border-emerald-500/20">
+                                  {boletoInter.status === 'pago via pix' ? 'Baixa Manual Realizada ✓' : 'Compensado via API Inter ✓'}
+                                </div>
                               )}
                             </div>
                           ) : comprovanteEnviado ? (

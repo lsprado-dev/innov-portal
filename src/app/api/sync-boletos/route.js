@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
-import { getInterToken } from '../../lib/inter';
+import { getInterToken } from '../../../lib/inter';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -26,27 +26,38 @@ export async function GET() {
     const key = Buffer.from(process.env.INTER_KEY_BASE64, 'base64').toString('ascii');
     const httpsAgent = new https.Agent({ cert, key });
 
-    const hojeData = new Date();
-    const futuroData = new Date(hojeData.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const passadoData = new Date(hojeData.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const anoAtual = hojeData.getFullYear().toString(); 
-
+    const anoAtual = new Date().getFullYear().toString(); 
     let cobrancasInter = [];
-    let paginaAtual = 0;
-    let totalPaginas = 1;
 
-    // 🚀 MÁGICA 1: Loop de Paginação (Folheia todas as páginas de 100 em 100 até o fim!)
-    while (paginaAtual < totalPaginas) {
-      const response = await axios.get(
-        `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${passadoData}&dataFinal=${futuroData}&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
-        { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
-      );
-      
-      const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
-      cobrancasInter.push(...lista);
+    // MÁGICA: Divide o ano em 4 blocos de 90 dias e filtra pela DATA DE VENCIMENTO!
+    const trimestres = [
+      { ini: `${anoAtual}-01-01`, fim: `${anoAtual}-03-31` },
+      { ini: `${anoAtual}-04-01`, fim: `${anoAtual}-06-30` },
+      { ini: `${anoAtual}-07-01`, fim: `${anoAtual}-09-30` },
+      { ini: `${anoAtual}-10-01`, fim: `${anoAtual}-12-31` }
+    ];
 
-      totalPaginas = response.data.totalPages || 1;
-      paginaAtual++;
+    for (const tri of trimestres) {
+      let paginaAtual = 0;
+      let totalPaginas = 1;
+
+      while (paginaAtual < totalPaginas) {
+        try {
+          const response = await axios.get(
+            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${tri.ini}&dataFinal=${tri.fim}&filtrarDataPor=VENCIMENTO&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
+            { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
+          );
+          
+          const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
+          cobrancasInter.push(...lista);
+
+          totalPaginas = response.data.totalPages || 1;
+          paginaAtual++;
+        } catch (err) {
+          console.error(`Falha no trimestre ${tri.ini}:`, err.response?.data || err.message);
+          break; 
+        }
+      }
     }
 
     const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf');
@@ -56,7 +67,7 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      // Trava de segurança: Ignora boletos de anos anteriores ou sem data
+      // Trava de segurança extra
       if (!dadosCobranca.dataVencimento || !dadosCobranca.dataVencimento.startsWith(anoAtual)) continue;
 
       const documentoPagador = dadosCobranca.pagador?.cpfCnpj || '';
@@ -68,13 +79,13 @@ export async function GET() {
       });
 
       if (clienteMatch) {
-        // 🚀 MÁGICA 2: Mapeamento de Status Completo (PIX, Manual e Atrasos)
-        let statusInterno = 'pendente'; // A RECEBER (Em Aberto)
+        // NEW
+        let statusInterno = 'pendente'; 
         const sit = dadosCobranca.situacao;
         
         if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO') statusInterno = 'pago';
-        if (sit === 'VENCIDO' || sit === 'ATRASADO') statusInterno = 'atrasado';
-        if (sit === 'CANCELADO' || sit === 'EXPIRADO') continue; // Limpa os cancelados/expirados da tela
+        else if (sit === 'VENCIDO' || sit === 'ATRASADO' || sit === 'EXPIRADO') statusInterno = 'expirado';
+        else if (sit === 'CANCELADO') continue; // Removemos o EXPIRADO daqui para que ele vá para o seu painel!
 
         const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
         const idCobranca = dadosCobranca.codigoSolicitacao || cob.codigoSolicitacao || dadosBoleto.nossoNumero;
@@ -96,8 +107,8 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ success: true, message: `${importados} boletos atualizados e sincronizados!` });
+    return NextResponse.json({ success: true, message: `${importados} boletos capturados com sucesso pelo Vencimento!` });
   } catch (error) {
-    return NextResponse.json({ error: error.response?.data || error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
