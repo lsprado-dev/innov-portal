@@ -14,15 +14,14 @@ export async function POST(request) {
     for (const evento of body) {
       const sit = evento.situacao;
       
-      // Verifica se foi pago por qualquer via (Boleto, PIX ou Baixa Manual no App do Inter)
+      // Verifica se foi pago por qualquer via
       if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'RECEBIDO_PIX' || sit === 'MARCADO_RECEBIDO') {
-        // A V3 envia codigoSolicitacao no lugar de nossoNumero
         const idCobranca = evento.codigoSolicitacao || evento.nossoNumero;
         
-        // Verifica se na notificação em tempo real veio a flag de PIX
-        const isPix = sit === 'RECEBIDO_PIX' || JSON.stringify(evento).includes('"PIX"');
+        // Verificação OFICIAL do Banco Inter para pagamento via QR Code do Boleto
+        const recebimentos = evento.recebimentos || [];
+        const isPix = sit === 'RECEBIDO_PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
         
-        // Dá baixa automática no boleto do cliente com o status correto!
         await supabaseAdmin
           .from('boletos_api')
           .update({ 

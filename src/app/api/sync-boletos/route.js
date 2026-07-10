@@ -52,7 +52,8 @@ export async function GET() {
           const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
           cobrancasInter.push(...lista);
 
-          totalPaginas = response.data.totalPages || 1;
+          // Correção do idioma da API do Inter (Ele usa totalPaginas em PT-BR)
+          totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
           paginaAtual++;
         } catch (err) {
           console.error(`Falha no trimestre ${tri.ini}:`, err.response?.data || err.message);
@@ -82,8 +83,9 @@ export async function GET() {
         let statusInterno = 'pendente'; 
         const sit = dadosCobranca.situacao;
         
-        // Verifica se tem indicativo de PIX na resposta do Inter de forma à prova de falhas
-        const isPix = sit === 'RECEBIDO_PIX' || JSON.stringify(cob).includes('"PIX"');
+        // Verificação OFICIAL do Banco Inter para identificar pagamento via QR Code do Boleto
+        const recebimentos = dadosCobranca.recebimentos || [];
+        const isPix = sit === 'RECEBIDO_PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
 
         if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO' || sit === 'RECEBIDO_PIX') {
             statusInterno = isPix ? 'pago via pix' : 'pago';
