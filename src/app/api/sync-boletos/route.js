@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
 
-// Subindo apenas 2 níveis: de "sync-boletos" -> "api" -> "app", onde está a "lib"
+// Subindo 4 níveis exatos para achar a pasta lib na raiz do projeto
 import { getInterToken } from '../../lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -12,13 +12,14 @@ const supabaseAdmin = createClient(
 );
 
 function obterMesRef(dataVencimento) {
+  if (!dataVencimento) return 'Desconhecido';
   const mesVencimento = parseInt(dataVencimento.split('-')[1], 10);
   const mapa = {
     1: 'Dezembro', 2: 'Janeiro', 3: 'Fevereiro', 4: 'Março',
     5: 'Abril', 6: 'Maio', 7: 'Junho', 8: 'Julho',
     9: 'Agosto', 10: 'Setembro', 11: 'Outubro', 12: 'Novembro'
   };
-  return mapa[mesVencimento];
+  return mapa[mesVencimento] || 'Desconhecido';
 }
 
 export async function GET() {
@@ -31,6 +32,7 @@ export async function GET() {
     const anoAtual = new Date().getFullYear().toString(); 
     let cobrancasInter = [];
 
+    // MÁGICA: Divide o ano em 4 blocos de 90 dias e filtra pela DATA DE VENCIMENTO!
     const trimestres = [
       { ini: `${anoAtual}-01-01`, fim: `${anoAtual}-03-31` },
       { ini: `${anoAtual}-04-01`, fim: `${anoAtual}-06-30` },
@@ -52,7 +54,7 @@ export async function GET() {
           const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
           cobrancasInter.push(...lista);
 
-          // Correção do idioma da API do Inter (Ele usa totalPaginas em PT-BR)
+          // Correção do idioma da API do Inter garantida e mantida!
           totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
           paginaAtual++;
         } catch (err) {
@@ -69,9 +71,11 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      if (!dadosCobranca.dataVencimento || !dadosCobranca.dataVencimento.startsWith(anoAtual)) continue;
+      // 1. Removemos a trava do startsWith(anoAtual) pois a URL da API já garante a data correta.
+      if (!dadosCobranca.dataVencimento) continue;
 
-      const documentoPagador = dadosCobranca.pagador?.cpfCnpj || '';
+      // 2. Limpeza brutal do CPF/CNPJ (Garante que só sobram números para a comparação perfeita)
+      const documentoPagador = (dadosCobranca.pagador?.cpfCnpj || dadosCobranca.pagador?.cnpjCpf || '').replace(/\D/g, '');
       if (!documentoPagador) continue;
       
       const clienteMatch = clientesSupabase.find(c => {
@@ -81,19 +85,18 @@ export async function GET() {
 
       if (clienteMatch) {
         let statusInterno = 'pendente'; 
-        const sit = dadosCobranca.situacao;
+        // 3. Deixa tudo em maiúsculo para não ter erro de Case Sensitivity
+        const sit = (dadosCobranca.situacao || '').toUpperCase();
         
-        // Verificação OFICIAL do Banco Inter para identificar pagamento via QR Code do Boleto
-        const recebimentos = dadosCobranca.recebimentos || [];
-        const isPix = sit === 'RECEBIDO_PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
+        // 4. Verificação varrendo o JSON inteiro para não deixar escapar nenhum rastro de PIX
+        const isPix = sit.includes('PIX') || JSON.stringify(cob).toUpperCase().includes('PIX');
 
-        if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO' || sit === 'RECEBIDO_PIX') {
+        // 5. Busca ampla e flexível pelos status (Qualquer variação de Recebido, Pago ou Marcado)
+        if (sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO')) {
             statusInterno = isPix ? 'pago via pix' : 'pago';
-        } else if (sit === 'VENCIDO' || sit === 'ATRASADO' || sit === 'EXPIRADO' || sit === 'CANCELADO' || sit === 'BAIXADO') {
+        } else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || sit.includes('EXPIRADO') || sit.includes('CANCELADO') || sit.includes('BAIXADO')) {
             statusInterno = 'expirado';
         }
-        // Removemos o 'continue' para NUNCA ignorar um boleto. 
-        // Se ele foi cancelado ou baixado pelo Inter, vai aparecer como Expirado no seu painel! 
 
         const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
         const idCobranca = dadosCobranca.codigoSolicitacao || cob.codigoSolicitacao || dadosBoleto.nossoNumero;
@@ -115,7 +118,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ success: true, message: `${importados} boletos capturados com sucesso pelo Vencimento!` });
+    return NextResponse.json({ success: true, message: `${importados} boletos sincronizados com o banco de dados!` });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
