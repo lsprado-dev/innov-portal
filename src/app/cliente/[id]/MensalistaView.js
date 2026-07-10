@@ -2209,7 +2209,6 @@ export default function MensalistaView({ params: paramsPromise }) {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  // NEW (Versão corrigida, unificada e sem duplicidades)
                   {CICLO_FINANCEIRO.map((mes) => {
                     const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); 
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
