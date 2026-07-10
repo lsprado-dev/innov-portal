@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
 
-// Ajuste da importação (Tente usar o atalho @/ padrão do Next.js)
-// Se o @/ não funcionar no seu projeto, mude para: import { getInterToken } from '../../../../lib/inter';
-import { getInterToken } from '@/lib/inter'; 
+// Subindo apenas 2 níveis: de "sync-boletos" -> "api" -> "app", onde está a "lib"
+import { getInterToken } from '../../lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
