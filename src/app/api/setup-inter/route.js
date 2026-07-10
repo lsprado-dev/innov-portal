@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
-import { getInterToken } from '../../../lib/inter';
+import { getInterToken } from '../../lib/inter';
 
 export async function GET() {
   try {
