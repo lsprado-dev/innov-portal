@@ -2163,8 +2163,11 @@ export default function MensalistaView({ params: paramsPromise }) {
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
                     const pagoManualmente = mensalidadesPagas.includes(mes.ref);
                     
-                    // Se tiver boleto da API, assume o status dela. Senão, mantém a retrocompatibilidade manual.
-                    const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnviado || pagoManualmente);
+                    // Força os meses 01 (Janeiro), 02 (Fevereiro), 03 (Março) e 04 (Abril) a aparecerem pagos sempre.
+const isMesAntigoPago = ['01', '02', '03', '04'].includes(mes.id);
+
+// Se tiver boleto da API, assume o status dela. Senão, mantém a retrocompatibilidade manual + Força os antigos.
+const isPago = boletoInter ? (boletoInter.status === 'pago') : (comprovanteEnviado || pagoManualmente || isMesAntigoPago);
                     const emAtraso =  boletoInter && boletoInter.status === 'atrasado';
 
                     // Lógica mágica de datas
