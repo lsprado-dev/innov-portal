@@ -2251,7 +2251,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                     }
 
                     return (
-                      <div key={mes.id} className={`p-4 rounded-xl border flex flex-col justify-between h-44 transition-all relative ${estiloCard}`}>
+                      <div key={mes.id} className={`p-4 rounded-xl border flex flex-col justify-between h-full min-h-[13rem] gap-2 transition-all relative ${estiloCard}`}>
                         
                         {/* Cabeçalho do Card */}
                         <div className="flex justify-between items-start gap-2">

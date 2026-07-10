@@ -82,9 +82,13 @@ export async function GET() {
         let statusInterno = 'pendente'; 
         const sit = dadosCobranca.situacao;
         
-        if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO') statusInterno = 'pago';
-        else if (sit === 'VENCIDO' || sit === 'ATRASADO' || sit === 'EXPIRADO') statusInterno = 'expirado';
-        else if (sit === 'CANCELADO') continue; 
+        if (sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO') {
+            statusInterno = 'pago';
+        } else if (sit === 'VENCIDO' || sit === 'ATRASADO' || sit === 'EXPIRADO' || sit === 'CANCELADO' || sit === 'BAIXADO') {
+            statusInterno = 'expirado';
+        }
+        // Removemos o 'continue' para NUNCA ignorar um boleto. 
+        // Se ele foi cancelado ou baixado pelo Inter, vai aparecer como Expirado no seu painel! 
 
         const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
         const idCobranca = dadosCobranca.codigoSolicitacao || cob.codigoSolicitacao || dadosBoleto.nossoNumero;
