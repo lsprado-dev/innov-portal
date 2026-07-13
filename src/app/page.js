@@ -211,7 +211,8 @@ export default function AdminPage() {
 
   // NOVOS ESTADOS PARA ADICIONAR CLIENTES (MANUAL E CSV)
   const [modalAdicionar, setModalAdicionar] = useState(false);
-  const [abaAdicionar, setAbaAdicionar] = useState('manual'); // 'manual' ou 'csv'
+  const [abaAdicionar, setAbaAdicionar] = useState('manual'); // 'manual', 'mensalista' ou 'csv'
+  const [buscaMensalista, setBuscaMensalista] = useState('');
   const [tipoAdicionar, setTipoAdicionar] = useState('mensalista'); // 'mensalista' ou 'especiais'
   const [formManual, setFormManual] = useState({ nome_empresa: '', documento: '', nome_contato: '', email: '', celular: '', regime_tributario: 'Simples Nacional' });
   const [tipoImportacaoCsv, setTipoImportacaoCsv] = useState('mensalista'); // 'mensalista' ou 'especiais'
@@ -1353,6 +1354,29 @@ export default function AdminPage() {
     e.target.value = null; // Reseta o input
   }
 
+  async function handleDesbloquearSocietario(clienteAlvo) {
+    setSubindo(true);
+    const payloadProc = {
+      cliente_id: clienteAlvo.id,
+      titulo: 'Processo Inicial',
+      passo: 1,
+      valor_honorarios: 0,
+      valor_entrada: 0,
+      taxas_pendentes: '[]',
+      honorario_pago: false
+    };
+    const { error } = await supabase.from('processos_societarios').insert([payloadProc]);
+    if (!error) {
+      mostrarToast(`Aba Societário desbloqueada para ${clienteAlvo.nome_empresa}!`, 'sucesso');
+      setModalAdicionar(false);
+      setBuscaMensalista('');
+      await carregarDados();
+    } else {
+      mostrarToast('Erro ao desbloquear: ' + error.message, 'erro');
+    }
+    setSubindo(false);
+  }
+
   async function salvarClientesCSV() {
     if (!previewCSV) return;
     setSubindo(true);
@@ -2207,17 +2231,15 @@ export default function AdminPage() {
               {(() => {
                 // FILTRAGEM INTELIGENTE
                 const listaExibicao = subAbaAtivos === 'especiais' 
-                  ? clientesFiltrados.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== ''))
+                  ? clientesFiltrados.filter(c => c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '') || processosSocietarios.some(p => p.cliente_id === c.id))
                   : clientesFiltrados.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')));
 
                 if (listaExibicao.length === 0) return <p className="text-zinc-500 col-span-full py-8 text-center">Nenhum cliente encontrado nesta categoria.</p>;
 
                 return listaExibicao.map((cli) => {
-                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || (cli.cpf && cli.cpf.trim() !== '');
-                  
-                  // Busca todos os processos deste cliente específico
                   const processosDoCliente = processosSocietarios.filter(p => p.cliente_id === cli.id);
                   const quantidadeProcessos = processosDoCliente.length;
+                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || (cli.cpf && cli.cpf.trim() !== '') || quantidadeProcessos > 0;
 
                   return (
                     <div key={cli.id} className={`p-6 rounded-xl border shadow-xl flex flex-col justify-between transition ${isEspecial ? 'bg-[#0d1b2a] border-purple-500/30 hover:border-purple-500/60' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
@@ -3447,11 +3469,37 @@ export default function AdminPage() {
             </div>
             
             <div className="flex bg-[#0d1b2a] p-1 border-b border-zinc-800">
-              <button onClick={() => setAbaAdicionar('manual')} className={`flex-1 px-4 py-3 text-xs font-bold transition-all ${abaAdicionar === 'manual' ? 'bg-[#1b263b] text-white border-b-2 border-[#d4af37]' : 'text-zinc-500 hover:text-zinc-300'}`}>Adição Manual</button>
-              <button onClick={() => setAbaAdicionar('csv')} className={`flex-1 px-4 py-3 text-xs font-bold transition-all ${abaAdicionar === 'csv' ? 'bg-[#1b263b] text-white border-b-2 border-[#d4af37]' : 'text-zinc-500 hover:text-zinc-300'}`}>Importar CSV</button>
+              <button onClick={() => setAbaAdicionar('manual')} className={`flex-1 px-4 py-3 text-[10px] sm:text-xs font-bold transition-all ${abaAdicionar === 'manual' ? 'bg-[#1b263b] text-white border-b-2 border-[#d4af37]' : 'text-zinc-500 hover:text-zinc-300'}`}>Adição Manual</button>
+              <button onClick={() => setAbaAdicionar('mensalista')} className={`flex-1 px-4 py-3 text-[10px] sm:text-xs font-bold transition-all ${abaAdicionar === 'mensalista' ? 'bg-[#1b263b] text-white border-b-2 border-purple-500' : 'text-zinc-500 hover:text-zinc-300'}`}>Adição Mensalista</button>
+              <button onClick={() => setAbaAdicionar('csv')} className={`flex-1 px-4 py-3 text-[10px] sm:text-xs font-bold transition-all ${abaAdicionar === 'csv' ? 'bg-[#1b263b] text-white border-b-2 border-[#d4af37]' : 'text-zinc-500 hover:text-zinc-300'}`}>Importar CSV</button>
             </div>
 
             <div className="p-5">
+              {abaAdicionar === 'mensalista' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] uppercase text-zinc-400 font-bold mb-1">Buscar Cliente Mensalista</label>
+                    <input type="text" placeholder="Nome ou CNPJ da empresa..." value={buscaMensalista} onChange={e => setBuscaMensalista(e.target.value)} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 outline-none" />
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
+                    {clientes.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')) && (c.nome_empresa?.toLowerCase().includes(buscaMensalista.toLowerCase()) || c.cnpj?.includes(buscaMensalista))).map(cli => (
+                      <div key={cli.id} className="flex justify-between items-center bg-[#0d1b2a] border border-zinc-800 p-3 rounded-lg hover:border-purple-500/50 transition">
+                        <div className="flex flex-col truncate pr-2">
+                          <p className="text-sm font-bold text-white truncate">{cli.nome_empresa}</p>
+                          <p className="text-[10px] text-zinc-500">CNPJ: {cli.cnpj}</p>
+                        </div>
+                        <button onClick={() => handleDesbloquearSocietario(cli)} disabled={subindo} className="bg-purple-500 text-white text-[10px] font-bold px-3 py-2 rounded hover:bg-purple-400 transition shadow-sm whitespace-nowrap">
+                          Desbloquear Aba
+                        </button>
+                      </div>
+                    ))}
+                    {buscaMensalista && clientes.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')) && (c.nome_empresa?.toLowerCase().includes(buscaMensalista.toLowerCase()) || c.cnpj?.includes(buscaMensalista))).length === 0 && (
+                      <p className="text-xs text-zinc-500 text-center py-4">Nenhum cliente mensalista encontrado com esta busca.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {abaAdicionar === 'manual' && (
                 <form onSubmit={handleAdicionarManual} className="space-y-4">
                   <div className="flex bg-[#0d1b2a] p-1 rounded-lg border border-zinc-700 w-full">

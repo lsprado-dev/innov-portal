@@ -52,6 +52,7 @@ const IconFolderLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill=
 const IconChartLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
 const IconUsersLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
 const IconDocLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+const IconSocietarioLarge = () => <svg className="w-8 h-8 text-purple-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
 const IconFinanceiroLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 
 // Nova inteligência de meses do Financeiro
@@ -186,8 +187,10 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [pedidos, setPedidos] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [itensLixeira, setItensLixeira] = useState([]);
-  const [boletosDaAPI, setBoletosDaAPI] = useState([]); // NOVO: Guarda os boletos carregados da tabela boletos_api
+  const [boletosDaAPI, setBoletosDaAPI] = useState([]); 
   const [novoPedido, setNovoPedido] = useState('');
+  const [processos, setProcessos] = useState([]);
+  const [badgeSocietario, setBadgeSocietario] = useState(0);
   const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
   const [arquivoPedido, setArquivoPedido] = useState(null); // NOVO: Anexo no ticket do cliente
   
@@ -464,6 +467,16 @@ export default function MensalistaView({ params: paramsPromise }) {
         const { data: ligadas } = await supabase.from('clientes').select('id, nome_empresa, cnpj').in('id', data.empresas_vinculadas);
         if (ligadas) setEmpresasLigadas(ligadas);
       }
+
+      // NOVO: Puxa os processos societários para mostrar a notificação (badge roxo)
+      const { data: procs } = await supabase.from('processos_societarios').select('*').eq('cliente_id', id);
+      if (procs) {
+        setProcessos(procs);
+        if (procs.length > 0 && !localStorage.getItem(`societario_visto_${id}_${procs.length}`)) {
+          setBadgeSocietario(procs.length);
+        }
+      }
+
     }
     carregarCliente();
   }, [id, router]);
@@ -2170,13 +2183,24 @@ export default function MensalistaView({ params: paramsPromise }) {
                 { id: 'contabil', nome: 'Contábil', desc: 'Balanços e DREs', icon: <IconFolderLarge /> },
                 { id: 'fiscal', nome: 'Fiscal', desc: 'Guias e Impostos', icon: <IconChartLarge /> },
                 { id: 'rh', nome: 'DP / RH', desc: 'Folhas e Recibos', icon: <IconUsersLarge /> },
+                { id: 'societario', nome: 'Societário', desc: 'Processos', icon: <IconSocietarioLarge /> },
                 { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
                 { id: 'financeiro', nome: 'Financeiro', desc: 'Controle de mensalidades', icon: <IconFinanceiroLarge /> }
               ].map(pasta => {
                 const qtdNovos = !isInterno ? arquivosNaoLidos.filter(a => a.setor === pasta.id).length : 0;
                 return (
-                  <button key={pasta.id} onClick={() => { setPastaAtiva(pasta.id); rolarPara('conteudo-pastas'); }} className={`relative flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === pasta.id ? 'border-[#d4af37] bg-zinc-800' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
-                    {qtdNovos > 0 && <span className="absolute -top-2 -right-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm border border-emerald-400">{qtdNovos} Novo{qtdNovos > 1 ? 's' : ''}</span>}
+                  <button key={pasta.id} onClick={() => { 
+                    setPastaAtiva(pasta.id); 
+                    if (pasta.id === 'societario') {
+                      setBadgeSocietario(0);
+                      localStorage.setItem(`societario_visto_${id}_${processos.length}`, 'true');
+                    }
+                    rolarPara('conteudo-pastas'); 
+                  }} className={`relative flex-1 w-full p-5 rounded-xl border transition-all text-left flex flex-col justify-between shadow-lg ${pastaAtiva === pasta.id ? (pasta.id === 'societario' ? 'border-purple-500 bg-zinc-800' : 'border-[#d4af37] bg-zinc-800') : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
+                    
+                    {pasta.id !== 'societario' && qtdNovos > 0 && <span className="absolute -top-2 -right-2 bg-emerald-500 text-[#0d1b2a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm border border-emerald-400">{qtdNovos} Novo{qtdNovos > 1 ? 's' : ''}</span>}
+                    {pasta.id === 'societario' && badgeSocietario > 0 && <span className="absolute -top-2 -right-2 bg-purple-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm border border-purple-400">{badgeSocietario} Novo(s)</span>}
+                    
                     {pasta.icon}
                     <h3 className="text-sm font-bold text-white mb-1">{pasta.nome}</h3>
                     <p className="text-[10px] text-zinc-400">{pasta.desc}</p>
@@ -2187,7 +2211,29 @@ export default function MensalistaView({ params: paramsPromise }) {
 
             <div id="conteudo-pastas"></div> {/* Âncora Invisível */}
 
-            {pastaAtiva === 'financeiro' ? (
+            {pastaAtiva === 'societario' ? (
+              <div className="bg-[#1b263b] p-8 rounded-xl border border-purple-500/30 shadow-xl mb-10 text-center animate-in fade-in">
+                 <h3 className="text-2xl font-bold text-purple-400 mb-4">Painel Societário</h3>
+                 {processos.length === 0 ? (
+                    <div className="bg-[#0d1b2a] p-6 rounded-lg border border-purple-500/20 max-w-2xl mx-auto shadow-inner">
+                       <p className="text-zinc-300 text-sm leading-relaxed">
+                         Aqui ficarão os seus processos societários como <strong>Alteração Contratual, Abertura de Filial, Alteração de LTDA</strong>, entre outros serviços que pode contratar por fora com a nossa contabilidade.
+                       </p>
+                       <p className="text-zinc-500 text-xs mt-6 italic">Nenhum processo ativo no momento.</p>
+                    </div>
+                 ) : (
+                    <div className="bg-[#0d1b2a] p-6 rounded-lg border border-purple-500/20 max-w-2xl mx-auto shadow-inner">
+                       <p className="text-zinc-300 text-sm mb-6">Possui <strong>{processos.length}</strong> processo(s) em andamento ou no histórico.</p>
+                       <button onClick={() => window.location.href = `/cliente/${id}?view=especial`} className="bg-purple-500 text-white font-black px-8 py-3.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-[0_0_20px_rgba(168,85,247,0.4)]">
+                         Acessar Painel Especial
+                       </button>
+                       {isInterno && (
+                         <p className="text-zinc-500 text-[10px] mt-4">Como Admin, pode clicar acima para gerir os processos deste cliente.</p>
+                       )}
+                    </div>
+                 )}
+              </div>
+            ) : pastaAtiva === 'financeiro' ? (
               <div className="bg-[#1b263b] p-8 rounded-xl border border-[#d4af37]/30 shadow-xl mb-10">
                 <div className="border-b border-zinc-800 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
