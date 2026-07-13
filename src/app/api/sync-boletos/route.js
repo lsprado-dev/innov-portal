@@ -32,11 +32,11 @@ export async function GET() {
     const anoBase = new Date().getFullYear();
     let cobrancasInter = [];
 
-    // MÁGICA: O Banco Inter possui uma trava invisível: intervalos maiores que 90 dias retornam Erro 400.
-    // Trimestres como Q2 (91 dias) e Q3 (92 dias) faziam a API falhar silenciosamente e ignorar os boletos!
-    // Correção: Varrer mês a mês, garantindo no máximo 31 dias por chamada, resolvendo o bug de vez.
+    // MÁGICA MÁXIMA: Para achar os boletos QR Code (Pix), temos que filtrar por INCLUSAO e não VENCIMENTO.
+    // O Inter às vezes omite os boletos pagos via Pix quando a busca é pela data de vencimento!
+    // Vamos começar do mês 5 (Maio) para garantir que pegamos os emitidos no final de Maio que venciam em Junho.
     const mesesBlocos = [];
-    for (let i = 1; i <= 12; i++) {
+    for (let i = 5; i <= 12; i++) {
       const mesStr = String(i).padStart(2, '0');
       const ultimoDia = new Date(anoBase, i, 0).getDate();
       mesesBlocos.push({
@@ -52,7 +52,7 @@ export async function GET() {
       while (paginaAtual < totalPaginas) {
         try {
           const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=VENCIMENTO&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
+            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=INCLUSAO&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
             { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
           );
           
@@ -76,9 +76,14 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      // 1. Garantia de Vencimento (Boletos pagos via Pix às vezes ocultam isso na raiz)
-      const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento;
+      // 1. Garantia de Vencimento (Se o Inter engolir o vencimento no Pix, usamos a data de emissão como salva-vidas)
+      const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento || dadosCobranca.dataEmissao || cob.dataEmissao;
       if (!dataVenci) continue;
+
+      // TRAVA DE SEGURANÇA: O cliente pediu para ignorar lixo antigo (Meses 1, 2, 3, 4 e 5).
+      // Se o boleto venceu entre Janeiro e Maio, ele é completamente ignorado e não vai pro Supabase.
+      const mesVencimentoInt = parseInt(dataVenci.split('-')[1], 10);
+      if (mesVencimentoInt <= 5 && dataVenci.startsWith(anoBase.toString())) continue;
 
       // 2. Limpeza brutal do CPF/CNPJ (Garante que só sobram números para a comparação perfeita)
       const documentoPagador = (dadosCobranca.pagador?.cpfCnpj || dadosCobranca.pagador?.cnpjCpf || '').replace(/\D/g, '');
