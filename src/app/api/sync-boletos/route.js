@@ -32,10 +32,7 @@ export async function GET() {
     const anoBase = new Date().getFullYear();
     let cobrancasInter = [];
 
-    // MÁGICA SUPREMA (O Hack da Comunidade):
-    // Boletos pagos via Pix DESAPARECEM da busca por "VENCIMENTO".
-    // Eles só aparecem se buscarmos por "SITUACAO" (Data em que o status mudou para pago).
-    // Começamos do mês 5 (Maio) para garantir que não escapa nada que vença em Junho.
+    // Começamos do mês 5 (Maio) para garantir que pegamos tudo que vence a partir de Junho.
     const mesesBlocos = [];
     for (let i = 5; i <= 12; i++) {
       const mesStr = String(i).padStart(2, '0');
@@ -46,8 +43,10 @@ export async function GET() {
       });
     }
 
-    // Faremos 2 varreduras em cada mês: Uma por VENCIMENTO (boletos abertos/normais) e outra por SITUACAO (Bolepix escondido).
-    const tiposDeFiltro = ['VENCIMENTO', 'SITUACAO'];
+    // A MÁGICA DEFINITIVA: 
+    // Usamos apenas os parâmetros oficiais da V3. 'PAGAMENTO' é a chave para o Inter "cuspir" 
+    // os boletos que foram liquidados instantaneamente via QR Code (Bolepix).
+    const tiposDeFiltro = ['VENCIMENTO', 'EMISSAO', 'PAGAMENTO'];
 
     for (const bloco of mesesBlocos) {
       for (const tipoFiltro of tiposDeFiltro) {
@@ -81,16 +80,15 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      // 1. Garantia de Vencimento (Se o Inter engolir o vencimento no Pix, usamos a data de emissão como salva-vidas)
+      // 1. Garantia de Vencimento
       const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento || dadosCobranca.dataEmissao || cob.dataEmissao;
       if (!dataVenci) continue;
 
       // ESCUDO DE TITÂNIO: Ignorar absolutamente TUDO o que vencer antes de 1º de Junho do ano atual.
-      // Isso extermina de vez o bug do lixo antigo (Ex: Ref: Dezembro Vence 20/01/2026).
       const dataCorte = `${anoBase}-06-01`;
       if (dataVenci < dataCorte) continue;
 
-      // 2. Limpeza brutal do CPF/CNPJ (Garante que só sobram números para a comparação perfeita)
+      // 2. Limpeza brutal do CPF/CNPJ
       const documentoPagador = (dadosCobranca.pagador?.cpfCnpj || dadosCobranca.pagador?.cnpjCpf || '').replace(/\D/g, '');
       if (!documentoPagador) continue;
       
@@ -106,7 +104,7 @@ export async function GET() {
         // MÁGICA: Verifica se pingou qualquer valor financeiro real nesse boleto
         const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || dadosCobranca.valorPago || 0);
         
-        // Identificação real do PIX pela API V3 (Evita sobrescrever o webhook e salva a pátria)
+        // Identificação real do PIX pela API V3
         const recebimentos = dadosCobranca.recebimentos || cob.recebimentos || [];
         const origem = dadosCobranca.origemRecebimento || cob.origemRecebimento || '';
         const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
@@ -116,20 +114,14 @@ export async function GET() {
         dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
-        // 1. SE FOI PAGO OU ABATIDO (Dinheiro > 0 ou status de recebimento/abatimento)
+        // LÓGICA DE STATUS
         if (valorPago > 0 || sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
             statusInterno = isPix ? 'pago via pix' : 'pago';
-        } 
-        // 2. SE O BANCO MATOU O BOLETO DE VEZ (Cancelado, Baixado ou Expirado)
-        else if (sit.includes('CANCELADO') || sit.includes('BAIXADO') || sit.includes('EXPIRADO')) {
+        } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO') || sit.includes('EXPIRADO')) {
             statusInterno = 'expirado';
-        } 
-        // 3. SE ATRASOU MAS AINDA ESTÁ VIVO (Passou da data de vencimento, mas não foi cancelado)
-        else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || dataVenci < hojeStr) {
+        } else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || dataVenci < hojeStr) {
             statusInterno = 'atrasado';
-        } 
-        // 4. SE ESTÁ TUDO OK NO PRAZO
-        else {
+        } else {
             statusInterno = 'pendente';
         }
 
@@ -138,7 +130,7 @@ export async function GET() {
         const linhaDigitavel = dadosBoleto?.linhaDigitavel || '';
         const linkMagicoPDF = `/api/boletos/pdf?nossoNumero=${idCobranca}`;
 
-        // Montamos o payload de Upsert com cuidado para NÃO zerar a linha digitável se ela vier vazia no PIX
+        // Upsert blindado para não apagar linha digitável caso o Inter omita no pagamento via PIX
         const payloadUpsert = {
           cliente_id: clienteMatch.id,
           mes_ref: mesRefCorreto,
