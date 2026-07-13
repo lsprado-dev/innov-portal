@@ -6,6 +6,9 @@ import https from 'https';
 import { getInterToken } from '../../lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
+// PERMITE QUE A ROTA RODE POR MAIS TEMPO NA VERCEL (Até 60 segundos)
+export const maxDuration = 60; 
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -98,7 +101,9 @@ export async function GET() {
 
     const cobrancasInter = Array.from(boletosMap.values());
     const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf');
-    let importados = 0;
+    
+    // NOVO: Array para guardar todos os boletos e fazer 1 único disparo pro banco!
+    const payloadsParaSalvar = [];
 
     for (const cob of cobrancasInter) {
       const dadosCobranca = cob.cobranca || cob;
@@ -177,12 +182,18 @@ export async function GET() {
           payloadUpsert.linha_digitavel = linhaDigitavel;
         }
 
-        await supabaseAdmin.from('boletos_api').upsert(payloadUpsert, { onConflict: 'nosso_numero' });
-        importados++;
+        // NOVO: Adiciona no array em vez de salvar 1 por 1
+        payloadsParaSalvar.push(payloadUpsert);
       }
     }
 
-    return NextResponse.json({ success: true, message: `${importados} boletos sincronizados com o banco de dados!` });
+    // BULK UPSERT MÁGICO: Dispara 1 única requisição para o banco salvar centenas de boletos de uma vez!
+    if (payloadsParaSalvar.length > 0) {
+      const { error } = await supabaseAdmin.from('boletos_api').upsert(payloadsParaSalvar, { onConflict: 'nosso_numero' });
+      if (error) throw error;
+    }
+
+    return NextResponse.json({ success: true, message: `${payloadsParaSalvar.length} boletos sincronizados com o banco de dados em lote!` });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
