@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
 
-// Subindo 4 níveis exatos para achar a pasta lib na raiz do projeto
 import { getInterToken } from '../../lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -29,50 +28,72 @@ export async function GET() {
     const key = Buffer.from(process.env.INTER_KEY_BASE64, 'base64').toString('ascii');
     const httpsAgent = new https.Agent({ cert, key });
 
-    const anoBase = new Date().getFullYear();
-    let cobrancasInter = [];
+    const dataLocal = new Date();
+    dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
+    
+    // 1. JANELA DESLIZANTE DE 85 DIAS:
+    // Garante que não tomamos bloqueio do banco (Rate Limit) por excesso de requisições.
+    // Como a regra de negócio exige tudo dentro do mês, 85 dias cobrem Junho, Julho e o futuro próximo.
+    let dataFim = new Date(dataLocal);
+    dataFim.setDate(dataFim.getDate() + 25);
+    
+    let dataIni = new Date(dataFim);
+    dataIni.setDate(dataIni.getDate() - 85);
+    
+    // Trava rígida: Nunca puxar lixo antes de 1º de Junho.
+    const corteJunho = new Date('2026-06-01T00:00:00Z');
+    if (dataIni < corteJunho) dataIni = corteJunho;
 
-    // Começamos do mês 5 (Maio) para garantir que pegamos tudo que vence a partir de Junho.
-    const mesesBlocos = [];
-    for (let i = 5; i <= 12; i++) {
-      const mesStr = String(i).padStart(2, '0');
-      const ultimoDia = new Date(anoBase, i, 0).getDate();
-      mesesBlocos.push({
-        ini: `${anoBase}-${mesStr}-01`,
-        fim: `${anoBase}-${mesStr}-${ultimoDia}`
-      });
-    }
+    const strIni = dataIni.toISOString().split('T')[0];
+    const strFim = dataFim.toISOString().split('T')[0];
 
-    // A MÁGICA DEFINITIVA: 
-    // Usamos apenas os parâmetros oficiais da V3. 'PAGAMENTO' é a chave para o Inter "cuspir" 
-    // os boletos que foram liquidados instantaneamente via QR Code (Bolepix).
     const tiposDeFiltro = ['VENCIMENTO', 'EMISSAO', 'PAGAMENTO'];
+    const boletosMap = new Map(); // 2. O MAPA MÁGICO: Impede que o Inter minta para nós.
 
-    for (const bloco of mesesBlocos) {
-      for (const tipoFiltro of tiposDeFiltro) {
-        let paginaAtual = 0;
-        let totalPaginas = 1;
+    for (const tipoFiltro of tiposDeFiltro) {
+      let paginaAtual = 0;
+      let totalPaginas = 1;
 
-        while (paginaAtual < totalPaginas) {
-          try {
-            const response = await axios.get(
-              `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=${tipoFiltro}&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
-              { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
-            );
+      while (paginaAtual < totalPaginas) {
+        try {
+          const response = await axios.get(
+            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
+            { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
+          );
+          
+          const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
+          
+          // DEDUPLICAÇÃO INTELIGENTE: Se o boleto já está na memória como PAGO, 
+          // não deixa o filtro de VENCIMENTO rebaixar ele para pendente!
+          for (const cob of lista) {
+            const cobRoot = cob.cobranca || cob;
+            const bolRoot = cob.boleto || cob;
+            const id = cobRoot.codigoSolicitacao || cob.codigoSolicitacao || bolRoot.nossoNumero;
             
-            const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
-            cobrancasInter.push(...lista);
+            if (!id) continue;
 
-            totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
-            paginaAtual++;
-          } catch (err) {
-            console.error(`Falha no bloco ${bloco.ini} com filtro ${tipoFiltro}:`, err.response?.data || err.message);
-            break; 
+            if (!boletosMap.has(id)) {
+              boletosMap.set(id, cob);
+            } else {
+              const sitNova = (cobRoot.situacao || '').toUpperCase();
+              const valorPago = parseFloat(cobRoot.valorTotalRecebido || cobRoot.valorRecebido || 0);
+              
+              if (sitNova.includes('RECEBIDO') || sitNova.includes('PAGO') || sitNova.includes('BAIXADO') || valorPago > 0) {
+                boletosMap.set(id, cob); // Mantém sempre a versão que atesta o pagamento
+              }
+            }
           }
+
+          totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
+          paginaAtual++;
+        } catch (err) {
+          console.error(`Falha no filtro ${tipoFiltro}:`, err.response?.data || err.message);
+          break; 
         }
       }
     }
 
+    const cobrancasInter = Array.from(boletosMap.values());
     const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf');
     let importados = 0;
 
@@ -80,15 +101,12 @@ export async function GET() {
       const dadosCobranca = cob.cobranca || cob;
       const dadosBoleto = cob.boleto || cob;
 
-      // 1. Garantia de Vencimento
       const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento || dadosCobranca.dataEmissao || cob.dataEmissao;
       if (!dataVenci) continue;
 
-      // ESCUDO DE TITÂNIO: Ignorar absolutamente TUDO o que vencer antes de 1º de Junho do ano atual.
-      const dataCorte = `${anoBase}-06-01`;
-      if (dataVenci < dataCorte) continue;
+      // Escudo final de segurança
+      if (dataVenci < '2026-06-01') continue;
 
-      // 2. Limpeza brutal do CPF/CNPJ
       const documentoPagador = (dadosCobranca.pagador?.cpfCnpj || dadosCobranca.pagador?.cnpjCpf || '').replace(/\D/g, '');
       if (!documentoPagador) continue;
       
@@ -101,20 +119,13 @@ export async function GET() {
         let statusInterno = 'pendente'; 
         const sit = (dadosCobranca.situacao || '').toUpperCase();
         
-        // MÁGICA: Verifica se pingou qualquer valor financeiro real nesse boleto
         const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || dadosCobranca.valorPago || 0);
-        
-        // Identificação real do PIX pela API V3
         const recebimentos = dadosCobranca.recebimentos || cob.recebimentos || [];
         const origem = dadosCobranca.origemRecebimento || cob.origemRecebimento || '';
         const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
         
-        // Pega a data de hoje correta no fuso horário para saber se já passou do vencimento
-        const dataLocal = new Date();
-        dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
-        // LÓGICA DE STATUS
         if (valorPago > 0 || sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
             statusInterno = isPix ? 'pago via pix' : 'pago';
         } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO') || sit.includes('EXPIRADO')) {
@@ -130,7 +141,6 @@ export async function GET() {
         const linhaDigitavel = dadosBoleto?.linhaDigitavel || '';
         const linkMagicoPDF = `/api/boletos/pdf?nossoNumero=${idCobranca}`;
 
-        // Upsert blindado para não apagar linha digitável caso o Inter omita no pagamento via PIX
         const payloadUpsert = {
           cliente_id: clienteMatch.id,
           mes_ref: mesRefCorreto,
