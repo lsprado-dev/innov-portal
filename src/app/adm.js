@@ -2239,9 +2239,7 @@ export default function AdminPage() {
                 return listaExibicao.map((cli) => {
                   const processosDoCliente = processosSocietarios.filter(p => p.cliente_id === cli.id);
                   const quantidadeProcessos = processosDoCliente.length;
-                  // BUG FIX: isEspecial não será forçado a true só porque a empresa mensalista tem processo societário.
-                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || (cli.cpf && cli.cpf.trim() !== '');
-                  const mostrarCardProcessos = isEspecial || quantidadeProcessos > 0;
+                  const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || (cli.cpf && cli.cpf.trim() !== '') || quantidadeProcessos > 0;
 
                   return (
                     <div key={cli.id} className={`p-6 rounded-xl border shadow-xl flex flex-col justify-between transition ${isEspecial ? 'bg-[#0d1b2a] border-purple-500/30 hover:border-purple-500/60' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
@@ -2263,7 +2261,7 @@ export default function AdminPage() {
                         <p className="text-xs text-zinc-400">Contato: <span className="text-zinc-300">{cli.nome_contato || 'Não informado'}</span></p>
                         
                         {/* 🚀 O CARD INFORMATIVO DE PROCESSOS MÚLTIPLOS */}
-                        {mostrarCardProcessos && (
+                        {isEspecial && (
                           <div className="mt-5 p-4 bg-[#1b263b] rounded-lg border border-purple-500/20 text-center">
                             {quantidadeProcessos === 0 ? (
                               <p className="text-xs text-zinc-500 italic">Nenhum processo iniciado.</p>
