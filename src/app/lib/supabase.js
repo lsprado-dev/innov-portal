@@ -23,8 +23,11 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
           // MÁGICA: Se o Supabase avisar que o passe VIP venceu (Erro 401)
           if (response.status === 401) {
             if (typeof window !== 'undefined') {
-              // Dispara um alarme global no navegador
-              window.dispatchEvent(new CustomEvent('sessao_expirada'));
+              // Ignora o erro se for a própria rota de renovação tentando trabalhar!
+              if (!url.includes('/api/auth/refresh')) {
+                // Dispara um alarme global no navegador
+                window.dispatchEvent(new CustomEvent('sessao_expirada'));
+              }
             }
           }
           
