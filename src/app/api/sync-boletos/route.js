@@ -51,9 +51,9 @@ export async function GET() {
 
       while (temMaisPaginas) {
         try {
-          // CORREÇÃO CRÍTICA DA PAGINAÇÃO API V3: Usar paginacao.itensPorPagina e paginacao.paginaAtual
+          // CORREÇÃO CRÍTICA DA PAGINAÇÃO API V3: Usar os nomes corretos sem o prefixo "paginacao."
           const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&paginacao.itensPorPagina=100&paginacao.paginaAtual=${paginaAtual}`,
+            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&itensPorPagina=100&paginaAtual=${paginaAtual}`,
             { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
           );
           
@@ -79,8 +79,8 @@ export async function GET() {
             }
           }
 
-          // MÁGICA DA PAGINAÇÃO: Se a lista retornar menos de 100 itens, significa que chegamos na última página!
-          if (lista.length < 100) {
+          // MÁGICA DA PAGINAÇÃO: Usa o controle .last da API ou corta se vier menos de 100
+          if (lista.length === 0 || response.data.last === true || lista.length < 100) {
             temMaisPaginas = false;
           } else {
             paginaAtual++;
@@ -128,7 +128,12 @@ export async function GET() {
         // Se foi marcado manualmente como recebido no painel do Inter (situação exata MARCADO_RECEBIDO na API V3)
         // Injetamos a flag isPix para que ele fique classificado corretamente como "Pago via PIX" no seu Portal!
         const isMarcadoManual = sit === 'MARCADO_RECEBIDO' || sit.includes('MARCADO');
-        const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => (r.origemRecebimento || '').toUpperCase() === 'PIX') || isMarcadoManual;
+        
+        // INTER V3: Pagamentos PIX também podem vir escondidos direto no root ou na cobranca
+        const temPixNoObjeto = (dadosCobranca.pix != null) || (cob.pix != null);
+        const temPixEmRecebimentos = recebimentos.some(r => (r.origemRecebimento || '').toUpperCase() === 'PIX');
+        
+        const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || temPixEmRecebimentos || temPixNoObjeto || isMarcadoManual;
         
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
