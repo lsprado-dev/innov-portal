@@ -32,9 +32,10 @@ export async function GET() {
     const anoBase = new Date().getFullYear();
     let cobrancasInter = [];
 
-    // MÁGICA MÁXIMA: Para achar os boletos QR Code (Pix), temos que filtrar por INCLUSAO e não VENCIMENTO.
-    // O Inter às vezes omite os boletos pagos via Pix quando a busca é pela data de vencimento!
-    // Vamos começar do mês 5 (Maio) para garantir que pegamos os emitidos no final de Maio que venciam em Junho.
+    // MÁGICA SUPREMA (O Hack da Comunidade): 
+    // 1. O parâmetro correto na V3 é EMISSAO.
+    // 2. O Inter OCULTA os boletos pagos via Pix da listagem geral. Temos que fazer um loop 
+    //    forçando o parâmetro &situacao=RECEBIDO_PIX para ele "cuspir" esses pagamentos!
     const mesesBlocos = [];
     for (let i = 5; i <= 12; i++) {
       const mesStr = String(i).padStart(2, '0');
@@ -45,26 +46,30 @@ export async function GET() {
       });
     }
 
+    // Varremos uma vez normal, e uma vez FORÇANDO a busca pelo Pix
+    const filtrosDeSituacao = ['', '&situacao=RECEBIDO_PIX'];
+
     for (const bloco of mesesBlocos) {
-      let paginaAtual = 0;
-      let totalPaginas = 1;
+      for (const querySit of filtrosDeSituacao) {
+        let paginaAtual = 0;
+        let totalPaginas = 1;
 
-      while (paginaAtual < totalPaginas) {
-        try {
-          const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=INCLUSAO&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
-            { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
-          );
-          
-          const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
-          cobrancasInter.push(...lista);
+        while (paginaAtual < totalPaginas) {
+          try {
+            const response = await axios.get(
+              `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=EMISSAO&tamanhoPagina=100&paginaAtual=${paginaAtual}${querySit}`,
+              { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
+            );
+            
+            const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
+            cobrancasInter.push(...lista);
 
-          // Correção do idioma da API do Inter garantida e mantida!
-          totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
-          paginaAtual++;
-        } catch (err) {
-          console.error(`Falha no bloco ${bloco.ini}:`, err.response?.data || err.message);
-          break; 
+            totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
+            paginaAtual++;
+          } catch (err) {
+            console.error(`Falha no bloco ${bloco.ini} com filtro ${querySit}:`, err.response?.data || err.message);
+            break; 
+          }
         }
       }
     }
