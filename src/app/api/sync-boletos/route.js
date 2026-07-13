@@ -31,15 +31,14 @@ export async function GET() {
 
     const dataLocal = new Date();
     dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
-    const anoBase = dataLocal.getFullYear();
     
-    // 1. JANELA ÚNICA DE 89 DIAS (Corte exato a partir de 01/06)
-    // Reduz as requisições de 25 para apenas 2 chamadas mestras, evitando o bloqueio do Inter!
-    const strIni = `${anoBase}-06-01`;
+    // 1. JANELA DINÂMICA DE 89 DIAS (Garante que nunca para de sincronizar o mês atual!)
+    // Puxa exatamente os últimos 89 dias até hoje, respeitando o limite da API V3.
+    const strFim = dataLocal.toISOString().split('T')[0];
     
-    const dataFim = new Date(`${anoBase}-06-01T12:00:00Z`);
-    dataFim.setDate(dataFim.getDate() + 89);
-    const strFim = dataFim.toISOString().split('T')[0];
+    const dataInicio = new Date(dataLocal);
+    dataInicio.setDate(dataInicio.getDate() - 89);
+    const strIni = dataInicio.toISOString().split('T')[0];
 
     // EMISSAO voltou! Precisamos dele para achar os boletos que foram "Marcados como Recebido" manualmente no Inter,
     // pois eles somem do VENCIMENTO e não geram log de PAGAMENTO sistêmico.
@@ -48,12 +47,13 @@ export async function GET() {
 
     for (const tipoFiltro of tiposDeFiltro) {
       let paginaAtual = 0;
-      let totalPaginas = 1;
+      let temMaisPaginas = true;
 
-      while (paginaAtual < totalPaginas) {
+      while (temMaisPaginas) {
         try {
+          // CORREÇÃO CRÍTICA DA PAGINAÇÃO API V3: Usar paginacao.itensPorPagina e paginacao.paginaAtual
           const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
+            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&paginacao.itensPorPagina=100&paginacao.paginaAtual=${paginaAtual}`,
             { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
           );
           
@@ -79,8 +79,12 @@ export async function GET() {
             }
           }
 
-          totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
-          paginaAtual++;
+          // MÁGICA DA PAGINAÇÃO: Se a lista retornar menos de 100 itens, significa que chegamos na última página!
+          if (lista.length < 100) {
+            temMaisPaginas = false;
+          } else {
+            paginaAtual++;
+          }
           
           // DELAY ANTI-BLOQUEIO: Dá um respiro para o Banco Inter não derrubar a nossa conexão
           await new Promise(r => setTimeout(r, 400));
@@ -119,11 +123,12 @@ export async function GET() {
         
         const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || dadosCobranca.valorPago || 0);
         const recebimentos = dadosCobranca.recebimentos || cob.recebimentos || [];
-        const origem = dadosCobranca.origemRecebimento || cob.origemRecebimento || '';
+        const origem = (dadosCobranca.origemRecebimento || cob.origemRecebimento || '').toUpperCase();
         
-        // Se foi marcado manualmente como recebido, o sistema injeta a flag isPix para o painel ficar verde como você pediu.
-        const isMarcadoManual = sit.includes('MARCADO') || sit === 'RECEBIDO';
-        const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX') || isMarcadoManual;
+        // Se foi marcado manualmente como recebido no painel do Inter (situação exata MARCADO_RECEBIDO na API V3)
+        // Injetamos a flag isPix para que ele fique classificado corretamente como "Pago via PIX" no seu Portal!
+        const isMarcadoManual = sit === 'MARCADO_RECEBIDO' || sit.includes('MARCADO');
+        const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => (r.origemRecebimento || '').toUpperCase() === 'PIX') || isMarcadoManual;
         
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
