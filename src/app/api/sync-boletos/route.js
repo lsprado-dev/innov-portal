@@ -32,10 +32,10 @@ export async function GET() {
     const anoBase = new Date().getFullYear();
     let cobrancasInter = [];
 
-    // MÁGICA SUPREMA (O Hack da Comunidade): 
-    // 1. O parâmetro correto na V3 é EMISSAO.
-    // 2. O Inter OCULTA os boletos pagos via Pix da listagem geral. Temos que fazer um loop 
-    //    forçando o parâmetro &situacao=RECEBIDO_PIX para ele "cuspir" esses pagamentos!
+    // MÁGICA SUPREMA (O Hack da Comunidade):
+    // Boletos pagos via Pix DESAPARECEM da busca por "VENCIMENTO".
+    // Eles só aparecem se buscarmos por "SITUACAO" (Data em que o status mudou para pago).
+    // Começamos do mês 5 (Maio) para garantir que não escapa nada que vença em Junho.
     const mesesBlocos = [];
     for (let i = 5; i <= 12; i++) {
       const mesStr = String(i).padStart(2, '0');
@@ -46,18 +46,18 @@ export async function GET() {
       });
     }
 
-    // Varremos uma vez normal, e uma vez FORÇANDO a busca pelo Pix
-    const filtrosDeSituacao = ['', '&situacao=RECEBIDO_PIX'];
+    // Faremos 2 varreduras em cada mês: Uma por VENCIMENTO (boletos abertos/normais) e outra por SITUACAO (Bolepix escondido).
+    const tiposDeFiltro = ['VENCIMENTO', 'SITUACAO'];
 
     for (const bloco of mesesBlocos) {
-      for (const querySit of filtrosDeSituacao) {
+      for (const tipoFiltro of tiposDeFiltro) {
         let paginaAtual = 0;
         let totalPaginas = 1;
 
         while (paginaAtual < totalPaginas) {
           try {
             const response = await axios.get(
-              `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=EMISSAO&tamanhoPagina=100&paginaAtual=${paginaAtual}${querySit}`,
+              `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=${tipoFiltro}&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
               { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
             );
             
@@ -67,7 +67,7 @@ export async function GET() {
             totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
             paginaAtual++;
           } catch (err) {
-            console.error(`Falha no bloco ${bloco.ini} com filtro ${querySit}:`, err.response?.data || err.message);
+            console.error(`Falha no bloco ${bloco.ini} com filtro ${tipoFiltro}:`, err.response?.data || err.message);
             break; 
           }
         }
@@ -85,10 +85,10 @@ export async function GET() {
       const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento || dadosCobranca.dataEmissao || cob.dataEmissao;
       if (!dataVenci) continue;
 
-      // TRAVA DE SEGURANÇA: O cliente pediu para ignorar lixo antigo (Meses 1, 2, 3, 4 e 5).
-      // Se o boleto venceu entre Janeiro e Maio, ele é completamente ignorado e não vai pro Supabase.
-      const mesVencimentoInt = parseInt(dataVenci.split('-')[1], 10);
-      if (mesVencimentoInt <= 5 && dataVenci.startsWith(anoBase.toString())) continue;
+      // ESCUDO DE TITÂNIO: Ignorar absolutamente TUDO o que vencer antes de 1º de Junho do ano atual.
+      // Isso extermina de vez o bug do lixo antigo (Ex: Ref: Dezembro Vence 20/01/2026).
+      const dataCorte = `${anoBase}-06-01`;
+      if (dataVenci < dataCorte) continue;
 
       // 2. Limpeza brutal do CPF/CNPJ (Garante que só sobram números para a comparação perfeita)
       const documentoPagador = (dadosCobranca.pagador?.cpfCnpj || dadosCobranca.pagador?.cnpjCpf || '').replace(/\D/g, '');
@@ -111,8 +111,10 @@ export async function GET() {
         const origem = dadosCobranca.origemRecebimento || cob.origemRecebimento || '';
         const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
         
-        // Pega a data de hoje no formato YYYY-MM-DD para saber se já passou do vencimento
-        const hojeStr = new Date().toISOString().split('T')[0];
+        // Pega a data de hoje correta no fuso horário para saber se já passou do vencimento
+        const dataLocal = new Date();
+        dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
+        const hojeStr = dataLocal.toISOString().split('T')[0];
 
         // 1. SE FOI PAGO OU ABATIDO (Dinheiro > 0 ou status de recebimento/abatimento)
         if (valorPago > 0 || sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
