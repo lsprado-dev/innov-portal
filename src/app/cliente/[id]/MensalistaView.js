@@ -2319,7 +2319,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                                 <>
                                   {estaExpirado ? (
                                     <button type="button" onClick={() => { setNovoPedido(`Gostaria de solicitar a 2ª via do boleto de ${mes.ref}, pois o anterior expirou.`); setDepartamentoPedido('Financeiro'); setAbaPrincipal('solicitacoes'); rolarPara('nova-solicitacao-form'); mostrarToast('Ticket preenchido!', 'aviso'); }} className="block w-full text-center text-[10px] border border-zinc-700 text-white bg-zinc-800 hover:bg-zinc-700 py-2 rounded font-bold transition shadow-sm uppercase">
-                                      Abrir Ticket p/ 2ª Via
+                                      Abrir Ticket p/ Pix
                                     </button>
                                   ) : (
                                     <>

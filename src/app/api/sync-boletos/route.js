@@ -29,25 +29,30 @@ export async function GET() {
     const key = Buffer.from(process.env.INTER_KEY_BASE64, 'base64').toString('ascii');
     const httpsAgent = new https.Agent({ cert, key });
 
-    const anoAtual = new Date().getFullYear().toString(); 
+    const anoBase = new Date().getFullYear();
     let cobrancasInter = [];
 
-    // MÁGICA: Divide o ano em 4 blocos de 90 dias e filtra pela DATA DE VENCIMENTO!
-    const trimestres = [
-      { ini: `${anoAtual}-01-01`, fim: `${anoAtual}-03-31` },
-      { ini: `${anoAtual}-04-01`, fim: `${anoAtual}-06-30` },
-      { ini: `${anoAtual}-07-01`, fim: `${anoAtual}-09-30` },
-      { ini: `${anoAtual}-10-01`, fim: `${anoAtual}-12-31` }
-    ];
+    // MÁGICA: O Banco Inter possui uma trava invisível: intervalos maiores que 90 dias retornam Erro 400.
+    // Trimestres como Q2 (91 dias) e Q3 (92 dias) faziam a API falhar silenciosamente e ignorar os boletos!
+    // Correção: Varrer mês a mês, garantindo no máximo 31 dias por chamada, resolvendo o bug de vez.
+    const mesesBlocos = [];
+    for (let i = 1; i <= 12; i++) {
+      const mesStr = String(i).padStart(2, '0');
+      const ultimoDia = new Date(anoBase, i, 0).getDate();
+      mesesBlocos.push({
+        ini: `${anoBase}-${mesStr}-01`,
+        fim: `${anoBase}-${mesStr}-${ultimoDia}`
+      });
+    }
 
-    for (const tri of trimestres) {
+    for (const bloco of mesesBlocos) {
       let paginaAtual = 0;
       let totalPaginas = 1;
 
       while (paginaAtual < totalPaginas) {
         try {
           const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${tri.ini}&dataFinal=${tri.fim}&filtrarDataPor=VENCIMENTO&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
+            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${bloco.ini}&dataFinal=${bloco.fim}&filtrarDataPor=VENCIMENTO&tamanhoPagina=100&paginaAtual=${paginaAtual}`,
             { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
           );
           
@@ -58,7 +63,7 @@ export async function GET() {
           totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
           paginaAtual++;
         } catch (err) {
-          console.error(`Falha no trimestre ${tri.ini}:`, err.response?.data || err.message);
+          console.error(`Falha no bloco ${bloco.ini}:`, err.response?.data || err.message);
           break; 
         }
       }
