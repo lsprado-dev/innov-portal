@@ -2183,9 +2183,9 @@ export default function MensalistaView({ params: paramsPromise }) {
                 { id: 'contabil', nome: 'Contábil', desc: 'Balanços e DREs', icon: <IconFolderLarge /> },
                 { id: 'fiscal', nome: 'Fiscal', desc: 'Guias e Impostos', icon: <IconChartLarge /> },
                 { id: 'rh', nome: 'DP / RH', desc: 'Folhas e Recibos', icon: <IconUsersLarge /> },
-                { id: 'societario', nome: 'Societário', desc: 'Processos', icon: <IconSocietarioLarge /> },
                 { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
-                { id: 'financeiro', nome: 'Financeiro', desc: 'Controle de mensalidades', icon: <IconFinanceiroLarge /> }
+                { id: 'financeiro', nome: 'Financeiro', desc: 'Controle de mensalidades', icon: <IconFinanceiroLarge /> },
+                { id: 'societario', nome: 'Societário', desc: 'Processos', icon: <IconSocietarioLarge /> }
               ].map(pasta => {
                 const qtdNovos = !isInterno ? arquivosNaoLidos.filter(a => a.setor === pasta.id).length : 0;
                 return (
