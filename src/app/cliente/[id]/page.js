@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, use } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase'; // Ajuste o caminho se necessário
 import MensalistaView from './MensalistaView';
 import EspecialView from './EspecialView';
@@ -8,6 +9,10 @@ export default function ControladorCliente({ params }) {
   // Desempacota o ID (Padrão do Next.js App Router)
   const resolvedParams = use(params);
   const { id } = resolvedParams;
+  
+  // Lê a URL para ver se o cliente quer abrir a aba societário
+  const searchParams = useSearchParams();
+  const isViewEspecial = searchParams.get('view') === 'especial';
   
   const [tipoConta, setTipoConta] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -40,8 +45,8 @@ export default function ControladorCliente({ params }) {
     );
   }
 
-  // Se for da galera do Societário, manda para a tela nova!
-  if (tipoConta === 'especiais' || tipoConta === 'especial') {
+  // Se for da galera do Societário OU se pediu para ver o Societário, manda para a tela nova!
+  if (tipoConta === 'especiais' || tipoConta === 'especial' || isViewEspecial) {
     return <EspecialView params={params} />;
   }
 
