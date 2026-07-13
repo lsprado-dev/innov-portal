@@ -2230,20 +2230,25 @@ export default function MensalistaView({ params: paramsPromise }) {
                     const estaLiberado = hoje >= dataLiberacao || !!boletoInter;
                     const mesAbertura = dataLiberacao.getMonth() + 1; 
 
-                    // 3. Atualizando as lógicas de Status Definitivas (SEM DUPLICAR)
+                    // 3. Atualizando as lógicas de Status Definitivas (Baseado no Backend)
                     const isPagoAPI = boletoInter && (boletoInter.status === 'pago' || boletoInter.status === 'pago via pix');
                     const isMesAntigoPago = ['01', '02', '03', '04'].includes(mes.id);
-                    
                     const isPago = isPagoAPI || comprovanteEnviado || pagoManualmente || isMesAntigoPago;
-                    const emAtraso = boletoInter && (boletoInter.status === 'atrasado' || boletoInter.status === 'expirado');
+                    
+                    const emAtraso = boletoInter && boletoInter.status === 'atrasado';
+                    const estaExpirado = boletoInter && boletoInter.status === 'expirado';
                     const emAberto = boletoInter && boletoInter.status === 'pendente';
 
                     // Estilização inteligente do Card
                     let estiloCard = '';
                     if (isPago) {
                       estiloCard = 'bg-emerald-500/10 border-emerald-500/40';
+                    } else if (estaExpirado) {
+                      estiloCard = 'bg-black border-zinc-800 shadow-[0_0_15px_rgba(0,0,0,0.5)]';
                     } else if (emAtraso) {
-                      estiloCard = 'bg-red-500/5 border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.05)]';
+                      estiloCard = 'bg-red-500/10 border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.1)]';
+                    } else if (emAberto) {
+                      estiloCard = 'bg-blue-500/10 border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.1)]';
                     } else if (estaLiberado) {
                       estiloCard = 'bg-[#0d1b2a] border-zinc-700 shadow-[0_0_15px_rgba(212,175,55,0.05)]'; 
                     } else {
@@ -2256,8 +2261,8 @@ export default function MensalistaView({ params: paramsPromise }) {
                         {/* Cabeçalho do Card */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex-1">
-                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : emAtraso ? 'text-red-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
-                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaExpirado ? 'text-zinc-400' : emAtraso ? 'text-red-400' : emAberto ? 'text-blue-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
+                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : estaExpirado ? 'text-zinc-500 font-bold' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : emAberto ? 'text-blue-400/80' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
                               {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento ${diaVencimento} de ${mes.pag}`}
                             </p>
                             
@@ -2268,14 +2273,19 @@ export default function MensalistaView({ params: paramsPromise }) {
                                 </span>
                               </div>
                             )}
-                            {emAtraso && (
+                            {estaExpirado && !isPago && (
                               <div className="mt-2">
-                                <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse">Expirado</span>
+                                <span className="bg-zinc-800 text-white border border-zinc-600 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Expirado</span>
                               </div>
                             )}
-                            {emAberto && !isPago && !emAtraso && (
+                            {emAtraso && !isPago && !estaExpirado && (
                               <div className="mt-2">
-                                <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Em Aberto</span>
+                                <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse">Atrasado</span>
+                              </div>
+                            )}
+                            {emAberto && !isPago && !emAtraso && !estaExpirado && (
+                              <div className="mt-2">
+                                <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Em Aberto</span>
                               </div>
                             )}
                           </div>
@@ -2303,11 +2313,19 @@ export default function MensalistaView({ params: paramsPromise }) {
                             <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
                               {!isPagoAPI ? (
                                 <>
-                                  <a href={boletoInter.url_pdf} target="_blank" rel="noopener noreferrer" className="block w-full text-center text-[11px] bg-[#d4af37] text-[#0d1b2a] py-1.5 rounded font-bold hover:bg-yellow-500 transition shadow-md">Ver / Baixar Boleto</a>
-                                  <button type="button" onClick={() => { if (boletoInter.linha_digitavel) { navigator.clipboard.writeText(boletoInter.linha_digitavel); mostrarToast('Código copiado!', 'sucesso'); } }} className="block w-full text-center text-[10px] border border-zinc-600 text-zinc-300 py-1 rounded font-medium hover:bg-zinc-800 hover:text-white transition">Copiar Código</button>
+                                  {estaExpirado ? (
+                                    <button type="button" onClick={() => { setNovoPedido(`Gostaria de solicitar a 2ª via do boleto de ${mes.ref}, pois o anterior expirou.`); setDepartamentoPedido('Financeiro'); setAbaPrincipal('solicitacoes'); rolarPara('nova-solicitacao-form'); mostrarToast('Ticket preenchido!', 'aviso'); }} className="block w-full text-center text-[10px] border border-zinc-700 text-white bg-zinc-800 hover:bg-zinc-700 py-2 rounded font-bold transition shadow-sm uppercase">
+                                      Abrir Ticket p/ 2ª Via
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <a href={boletoInter.url_pdf} target="_blank" rel="noopener noreferrer" className={`block w-full text-center text-[11px] text-white py-1.5 rounded font-bold transition shadow-md ${emAtraso ? 'bg-red-500 hover:bg-red-400' : 'bg-blue-500 hover:bg-blue-400'}`}>Ver / Baixar Boleto</a>
+                                      <button type="button" onClick={() => { if (boletoInter.linha_digitavel) { navigator.clipboard.writeText(boletoInter.linha_digitavel); mostrarToast('Código copiado!', 'sucesso'); } }} className="block w-full text-center text-[10px] border border-zinc-600 text-zinc-300 py-1 rounded font-medium hover:bg-zinc-800 hover:text-white transition">Copiar Código</button>
+                                    </>
+                                  )}
                                   
-                                  {isInterno && (
-                                    <button type="button" onClick={() => handleBaixaManualBoleto(boletoInter)} className="block w-full text-center text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 py-1.5 rounded font-bold hover:bg-emerald-500 hover:text-black transition">
+                                  {isInterno && !estaExpirado && (
+                                    <button type="button" onClick={() => handleBaixaManualBoleto(boletoInter)} className="block w-full text-center text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 py-1.5 rounded font-bold hover:bg-emerald-500 hover:text-black transition mt-1">
                                       Dar Baixa Manual (PIX)
                                     </button>
                                   )}

@@ -85,17 +85,29 @@ export async function GET() {
 
       if (clienteMatch) {
         let statusInterno = 'pendente'; 
-        // 3. Deixa tudo em maiúsculo para não ter erro de Case Sensitivity
         const sit = (dadosCobranca.situacao || '').toUpperCase();
         
-        // 4. Verificação varrendo o JSON inteiro para não deixar escapar nenhum rastro de PIX
-        const isPix = sit.includes('PIX') || JSON.stringify(cob).toUpperCase().includes('PIX');
+        // MÁGICA: Verifica se pingou qualquer valor financeiro real nesse boleto
+        const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || dadosCobranca.valorPago || 0);
+        
+        // Pega a data de hoje no formato YYYY-MM-DD para saber se já passou do vencimento
+        const hojeStr = new Date().toISOString().split('T')[0];
 
-        // 5. Busca ampla e flexível pelos status (Qualquer variação de Recebido, Pago ou Marcado)
-        if (sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO')) {
-            statusInterno = isPix ? 'pago via pix' : 'pago';
-        } else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || sit.includes('EXPIRADO') || sit.includes('CANCELADO') || sit.includes('BAIXADO')) {
+        // 1. SE FOI PAGO OU ABATIDO (Dinheiro > 0 ou status de recebimento/abatimento)
+        if (valorPago > 0 || sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
+            statusInterno = 'pago';
+        } 
+        // 2. SE O BANCO MATOU O BOLETO DE VEZ (Cancelado, Baixado ou Expirado)
+        else if (sit.includes('CANCELADO') || sit.includes('BAIXADO') || sit.includes('EXPIRADO')) {
             statusInterno = 'expirado';
+        } 
+        // 3. SE ATRASOU MAS AINDA ESTÁ VIVO (Passou da data de vencimento, mas não foi cancelado)
+        else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || dadosCobranca.dataVencimento < hojeStr) {
+            statusInterno = 'atrasado';
+        } 
+        // 4. SE ESTÁ TUDO OK NO PRAZO
+        else {
+            statusInterno = 'pendente';
         }
 
         const mesRefCorreto = obterMesRef(dadosCobranca.dataVencimento);
