@@ -67,7 +67,7 @@ const CICLO_FINANCEIRO = [
   { id: '09', ref: 'Setembro', pag: 'Outubro' },
   { id: '10', ref: 'Outubro', pag: 'Novembro' },
   { id: '11', ref: 'Novembro', pag: 'Dezembro' },
-  { id: '12', ref: 'Dezembro', pag: 'Jan de 2027' }
+  { id: '12', ref: 'Dezembro', pag: 'Janeiro (Ano Seg.)' }
 ];
 
 const IconFolderSolid = () => <svg className="w-6 h-6 text-[#d4af37]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>;
@@ -521,7 +521,11 @@ export default function MensalistaView({ params: paramsPromise }) {
       const cobrancas = data.filter(a => a.tipo_alerta === 'cobranca' || !a.tipo_alerta);
       const lembretes = data.filter(a => a.tipo_alerta === 'lembrete');
 
-      const hoje = new Date().toISOString().split('T')[0];
+      // Correção de Fuso: Evita que o prazo expire horas mais cedo devido ao fuso UTC
+      const dataLocal = new Date();
+      dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
+      const hoje = dataLocal.toISOString().split('T')[0];
+      
       const atrasados = cobrancas.filter(a => a.prazo && a.prazo < hoje).length;
       
       setAlertasGlobaisAtrasados(atrasados);
