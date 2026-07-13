@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import https from 'https';
 
+// Subindo 4 níveis exatos para achar a pasta lib na raiz do projeto
 import { getInterToken } from '../../lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -30,25 +31,20 @@ export async function GET() {
 
     const dataLocal = new Date();
     dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
+    const anoBase = dataLocal.getFullYear();
     
-    // 1. JANELA DESLIZANTE DE 85 DIAS:
-    // Garante que não tomamos bloqueio do banco (Rate Limit) por excesso de requisições.
-    // Como a regra de negócio exige tudo dentro do mês, 85 dias cobrem Junho, Julho e o futuro próximo.
-    let dataFim = new Date(dataLocal);
-    dataFim.setDate(dataFim.getDate() + 25);
+    // 1. JANELA ÚNICA DE 89 DIAS (Corte exato a partir de 01/06)
+    // Reduz as requisições de 25 para apenas 2 chamadas mestras, evitando o bloqueio do Inter!
+    const strIni = `${anoBase}-06-01`;
     
-    let dataIni = new Date(dataFim);
-    dataIni.setDate(dataIni.getDate() - 85);
-    
-    // Trava rígida: Nunca puxar lixo antes de 1º de Junho.
-    const corteJunho = new Date('2026-06-01T00:00:00Z');
-    if (dataIni < corteJunho) dataIni = corteJunho;
-
-    const strIni = dataIni.toISOString().split('T')[0];
+    const dataFim = new Date(`${anoBase}-06-01T12:00:00Z`);
+    dataFim.setDate(dataFim.getDate() + 89);
     const strFim = dataFim.toISOString().split('T')[0];
 
-    const tiposDeFiltro = ['VENCIMENTO', 'EMISSAO', 'PAGAMENTO'];
-    const boletosMap = new Map(); // 2. O MAPA MÁGICO: Impede que o Inter minta para nós.
+    // EMISSAO voltou! Precisamos dele para achar os boletos que foram "Marcados como Recebido" manualmente no Inter,
+    // pois eles somem do VENCIMENTO e não geram log de PAGAMENTO sistêmico.
+    const tiposDeFiltro = ['VENCIMENTO', 'PAGAMENTO', 'EMISSAO'];
+    const boletosMap = new Map();
 
     for (const tipoFiltro of tiposDeFiltro) {
       let paginaAtual = 0;
@@ -63,8 +59,7 @@ export async function GET() {
           
           const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
           
-          // DEDUPLICAÇÃO INTELIGENTE: Se o boleto já está na memória como PAGO, 
-          // não deixa o filtro de VENCIMENTO rebaixar ele para pendente!
+          // DEDUPLICAÇÃO INTELIGENTE COM PROTEÇÃO DE STATUS
           for (const cob of lista) {
             const cobRoot = cob.cobranca || cob;
             const bolRoot = cob.boleto || cob;
@@ -79,15 +74,19 @@ export async function GET() {
               const valorPago = parseFloat(cobRoot.valorTotalRecebido || cobRoot.valorRecebido || 0);
               
               if (sitNova.includes('RECEBIDO') || sitNova.includes('PAGO') || sitNova.includes('BAIXADO') || valorPago > 0) {
-                boletosMap.set(id, cob); // Mantém sempre a versão que atesta o pagamento
+                boletosMap.set(id, cob); 
               }
             }
           }
 
           totalPaginas = response.data.totalPaginas || response.data.totalPages || 1;
           paginaAtual++;
+          
+          // DELAY ANTI-BLOQUEIO: Dá um respiro para o Banco Inter não derrubar a nossa conexão
+          await new Promise(r => setTimeout(r, 400));
+          
         } catch (err) {
-          console.error(`Falha no filtro ${tipoFiltro}:`, err.response?.data || err.message);
+          console.error(`Falha no filtro ${tipoFiltro} (Pág ${paginaAtual}):`, err.response?.data || err.message);
           break; 
         }
       }
@@ -102,12 +101,11 @@ export async function GET() {
       const dadosBoleto = cob.boleto || cob;
 
       const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento || dadosCobranca.dataEmissao || cob.dataEmissao;
-      if (!dataVenci) continue;
+      if (!dataVenci || dataVenci < strIni) continue; // Escudo que bloqueia lixo anterior a 01/06
 
-      // Escudo final de segurança
-      if (dataVenci < '2026-06-01') continue;
-
-      const documentoPagador = (dadosCobranca.pagador?.cpfCnpj || dadosCobranca.pagador?.cnpjCpf || '').replace(/\D/g, '');
+      // Extração Blindada do CNPJ para garantir que bate com o portal
+      const pagador = dadosCobranca.pagador || cob.pagador || {};
+      const documentoPagador = (pagador.cpfCnpj || pagador.cnpjCpf || pagador.numeroCpfCnpj || pagador.cpf || pagador.cnpj || '').replace(/\D/g, '');
       if (!documentoPagador) continue;
       
       const clienteMatch = clientesSupabase.find(c => {
@@ -122,18 +120,32 @@ export async function GET() {
         const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || dadosCobranca.valorPago || 0);
         const recebimentos = dadosCobranca.recebimentos || cob.recebimentos || [];
         const origem = dadosCobranca.origemRecebimento || cob.origemRecebimento || '';
-        const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX');
+        
+        // Se foi marcado manualmente como recebido, o sistema injeta a flag isPix para o painel ficar verde como você pediu.
+        const isMarcadoManual = sit.includes('MARCADO') || sit === 'RECEBIDO';
+        const isPix = sit.includes('RECEBIDO_PIX') || origem === 'PIX' || recebimentos.some(r => r.origemRecebimento === 'PIX') || isMarcadoManual;
         
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
+        // LÓGICA REFINADA: SEPARANDO CANCELADO DE EXPIRADO
         if (valorPago > 0 || sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
             statusInterno = isPix ? 'pago via pix' : 'pago';
-        } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO') || sit.includes('EXPIRADO')) {
+        } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO')) {
+            statusInterno = 'cancelado';
+        } else if (sit.includes('EXPIRADO')) {
             statusInterno = 'expirado';
-        } else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || dataVenci < hojeStr) {
-            statusInterno = 'atrasado';
         } else {
-            statusInterno = 'pendente';
+            // Regra do 1 mês: Se passou 30 dias do vencimento e não foi pago, forçamos o status para expirado
+            const dataVencimentoDate = new Date(`${dataVenci}T12:00:00Z`);
+            const diffDias = (dataLocal - dataVencimentoDate) / (1000 * 3600 * 24);
+            
+            if (diffDias > 30) {
+                statusInterno = 'expirado';
+            } else if (sit.includes('VENCIDO') || sit.includes('ATRASADO') || dataVenci < hojeStr) {
+                statusInterno = 'atrasado';
+            } else {
+                statusInterno = 'pendente';
+            }
         }
 
         const mesRefCorreto = obterMesRef(dataVenci);
@@ -156,7 +168,6 @@ export async function GET() {
         }
 
         await supabaseAdmin.from('boletos_api').upsert(payloadUpsert, { onConflict: 'nosso_numero' });
-
         importados++;
       }
     }

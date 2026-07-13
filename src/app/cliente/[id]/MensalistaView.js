@@ -2241,18 +2241,21 @@ export default function MensalistaView({ params: paramsPromise }) {
                     
                     const emAtraso = boletoInter && boletoInter.status === 'atrasado';
                     const estaExpirado = boletoInter && boletoInter.status === 'expirado';
+                    const estaCancelado = boletoInter && boletoInter.status === 'cancelado';
                     const emAberto = boletoInter && boletoInter.status === 'pendente';
 
                     // Estilização inteligente do Card
                     let estiloCard = '';
                     if (isPago) {
                       estiloCard = 'bg-emerald-500/10 border-emerald-500/40';
+                    } else if (estaCancelado) {
+                      estiloCard = 'bg-zinc-900 border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.1)]'; 
                     } else if (estaExpirado) {
                       estiloCard = 'bg-black border-zinc-800 shadow-[0_0_15px_rgba(0,0,0,0.5)]';
                     } else if (emAtraso) {
                       estiloCard = 'bg-red-500/10 border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.1)]';
                     } else if (emAberto) {
-                      estiloCard = 'bg-blue-500/10 border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.1)]';
+                      estiloCard = 'bg-blue-500/10 border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.1)]'; 
                     } else if (estaLiberado) {
                       estiloCard = 'bg-[#0d1b2a] border-zinc-700 shadow-[0_0_15px_rgba(212,175,55,0.05)]'; 
                     } else {
@@ -2265,8 +2268,8 @@ export default function MensalistaView({ params: paramsPromise }) {
                         {/* Cabeçalho do Card */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex-1">
-                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaExpirado ? 'text-zinc-400' : emAtraso ? 'text-red-400' : emAberto ? 'text-blue-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
-                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : estaExpirado ? 'text-zinc-500 font-bold' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : emAberto ? 'text-blue-400/80' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaCancelado ? 'text-red-400/70' : estaExpirado ? 'text-zinc-400' : emAtraso ? 'text-red-400' : emAberto ? 'text-blue-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
+                            <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : (estaExpirado || estaCancelado) ? 'text-zinc-500 font-bold' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : emAberto ? 'text-blue-400/80' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
                               {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento ${diaVencimento} de ${mes.pag}`}
                             </p>
                             
@@ -2282,12 +2285,17 @@ export default function MensalistaView({ params: paramsPromise }) {
                                 <span className="bg-zinc-800 text-white border border-zinc-600 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Expirado</span>
                               </div>
                             )}
-                            {emAtraso && !isPago && !estaExpirado && (
+                            {estaCancelado && !isPago && (
+                              <div className="mt-2">
+                                <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Cancelado</span>
+                              </div>
+                            )}
+                            {emAtraso && !isPago && !estaExpirado && !estaCancelado && (
                               <div className="mt-2">
                                 <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse">Atrasado</span>
                               </div>
                             )}
-                            {emAberto && !isPago && !emAtraso && !estaExpirado && (
+                            {emAberto && !isPago && !emAtraso && !estaExpirado && !estaCancelado && (
                               <div className="mt-2">
                                 <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">Em Aberto</span>
                               </div>
@@ -2317,9 +2325,9 @@ export default function MensalistaView({ params: paramsPromise }) {
                             <div className="flex flex-col gap-1.5 pointer-events-auto mt-1">
                               {!isPagoAPI ? (
                                 <>
-                                  {estaExpirado ? (
-                                    <button type="button" onClick={() => { setNovoPedido(`Gostaria de solicitar a 2ª via do boleto de ${mes.ref}, pois o anterior expirou.`); setDepartamentoPedido('Financeiro'); setAbaPrincipal('solicitacoes'); rolarPara('nova-solicitacao-form'); mostrarToast('Ticket preenchido!', 'aviso'); }} className="block w-full text-center text-[10px] border border-zinc-700 text-white bg-zinc-800 hover:bg-zinc-700 py-2 rounded font-bold transition shadow-sm uppercase">
-                                      Abrir Ticket p/ Pix
+                                  {(estaExpirado || estaCancelado) ? (
+                                    <button type="button" onClick={() => { setNovoPedido(`Gostaria de solicitar a 2ª via do boleto de ${mes.ref}, pois o anterior foi ${estaCancelado ? 'cancelado' : 'expirado'}.`); setDepartamentoPedido('Financeiro'); setAbaPrincipal('solicitacoes'); rolarPara('nova-solicitacao-form'); mostrarToast('Ticket preenchido!', 'aviso'); }} className="block w-full text-center text-[10px] border border-zinc-700 text-white bg-zinc-800 hover:bg-zinc-700 py-2 rounded font-bold transition shadow-sm uppercase">
+                                      Abrir Ticket p/ 2ª Via
                                     </button>
                                   ) : (
                                     <>
