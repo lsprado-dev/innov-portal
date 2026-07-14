@@ -2285,12 +2285,17 @@ export default function AdminPage() {
                         
                         {/* 🚀 O CARD INFORMATIVO DE PROCESSOS MÚLTIPLOS (Só aparece na aba Societário) */}
                         {isEspecial && (
-                          <div className="mt-5 p-4 bg-[#1b263b] rounded-lg border border-purple-500/20 text-center">
+                          <div className="mt-5 p-3 bg-[#1b263b] rounded-lg border border-purple-500/20 text-center flex flex-col justify-center items-center min-h-[88px]">
                             {quantidadeProcessos === 0 ? (
-                              <p className="text-xs text-zinc-500 italic">Nenhum processo iniciado.</p>
+                              <>
+                                <p className="text-xs text-zinc-400 font-bold mb-1">Nenhum processo iniciado.</p>
+                                <p className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight">
+                                  Para começar, clique em <strong className="text-purple-400">Perfil</strong> e <strong className="text-purple-400">+ Novo Processo</strong>
+                                </p>
+                              </>
                             ) : (
                               <>
-                                <span className="text-3xl font-black text-purple-400 block mb-1">{quantidadeProcessos}</span>
+                                <span className="text-3xl font-black text-purple-400 block mb-1 leading-none">{quantidadeProcessos}</span>
                                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
                                   {quantidadeProcessos > 1 ? 'Processos Ativos' : 'Processo Ativo'}
                                 </span>
