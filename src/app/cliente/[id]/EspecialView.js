@@ -657,8 +657,8 @@ export default function EspecialView({ params }) {
                   <button onClick={() => setSubAbaStatus('finalizados')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${subAbaStatus === 'finalizados' ? 'bg-emerald-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'}`}>Finalizados</button>
                 </div>
               </div>
-              {isInterno && (
-                <button onClick={() => { setFormProcesso({ titulo: '', passo: 1, valor_honorarios: '', valor_entrada: '' }); setModalProcesso({ aberto: true, tipo: 'novo', processo: null }); }} className="bg-purple-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg w-full sm:w-auto">
+             {isInterno && (
+                <button onClick={() => { setFormProcesso({ titulo: '', passo: 1, valor_honorarios: '', valor_entrada: '' }); setListaTaxas([]); setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix(''); setModalProcesso({ aberto: true, tipo: 'novo', processo: null }); }} className="bg-purple-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg w-full sm:w-auto">
                   + Novo Processo
                 </button>
               )}

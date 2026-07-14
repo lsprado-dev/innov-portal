@@ -1249,7 +1249,7 @@ export default function AdminPage() {
       nome_contato: formManual.nome_contato,
       email: formManual.email,
       celular: formManual.celular,
-      regime_tributario: isEspecial ? 'Pessoa Física' : formManual.regime_tributario,
+      regime_tributario: formManual.regime_tributario,
       tipo_conta: isEspecial ? 'especiais' : 'mensalista',
       senha: encriptarSenha(docNumeros.substring(0, 6)),
       senha_alterada: false
@@ -1330,7 +1330,7 @@ export default function AdminPage() {
               nome_contato: colunas[2] || '',
               email: colunas[3] || '',
               celular: colunas[4] || '',
-              regime_tributario: 'Pessoa Física',
+              regime_tributario: 'Simples Nacional',
               tipo_conta: 'especiais'
             });
           } else {
