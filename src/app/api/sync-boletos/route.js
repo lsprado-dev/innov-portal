@@ -32,15 +32,19 @@ export async function GET() {
     const dataLocal = new Date();
     dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
     
-    // 1. JANELA DINÂMICA DE 89 DIAS (Garante que não perde os boletos do mês atual/futuro!)
-    // Puxa 60 dias para trás e 29 dias para a frente, respeitando o limite da API V3.
-    const dataFim = new Date(dataLocal);
-    dataFim.setDate(dataFim.getDate() + 29);
-    const strFim = dataFim.toISOString().split('T')[0];
-    
-    const dataInicio = new Date(dataLocal);
-    dataInicio.setDate(dataInicio.getDate() - 60);
-    const strIni = dataInicio.toISOString().split('T')[0];
+    // MÁGICA 1: Janela do Passado (Garante que NÃO PERDE os 90 dias de boletos antigos)
+    const dataInicioBase = new Date(dataLocal);
+    dataInicioBase.setDate(dataInicioBase.getDate() - 89);
+    const strIniBase = dataInicioBase.toISOString().split('T')[0];
+    const strFimBase = dataLocal.toISOString().split('T')[0];
+
+    // MÁGICA 2: Janela do Futuro (Garante que PUXA os boletos a vencer este mês)
+    const dataInicioFuturo = new Date(dataLocal);
+    dataInicioFuturo.setDate(dataInicioFuturo.getDate() - 44);
+    const strIniFuturo = dataInicioFuturo.toISOString().split('T')[0];
+    const dataFimFuturo = new Date(dataLocal);
+    dataFimFuturo.setDate(dataFimFuturo.getDate() + 45); // Total 89 dias
+    const strFimFuturo = dataFimFuturo.toISOString().split('T')[0];
 
     // EMISSAO voltou! Precisamos dele para achar os boletos que foram "Marcados como Recebido" manualmente no Inter,
     // pois eles somem do VENCIMENTO e não geram log de PAGAMENTO sistêmico.
@@ -50,6 +54,10 @@ export async function GET() {
     for (const tipoFiltro of tiposDeFiltro) {
       let paginaAtual = 0;
       let temMaisPaginas = true;
+
+      // Alterna a janela de acordo com o filtro para não estourar o limite de 90 dias do Inter!
+      const strIni = tipoFiltro === 'VENCIMENTO' ? strIniFuturo : strIniBase;
+      const strFim = tipoFiltro === 'VENCIMENTO' ? strFimFuturo : strFimBase;
 
       while (temMaisPaginas) {
         try {
@@ -107,7 +115,7 @@ export async function GET() {
       const dadosBoleto = cob.boleto || cob;
 
       const dataVenci = dadosCobranca.dataVencimento || dadosBoleto?.dataVencimento || cob.dataVencimento || dadosCobranca.dataEmissao || cob.dataEmissao;
-      if (!dataVenci || dataVenci < strIni) continue; // Escudo que bloqueia lixo anterior a 01/06
+      if (!dataVenci || dataVenci < strIniBase) continue; // Escudo que bloqueia lixo usando a data base mais antiga
 
       // Extração Blindada do CNPJ para garantir que bate com o portal
       const pagador = dadosCobranca.pagador || cob.pagador || {};
