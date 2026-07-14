@@ -197,21 +197,21 @@ export default function EspecialView({ params }) {
   }
 
   async function carregarDados() {
-    // 1. Carrega Cliente
-    const { data: cli } = await supabase.from('clientes').select('*').eq('id', id).single();
-    if (!cli) { router.push('/login'); return; }
-    setCliente(cli);
+    // 1. Dispara TODAS as buscas ao mesmo tempo (Paralelo = Muito mais rápido!)
+    const reqCli = supabase.from('clientes').select('*').eq('id', id).single();
+    const reqProcs = supabase.from('processos_societarios').select('*').eq('cliente_id', id).order('criado_em', { ascending: true });
+    const reqRecebidos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', 'societario').order('criado_em', { ascending: false });
+    const reqEnviados = supabase.from('envios_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
 
-    // 2. Carrega Processos Ativos
-    const { data: procs } = await supabase.from('processos_societarios').select('*').eq('cliente_id', id).order('criado_em', { ascending: true });
-    if (procs) setProcessos(procs);
+    // 2. Aguarda a resposta conjunta
+    const [resCli, resProcs, resRecebidos, resEnviados] = await Promise.all([reqCli, reqProcs, reqRecebidos, reqEnviados]);
 
-    // 3. Carrega Docs
-    const { data: recebidos } = await supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', 'societario').order('criado_em', { ascending: false });
-    if (recebidos) setDocsRecebidos(recebidos);
+    if (!resCli.data) { router.push('/login'); return; }
+    setCliente(resCli.data);
 
-    const { data: enviados } = await supabase.from('envios_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
-    if (enviados) setDocsEnviados(enviados);
+    if (resProcs.data) setProcessos(resProcs.data);
+    if (resRecebidos.data) setDocsRecebidos(resRecebidos.data);
+    if (resEnviados.data) setDocsEnviados(resEnviados.data);
   }
 
   useEffect(() => {

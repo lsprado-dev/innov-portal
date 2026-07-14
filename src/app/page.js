@@ -1164,7 +1164,7 @@ export default function AdminPage() {
       let { data: pastasLsprado } = await supabase.from('pastas_portal').select('*').eq('cliente_id', lsprado.id);
       if (!pastasLsprado || pastasLsprado.length === 0) return;
 
-      // 🧠 MÁGICA: Ordenação Topológica para garantir que a pasta Pai seja sempre criada ANTES da pasta Filha (Permite níveis infinitos)
+      // 🧠 MÁGICA: Ordenação Topológica
       const mapPais = {};
       pastasLsprado.forEach(sp => { mapPais[sp.id] = sp.parent_id; });
       const calcularProfundidade = (id) => {
@@ -1181,18 +1181,38 @@ export default function AdminPage() {
       pastasLsprado = pastasLsprado.sort((a, b) => calcularProfundidade(a.id) - calcularProfundidade(b.id));
 
       const mapaIds = {};
-      for (const pasta of pastasLsprado) {
+      const totalPastas = pastasLsprado.length;
+      
+      for (let i = 0; i < totalPastas; i++) {
+        const pasta = pastasLsprado[i];
+        
+        // FEEDBACK VISUAL EM TEMPO REAL COM A BARRA DE %
+        setProgressoSync({
+          fase: 1,
+          totalFases: 1,
+          nomeFase: 'Estruturando Pastas',
+          atual: i + 1,
+          total: totalPastas,
+          texto: pasta.nome,
+          tipo: 'pastas'
+        });
+
         const novaPastaPayload = {
           cliente_id: novoClienteId,
           setor: pasta.setor,
           nome: pasta.nome,
           parent_id: pasta.parent_id ? mapaIds[pasta.parent_id] : null,
-          id_drive_pasta: null // Fica nulo para o Sincronizador criar fisicamente depois
+          id_drive_pasta: null
         };
         const { data: novaPasta } = await supabase.from('pastas_portal').insert([novaPastaPayload]).select('id').single();
         if (novaPasta) mapaIds[pasta.id] = novaPasta.id;
       }
-    } catch(e) { console.error('Erro clone Lsprado:', e); }
+      
+      setProgressoSync(null); // Limpa a barra ao terminar
+    } catch(e) { 
+      console.error('Erro clone Lsprado:', e); 
+      setProgressoSync(null);
+    }
   }
 
   async function inicializarPastasDrive(clienteId, nomeEmpresa, mensagemSucesso) {
