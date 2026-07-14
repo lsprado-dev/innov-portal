@@ -73,7 +73,7 @@ export async function GET() {
               const sitNova = (cobRoot.situacao || '').toUpperCase();
               const valorPago = parseFloat(cobRoot.valorTotalRecebido || cobRoot.valorRecebido || 0);
               
-              if (sitNova.includes('RECEBIDO') || sitNova.includes('PAGO') || sitNova.includes('BAIXADO') || valorPago > 0) {
+              if (sitNova.includes('RECEBIDO') || sitNova === 'PAGO' || sitNova.includes('BAIXADO') || valorPago > 0) {
                 boletosMap.set(id, cob); 
               }
             }
@@ -121,7 +121,7 @@ export async function GET() {
         let statusInterno = 'pendente'; 
         const sit = (dadosCobranca.situacao || '').toUpperCase();
         
-        const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || dadosCobranca.valorPago || 0);
+        const valorPago = parseFloat(dadosCobranca.valorTotalRecebido || dadosCobranca.valorRecebido || 0);
         const recebimentos = dadosCobranca.recebimentos || cob.recebimentos || [];
         const origem = (dadosCobranca.origemRecebimento || cob.origemRecebimento || '').toUpperCase();
         
@@ -133,7 +133,7 @@ export async function GET() {
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
         // LÓGICA REFINADA: SEPARANDO CANCELADO DE EXPIRADO
-        if (valorPago > 0 || sit.includes('RECEBIDO') || sit.includes('PAGO') || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
+        if (valorPago > 0 || sit.includes('RECEBIDO') || sit === 'PAGO' || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
             statusInterno = isPix ? 'pago via pix' : 'pago';
         } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO')) {
             statusInterno = 'cancelado';
