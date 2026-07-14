@@ -32,12 +32,14 @@ export async function GET() {
     const dataLocal = new Date();
     dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
     
-    // 1. JANELA DINÂMICA DE 89 DIAS (Garante que nunca para de sincronizar o mês atual!)
-    // Puxa exatamente os últimos 89 dias até hoje, respeitando o limite da API V3.
-    const strFim = dataLocal.toISOString().split('T')[0];
+    // 1. JANELA DINÂMICA DE 89 DIAS (Garante que não perde os boletos do mês atual/futuro!)
+    // Puxa 60 dias para trás e 29 dias para a frente, respeitando o limite da API V3.
+    const dataFim = new Date(dataLocal);
+    dataFim.setDate(dataFim.getDate() + 29);
+    const strFim = dataFim.toISOString().split('T')[0];
     
     const dataInicio = new Date(dataLocal);
-    dataInicio.setDate(dataInicio.getDate() - 89);
+    dataInicio.setDate(dataInicio.getDate() - 60);
     const strIni = dataInicio.toISOString().split('T')[0];
 
     // EMISSAO voltou! Precisamos dele para achar os boletos que foram "Marcados como Recebido" manualmente no Inter,
@@ -133,7 +135,9 @@ export async function GET() {
         const hojeStr = dataLocal.toISOString().split('T')[0];
 
         // LÓGICA REFINADA: SEPARANDO CANCELADO DE EXPIRADO
-        if (valorPago > 0 || sit.includes('RECEBIDO') || sit === 'PAGO' || sit.includes('MARCADO') || sit.includes('ABATIDO')) {
+        const isPagoForte = valorPago > 0 || sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO' || sit.includes('RECEBIDO_PIX');
+        
+        if (isPagoForte) {
             statusInterno = isPix ? 'pago via pix' : 'pago';
         } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO')) {
             statusInterno = 'cancelado';
