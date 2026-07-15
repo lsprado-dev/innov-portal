@@ -2539,7 +2539,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                       {mostrarAutocomplete && busca.length > 0 && arquivosFiltradosDaBusca.length > 0 && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d1b2a] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                           {arquivosFiltradosDaBusca.map((arq) => (
-                            <div key={`auto-${arq.id}`} onClick={() => { setBusca(arq.nome_original); setMostrarAutocomplete(false); }} className="px-4 py-3 sm:py-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center">
+                            <div key={`auto-${arq.id}`} onMouseDown={(e) => { e.preventDefault(); setBusca(arq.nome_original); setMostrarAutocomplete(false); }} className="px-4 py-3 sm:py-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center">
                               <IconSearch /> {arq.nome_original}
                             </div>
                           ))}
@@ -2715,7 +2715,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                   {mostrarAutocomplete && busca.length > 0 && arquivosFiltradosDaBusca.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d1b2a] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                       {arquivosFiltradosDaBusca.map((arq) => (
-                        <div key={`auto-envio-${arq.id}`} onClick={() => { setBusca(arq.nome_documento); setMostrarAutocomplete(false); }} className="px-4 py-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center">
+                        <div key={`auto-envio-${arq.id}`} onMouseDown={(e) => { e.preventDefault(); setBusca(arq.nome_documento); setMostrarAutocomplete(false); }} className="px-4 py-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center">
                           <IconSearch /> {arq.nome_documento}
                         </div>
                       ))}
@@ -3851,7 +3851,8 @@ export default function MensalistaView({ params: paramsPromise }) {
                           .map((cli) => (
                           <div
                             key={`auto-link-${cli.id}`}
-                            onClick={() => {
+                            onMouseDown={(e) => {
+                              e.preventDefault();
                               setEmpresasLigadasForm([...empresasLigadasForm, cli]);
                               setBuscaLink('');
                               setMostrarAutoLink(false);

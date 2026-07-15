@@ -2692,7 +2692,7 @@ export default function AdminPage() {
                           {mostrarAutoAlerta && buscaAlertaInput.length > 0 && clientesParaAlerta.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-[#1b263b] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                               {clientesParaAlerta.map((cli) => (
-                                <div key={`auto-push-cli-${cli.id}`} onClick={() => { setFormPush({...formPush, alvo: 'clientes'}); adicionarClienteAlerta(cli); }} className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between">
+                                <div key={`auto-push-cli-${cli.id}`} onMouseDown={(e) => { e.preventDefault(); setFormPush({...formPush, alvo: 'clientes'}); adicionarClienteAlerta(cli); }} className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between">
                                   <span className="flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</span>
                                   <span className="text-[10px] text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">{cli.regime_tributario}</span>
                                 </div>
@@ -2783,7 +2783,7 @@ export default function AdminPage() {
                       {mostrarAutoAlerta && buscaAlertaInput.length > 0 && clientesParaAlerta.length > 0 && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-[#1b263b] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                           {clientesParaAlerta.map((cli) => (
-                            <div key={`auto-cli-${cli.id}`} onClick={() => adicionarClienteAlerta(cli)} className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between">
+                            <div key={`auto-cli-${cli.id}`} onMouseDown={(e) => { e.preventDefault(); adicionarClienteAlerta(cli); }} className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between">
                               <span className="flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</span>
                               <span className="text-[10px] text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">{cli.regime_tributario}</span>
                             </div>
