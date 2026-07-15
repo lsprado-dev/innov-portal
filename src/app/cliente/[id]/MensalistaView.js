@@ -57,7 +57,6 @@ const IconFinanceiroLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" f
 
 // Nova inteligência de meses do Financeiro
 const CICLO_FINANCEIRO = [
-  { id: '01', ref: 'Janeiro', servico: 'Dez', pag: 'Janeiro' },
   { id: '02', ref: 'Fevereiro', servico: 'Jan', pag: 'Fevereiro' },
   { id: '03', ref: 'Março', servico: 'Fev', pag: 'Março' },
   { id: '04', ref: 'Abril', servico: 'Mar', pag: 'Abril' },
@@ -68,7 +67,8 @@ const CICLO_FINANCEIRO = [
   { id: '09', ref: 'Setembro', servico: 'Ago', pag: 'Setembro' },
   { id: '10', ref: 'Outubro', servico: 'Set', pag: 'Outubro' },
   { id: '11', ref: 'Novembro', servico: 'Out', pag: 'Novembro' },
-  { id: '12', ref: 'Dezembro', servico: 'Nov', pag: 'Dezembro' }
+  { id: '12', ref: 'Dezembro', servico: 'Nov', pag: 'Dezembro' },
+  { id: '13', ref: 'Janeiro', servico: 'Dez', pag: 'Janeiro 26' }
 ];
 
 const IconFolderSolid = () => <svg className="w-6 h-6 text-[#d4af37]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>;
@@ -2260,9 +2260,6 @@ export default function MensalistaView({ params: paramsPromise }) {
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {CICLO_FINANCEIRO.map((mes) => {
-                    // Oculta visualmente o card de Janeiro (Ref. Dez do ano passado) sem quebrar a lógica
-                    if (mes.id === '01') return null;
-
                     const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); 
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
                     const pagoManualmente = mensalidadesPagas.includes(mes.ref);
