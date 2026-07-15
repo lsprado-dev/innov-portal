@@ -395,9 +395,10 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (!error) {
       mostrarToast('Dados cadastrais atualizados com sucesso!', 'sucesso');
-      setCliente({ ...cliente, ...formEditar });
+      setCliente({ ...cliente, ...formEditar, dia_vencimento: parseInt(formEditar.dia_vencimento, 10) });
       setModalEditarCliente(false);
       await registrarAuditoria('CLIENTE_EDITADO', `Editou os dados cadastrais da empresa ${formEditar.nome_empresa}.`);
+      if (parseInt(formEditar.dia_vencimento, 10) === 99 && pastaAtiva === 'financeiro') setPastaAtiva('contabil');
     } else {
       mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
     }
@@ -1515,8 +1516,9 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (!error) {
       setCliente({ ...cliente, dia_vencimento: diaNum });
-      mostrarToast(`Vencimento atualizado para o dia ${diaNum}!`, 'sucesso');
-      await registrarAuditoria('CLIENTE_EDITADO', `Alterou o dia de vencimento para ${diaNum}.`);
+      mostrarToast(diaNum === 99 ? 'Cliente configurado como Isento!' : `Vencimento atualizado para o dia ${diaNum}!`, 'sucesso');
+      await registrarAuditoria('CLIENTE_EDITADO', `Alterou o ciclo do financeiro para ${diaNum === 99 ? 'Isento' : diaNum}.`);
+      if (diaNum === 99 && pastaAtiva === 'financeiro') setPastaAtiva('contabil');
     } else {
       mostrarToast('Erro ao atualizar vencimento: ' + error.message, 'erro');
     }
@@ -2186,7 +2188,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                 { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
                 { id: 'financeiro', nome: 'Financeiro', desc: 'Controle de mensalidades', icon: <IconFinanceiroLarge /> },
                 { id: 'societario', nome: 'Societário', desc: 'Processos', icon: <IconSocietarioLarge /> }
-              ].map(pasta => {
+              ].filter(pasta => !(pasta.id === 'financeiro' && parseInt(cliente?.dia_vencimento, 10) === 99)).map(pasta => {
                 const qtdNovos = !isInterno ? arquivosNaoLidos.filter(a => a.setor === pasta.id).length : 0;
                 return (
                   <button key={pasta.id} onClick={() => { 
@@ -2253,6 +2255,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                         <option value="26">Dia 26 (Abre dia 15)</option>
                         <option value="30">Dia 30 (Abre dia 20)</option>
                         <option value="10">Dia 10 (Abre dia 01)</option>
+                        <option value="99">Isenta (Ocultar Aba)</option>
                       </select>
                     </div>
                   )}
@@ -3768,6 +3771,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                   <option value="26">Especial - Vence dia 26 (Abre dia 15)</option>
                   <option value="30">Especial - Vence dia 30 (Abre dia 20)</option>
                   <option value="10">Especial - Vence dia 10 (Abre dia 01)</option>
+                  <option value="99">Isenta (Oculta Aba Financeiro)</option>
                 </select>
               </div>
 
