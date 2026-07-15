@@ -14,10 +14,11 @@ const supabaseAdmin = createClient(
 function obterMesRef(dataVencimento) {
   if (!dataVencimento) return 'Desconhecido';
   const mesVencimento = parseInt(dataVencimento.split('-')[1], 10);
+  // route.js - Função obterMesRef (Alinhado)
   const mapa = {
-    1: 'Dezembro', 2: 'Janeiro', 3: 'Fevereiro', 4: 'Março',
-    5: 'Abril', 6: 'Maio', 7: 'Junho', 8: 'Julho',
-    9: 'Agosto', 10: 'Setembro', 11: 'Outubro', 12: 'Novembro'
+    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
   };
   return mapa[mesVencimento] || 'Desconhecido';
 }
@@ -145,12 +146,13 @@ export async function GET() {
         // LÓGICA REFINADA: SEPARANDO CANCELADO DE EXPIRADO
         const isPagoForte = valorPago > 0 || sit === 'RECEBIDO' || sit === 'PAGO' || sit === 'MARCADO_RECEBIDO' || sit.includes('RECEBIDO_PIX');
         
-        if (isPagoForte) {
-            statusInterno = isPix ? 'pago via pix' : 'pago';
+        // route.js - Lógica de Status (Prioridade para encerramento de ciclo)
+        if (sit.includes('EXPIRADO')) {
+            statusInterno = 'expirado';
         } else if (sit.includes('CANCELADO') || sit.includes('BAIXADO')) {
             statusInterno = 'cancelado';
-        } else if (sit.includes('EXPIRADO')) {
-            statusInterno = 'expirado';
+        } else if (isPagoForte) {
+            statusInterno = isPix ? 'pago via pix' : 'pago';
         } else {
             // Regra do 1 mês: Se passou 30 dias do vencimento e não foi pago, forçamos o status para expirado
             const dataVencimentoDate = new Date(`${dataVenci}T12:00:00Z`);
