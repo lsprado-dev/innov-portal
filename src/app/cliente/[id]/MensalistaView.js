@@ -380,25 +380,60 @@ export default function MensalistaView({ params: paramsPromise }) {
   // NOVO: Estados para edição manual do cliente pelo Admin na página do cliente
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
   const [formEditar, setFormEditar] = useState({ nome_empresa: '', nome_contato: '', email: '', celular: '', dia_vencimento: 20 });
+  
+  // ESTADOS MÁGICOS PARA O VÍNCULO DIRETO DO ADMIN
+  const [todosClientesParaLink, setTodosClientesParaLink] = useState([]);
+  const [buscaLink, setBuscaLink] = useState('');
+  const [empresasLigadasForm, setEmpresasLigadasForm] = useState([]);
+  const [mostrarAutoLink, setMostrarAutoLink] = useState(false);
 
   async function handleSalvarEdicaoManual(e) {
     e.preventDefault();
     setSubindoArquivo(true);
+
+    const novosVinculosIds = empresasLigadasForm.map(e => e.id);
+    const velhosVinculosIds = cliente.empresas_vinculadas || [];
     
     const { error } = await supabase.from('clientes').update({
       nome_empresa: formEditar.nome_empresa,
       nome_contato: formEditar.nome_contato,
       email: formEditar.email,
       celular: formEditar.celular,
-      dia_vencimento: parseInt(formEditar.dia_vencimento, 10)
+      dia_vencimento: parseInt(formEditar.dia_vencimento, 10),
+      empresas_vinculadas: novosVinculosIds
     }).eq('id', id);
 
     if (!error) {
+      // 🚀 MÁGICA: Espelhamento Automático de Vínculos!
+      const adicionados = novosVinculosIds.filter(vid => !velhosVinculosIds.includes(vid));
+      const removidos = velhosVinculosIds.filter(vid => !novosVinculosIds.includes(vid));
+
+      // 1. Vai nos adicionados e pluga o cabo da "nossa" empresa neles
+      for (const addedId of adicionados) {
+        const { data: d } = await supabase.from('clientes').select('empresas_vinculadas').eq('id', addedId).single();
+        if (d) {
+          const v = d.empresas_vinculadas || [];
+          if (!v.includes(id)) {
+            v.push(id);
+            await supabase.from('clientes').update({ empresas_vinculadas: v }).eq('id', addedId);
+          }
+        }
+      }
+
+      // 2. Vai nos removidos e arranca o cabo da "nossa" empresa deles
+      for (const remId of removidos) {
+        const { data: d } = await supabase.from('clientes').select('empresas_vinculadas').eq('id', remId).single();
+        if (d) {
+          const v = (d.empresas_vinculadas || []).filter(x => x !== id);
+          await supabase.from('clientes').update({ empresas_vinculadas: v }).eq('id', remId);
+        }
+      }
+
       mostrarToast('Dados cadastrais atualizados com sucesso!', 'sucesso');
-      setCliente({ ...cliente, ...formEditar, dia_vencimento: parseInt(formEditar.dia_vencimento, 10) });
+      setCliente({ ...cliente, ...formEditar, dia_vencimento: parseInt(formEditar.dia_vencimento, 10), empresas_vinculadas: novosVinculosIds });
+      setEmpresasLigadas(empresasLigadasForm); // Atualiza o Switcher de cara!
       setModalEditarCliente(false);
       await registrarAuditoria('CLIENTE_EDITADO', `Editou os dados cadastrais da empresa ${formEditar.nome_empresa}.`);
-      // Admin continua na aba e pode reverter a qualquer momento
     } else {
       mostrarToast('Erro ao atualizar: ' + error.message, 'erro');
     }
@@ -2032,7 +2067,14 @@ export default function MensalistaView({ params: paramsPromise }) {
                           celular: cliente.celular || '',
                           dia_vencimento: cliente.dia_vencimento || 20
                         });
+                        setEmpresasLigadasForm([...empresasLigadas]);
+                        setBuscaLink('');
                         setModalEditarCliente(true);
+                        
+                        // 🚀 Busca rápida de empresas para o campo de pesquisa
+                        supabase.from('clientes').select('id, nome_empresa, cnpj').neq('id', id).then(({data}) => {
+                          if (data) setTodosClientesParaLink(data);
+                        });
                       }
                     }}
                     title={isInterno ? "Clique para editar os dados cadastrais" : ""}
@@ -3786,6 +3828,66 @@ export default function MensalistaView({ params: paramsPromise }) {
                   <option value="10">Especial - Vence dia 10 (Abre dia 01)</option>
                   <option value="99">Isenta (Oculta Aba Financeiro)</option>
                 </select>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-4 mt-2">
+                <label className="block text-[10px] font-bold text-blue-400 uppercase mb-2">Vincular Empresas (Máx: 5)</label>
+                
+                {empresasLigadasForm.length < 5 && (
+                  <div className="relative mb-3">
+                    <input
+                      type="text"
+                      placeholder="Pesquisar por nome ou CNPJ..."
+                      value={buscaLink}
+                      onChange={(e) => { setBuscaLink(e.target.value); setMostrarAutoLink(true); }}
+                      onFocus={() => setMostrarAutoLink(true)}
+                      onBlur={() => setTimeout(() => setMostrarAutoLink(false), 200)}
+                      className="w-full bg-[#0d1b2a] border border-blue-500/30 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-400"
+                    />
+                    {mostrarAutoLink && buscaLink.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d1b2a] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
+                        {todosClientesParaLink
+                          .filter(c => (c.nome_empresa?.toLowerCase().includes(buscaLink.toLowerCase()) || c.cnpj?.includes(buscaLink)) && !empresasLigadasForm.some(l => l.id === c.id))
+                          .map((cli) => (
+                          <div
+                            key={`auto-link-${cli.id}`}
+                            onClick={() => {
+                              setEmpresasLigadasForm([...empresasLigadasForm, cli]);
+                              setBuscaLink('');
+                              setMostrarAutoLink(false);
+                            }}
+                            className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between"
+                          >
+                            <span className="truncate pr-2">{cli.nome_empresa}</span>
+                            <span className="text-[10px] text-zinc-500 flex-shrink-0">{cli.cnpj}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {empresasLigadasForm.length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic">Nenhuma empresa vinculada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {empresasLigadasForm.map(emp => (
+                      <div key={emp.id} className="flex justify-between items-center bg-[#0d1b2a] border border-blue-500/20 p-2.5 rounded-lg">
+                        <div className="truncate pr-2">
+                          <p className="text-xs font-bold text-white truncate">{emp.nome_empresa}</p>
+                          <p className="text-[10px] text-zinc-500 truncate">{emp.cnpj}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEmpresasLigadasForm(empresasLigadasForm.filter(e => e.id !== emp.id))}
+                          className="text-[10px] bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded transition whitespace-nowrap font-bold"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-zinc-800 mt-2">
