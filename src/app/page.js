@@ -237,9 +237,9 @@ export default function AdminPage() {
   }
 
   // SISTEMA DE CONFIRMAÇÃO PREMIUM (Adeus confirm nativo)
-  const [dialogo, setDialogo] = useState({ aberto: false, titulo: '', mensagem: '', acao: null, tipo: 'perigo' });
-  function confirmarAcao(titulo, mensagem, acao, tipo = 'perigo') {
-    setDialogo({ aberto: true, titulo, mensagem, acao, tipo });
+  const [dialogo, setDialogo] = useState({ aberto: false, titulo: '', mensagem: '', acao: null, tipo: 'perigo', btnCancelar: 'Cancelar', btnConfirmar: 'Confirmar' });
+  function confirmarAcao(titulo, mensagem, acao, tipo = 'perigo', btnCancelar = 'Cancelar', btnConfirmar = 'Confirmar') {
+    setDialogo({ aberto: true, titulo, mensagem, acao, tipo, btnCancelar, btnConfirmar });
   }
 
   // NOVO: LÊ O CLIQUE DO E-MAIL MATINAL DOS GESTORES E FILTRA SOZINHO!
@@ -1528,9 +1528,11 @@ export default function AdminPage() {
     if (isCoringa) {
       confirmarAcao(
         'Acesso Negado 🛑', 
-        '(conta mestra, nao delete essa pasta vai quebrar o sistema, mas vc nao vai fazer mesmo pq eu bloqueia essa funcao kkk)', 
+        '(conta mestra, deletar isso vai quebrar o sistema, mas vc nao vai fazer mesmo pq eu bloqueia essa funcao rs)', 
         () => {}, 
-        'aviso'
+        'aviso',
+        'Cancelar',
+        'TÁ BOM, CANCELAR'
       );
       return; 
     }
@@ -3446,13 +3448,13 @@ export default function AdminPage() {
                 onClick={() => setDialogo({ ...dialogo, aberto: false })} 
                 className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg transition"
               >
-                Cancelar
+                {dialogo.btnCancelar || 'Cancelar'}
               </button>
               <button 
-                onClick={() => { dialogo.acao(); setDialogo({ ...dialogo, aberto: false }); }} 
+                onClick={() => { if(dialogo.acao) dialogo.acao(); setDialogo({ ...dialogo, aberto: false }); }} 
                 className={`px-5 py-2.5 text-[#0d1b2a] text-sm font-extrabold rounded-lg transition shadow-lg ${dialogo.tipo === 'perigo' ? 'bg-red-500 hover:bg-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-[#d4af37] hover:bg-yellow-500 shadow-[0_0_15px_rgba(212,175,55,0.3)]'}`}
               >
-                Confirmar
+                {dialogo.btnConfirmar || 'Confirmar'}
               </button>
             </div>
           </div>
