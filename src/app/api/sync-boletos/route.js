@@ -23,7 +23,13 @@ function obterMesRef(dataVencimento) {
   return mapa[mesVencimento] || 'Desconhecido';
 }
 
-export async function GET() {
+export async function GET(request) {
+  // 🛡️ TRAVA DE SEGURANÇA: Lê a CRON_SECRET que já existe na sua Vercel
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Acesso Negado' }, { status: 401 });
+  }
+
   try {
     const token = await getInterToken();
     const cert = Buffer.from(process.env.INTER_CERT_BASE64, 'base64').toString('ascii');

@@ -16,7 +16,10 @@ export async function GET() {
       // ATENÇÃO: Confirme se este é o domínio correto do seu projeto na Vercel!
       { webhookUrl: 'https://portal.innovbusiness.com.br/api/webhooks/inter' }, 
       {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-conta-corrente': process.env.INTER_CONTA_CORRENTE // Adicione sua conta aqui (só números, sem dígito separado)
+        },
         httpsAgent
       }
     );
