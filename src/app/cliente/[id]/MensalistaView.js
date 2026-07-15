@@ -2261,6 +2261,18 @@ export default function MensalistaView({ params: paramsPromise }) {
                   )}
                 </div>
                 
+                {parseInt(cliente?.dia_vencimento, 10) === 99 ? (
+                  <div className="bg-[#0d1b2a] border border-[#d4af37]/20 p-10 rounded-xl text-center shadow-inner mt-4 animate-in fade-in">
+                    <span className="text-5xl block mb-4 drop-shadow-md opacity-90">🎁</span>
+                    <h4 className="text-lg font-bold text-[#d4af37] mb-2 uppercase tracking-wide">Cliente Isento</h4>
+                    <p className="text-sm text-zinc-300 max-w-lg mx-auto leading-relaxed">
+                      A visualização das cobranças está oculta. Este cliente está isento de mensalidades, pois outra empresa está responsável pelo seu pagamento ou possui um bônus concedido.
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-6 italic">
+                      Se precisar reativar a área financeira deste cliente, altere o "Trocar Vencimento" acima.
+                    </p>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {CICLO_FINANCEIRO.map((mes) => {
                     const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); 
@@ -2442,6 +2454,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                     );
                   })}
                 </div>
+                )}
               </div>
             ) : pastaAtiva && (
               <div className="bg-[#1b263b] p-5 sm:p-8 rounded-xl border border-zinc-800 shadow-xl mb-10">
