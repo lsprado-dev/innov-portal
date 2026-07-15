@@ -1522,6 +1522,19 @@ export default function AdminPage() {
   }
 
   function deletarCliente(id) {
+    const clienteAlvo = clientes.find(c => c.id === id);
+    const isCoringa = clienteAlvo?.cnpj?.replace(/\D/g, '') === '50457640000101' || clienteAlvo?.nome_empresa?.toLowerCase().includes('lsprado');
+
+    if (isCoringa) {
+      confirmarAcao(
+        'Acesso Negado 🛑', 
+        '(conta mestra, nao faca isso vai quebrar o sistema, mas vc nao vai fazer mesmo pq eu bloqueia essa funcao kkk)', 
+        () => {}, 
+        'aviso'
+      );
+      return; 
+    }
+
     confirmarAcao('Excluir Cliente', 'Essa ação é IRREVERSÍVEL. Todos os dados desta empresa serão apagados.', async () => {
       setSubindo(true);
       await supabase.from('clientes').delete().eq('id', id); 
