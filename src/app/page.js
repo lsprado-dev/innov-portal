@@ -1528,7 +1528,7 @@ export default function AdminPage() {
     if (isCoringa) {
       confirmarAcao(
         'Acesso Negado 🛑', 
-        '(conta mestra, nao faca isso vai quebrar o sistema, mas vc nao vai fazer mesmo pq eu bloqueia essa funcao kkk)', 
+        '(conta mestra, nao delete essa pasta vai quebrar o sistema, mas vc nao vai fazer mesmo pq eu bloqueia essa funcao kkk)', 
         () => {}, 
         'aviso'
       );

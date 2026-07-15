@@ -898,6 +898,10 @@ export default function MensalistaView({ params: paramsPromise }) {
       
       if (isCoringa && pastaAtiva !== 'financeiro') {
          const idsGlobais = await obterIdsPastaGlobal(pasta);
+         
+         // 🚀 TRAVA DE GARANTIA: Garante que a pasta Mestra (a que vc clicou) ESTEJA na lista!
+         if (!idsGlobais.includes(pasta.id)) idsGlobais.push(pasta.id);
+         
          await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).in('id', idsGlobais);
       } else {
          await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).eq('id', pasta.id);
@@ -921,6 +925,10 @@ export default function MensalistaView({ params: paramsPromise }) {
       setSubindoArquivo(true);
       if (isCoringa && pastaAtiva !== 'financeiro') {
         const idsGlobais = await obterIdsPastaGlobal(pasta);
+        
+        // 🚀 TRAVA DE GARANTIA: Garante que a pasta Mestra seja apagada junto!
+        if (!idsGlobais.includes(pasta.id)) idsGlobais.push(pasta.id);
+        
         await supabase.from('pastas_portal').delete().in('id', idsGlobais);
       } else {
         await supabase.from('pastas_portal').delete().eq('id', pasta.id);
