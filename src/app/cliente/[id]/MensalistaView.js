@@ -2260,6 +2260,9 @@ export default function MensalistaView({ params: paramsPromise }) {
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {CICLO_FINANCEIRO.map((mes) => {
+                    // Oculta visualmente o card de Janeiro (Ref. Dez do ano passado) sem quebrar a lógica
+                    if (mes.id === '01') return null;
+
                     const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); 
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
                     const pagoManualmente = mensalidadesPagas.includes(mes.ref);
