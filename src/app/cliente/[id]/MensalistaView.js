@@ -57,18 +57,18 @@ const IconFinanceiroLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" f
 
 // Nova inteligência de meses do Financeiro
 const CICLO_FINANCEIRO = [
-  { id: '01', ref: 'Janeiro', pag: 'Fevereiro' },
-  { id: '02', ref: 'Fevereiro', pag: 'Março' },
-  { id: '03', ref: 'Março', pag: 'Abril' },
-  { id: '04', ref: 'Abril', pag: 'Maio' },
-  { id: '05', ref: 'Maio', pag: 'Junho' },
-  { id: '06', ref: 'Junho', pag: 'Julho' },
-  { id: '07', ref: 'Julho', pag: 'Agosto' },
-  { id: '08', ref: 'Agosto', pag: 'Setembro' },
-  { id: '09', ref: 'Setembro', pag: 'Outubro' },
-  { id: '10', ref: 'Outubro', pag: 'Novembro' },
-  { id: '11', ref: 'Novembro', pag: 'Dezembro' },
-  { id: '12', ref: 'Dezembro', pag: 'Janeiro (Ano Seg.)' }
+  { id: '01', ref: 'Janeiro', servico: 'Dez', pag: 'Janeiro' },
+  { id: '02', ref: 'Fevereiro', servico: 'Jan', pag: 'Fevereiro' },
+  { id: '03', ref: 'Março', servico: 'Fev', pag: 'Março' },
+  { id: '04', ref: 'Abril', servico: 'Mar', pag: 'Abril' },
+  { id: '05', ref: 'Maio', servico: 'Abr', pag: 'Maio' },
+  { id: '06', ref: 'Junho', servico: 'Mai', pag: 'Junho' },
+  { id: '07', ref: 'Julho', servico: 'Jun', pag: 'Julho' },
+  { id: '08', ref: 'Agosto', servico: 'Jul', pag: 'Agosto' },
+  { id: '09', ref: 'Setembro', servico: 'Ago', pag: 'Setembro' },
+  { id: '10', ref: 'Outubro', servico: 'Set', pag: 'Outubro' },
+  { id: '11', ref: 'Novembro', servico: 'Out', pag: 'Novembro' },
+  { id: '12', ref: 'Dezembro', servico: 'Nov', pag: 'Dezembro' }
 ];
 
 const IconFolderSolid = () => <svg className="w-6 h-6 text-[#d4af37]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>;
@@ -2314,7 +2314,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                         {/* Cabeçalho do Card */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex-1">
-                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaCancelado ? 'text-red-400/70' : estaExpirado ? 'text-zinc-400' : emAtraso ? 'text-red-400' : emAberto ? 'text-blue-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref: {mes.ref}</h4>
+                            <h4 className={`text-[11px] font-bold uppercase tracking-wide ${isPago ? 'text-emerald-400' : estaCancelado ? 'text-red-400/70' : estaExpirado ? 'text-zinc-400' : emAtraso ? 'text-red-400' : emAberto ? 'text-blue-400' : estaLiberado ? 'text-white' : 'text-zinc-500'}`}>Ref. Serviços de {mes.servico}</h4>
                             <p className={`text-[11px] font-medium mt-0.5 ${isPago ? 'text-emerald-500/80' : (estaExpirado || estaCancelado) ? 'text-zinc-500 font-bold' : emAtraso ? 'text-red-400/80 font-bold animate-pulse' : emAberto ? 'text-blue-400/80' : estaLiberado ? 'text-zinc-400' : 'text-zinc-600'}`}>
                               {boletoInter ? `Vence ${new Date(boletoInter.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : `Vencimento ${diaVencimento} de ${mes.pag}`}
                             </p>
