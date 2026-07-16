@@ -59,6 +59,16 @@ export async function POST(request) {
       supportsAllDrives: true,
     });
 
+    // 5. MÁGICA: Libera o acesso para o cliente conseguir baixar sem pedir permissão
+    await drive.permissions.create({
+      fileId: uploadRes.data.id,
+      requestBody: {
+        role: 'reader',
+        type: 'anyone',
+      },
+      supportsAllDrives: true,
+    });
+
     return NextResponse.json({ success: true, fileId: uploadRes.data.id });
   } catch (error) {
     console.error('Erro no upload massa pro Drive:', error);
