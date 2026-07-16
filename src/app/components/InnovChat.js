@@ -26,6 +26,7 @@ export default function InnovChat({ operador, onFechar }) {
   const [novaMensagem, setNovaMensagem] = useState('');
   const [modoDelegar, setModoDelegar] = useState(false);
   const [subindo, setSubindo] = useState(false);
+  const [usuariosOnline, setUsuariosOnline] = useState([]); // NOVO ESTADO: PRESENÇA ONLINE
   
   const [formDelegar, setFormDelegar] = useState({
     atribuido_para: 'Maria (Societário)',
@@ -52,7 +53,6 @@ export default function InnovChat({ operador, onFechar }) {
     const canalChat = supabase.channel('chat_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_interno' }, (payload) => {
         setMensagens(prev => {
-          // Evita duplicar a mensagem caso você já a tenha adicionado instantaneamente
           const jaExiste = prev.some(m => m.mensagem === payload.new.mensagem && m.remetente === payload.new.remetente);
           if (jaExiste) return prev;
           return [...prev, payload.new];
@@ -60,8 +60,25 @@ export default function InnovChat({ operador, onFechar }) {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(canalChat); };
-  }, []);
+    // SISTEMA DE PRESENÇA MÁGICA (ONLINE/OFFLINE EM TEMPO REAL)
+    const canalPresenca = supabase.channel('chat_presenca');
+    canalPresenca
+      .on('presence', { event: 'sync' }, () => {
+        const estado = canalPresenca.presenceState();
+        const onlineAgrupado = Object.values(estado).flat().map(user => user.operador);
+        setUsuariosOnline([...new Set(onlineAgrupado)]); // Guarda apenas valores únicos
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await canalPresenca.track({ operador: operador }); // Sinaliza ao mundo que você entrou!
+        }
+      });
+
+    return () => { 
+      supabase.removeChannel(canalChat); 
+      supabase.removeChannel(canalPresenca);
+    };
+  }, [operador]);
 
   // 2. Rolar para o final suavemente sempre que houver mensagem nova
   useEffect(() => {
@@ -166,8 +183,22 @@ export default function InnovChat({ operador, onFechar }) {
         )}
       </div>
 
+      {/* BARRA DE EQUIPA ONLINE/OFFLINE */}
+      <div className="bg-[#0d1b2a]/80 border-b border-zinc-800/50 px-4 py-2.5 flex gap-2.5 overflow-x-auto hide-scrollbar shrink-0 shadow-sm">
+        {Object.keys(OBTER_EMAIL_FUNCIONARIO).map(nome => {
+          const isOnline = usuariosOnline.includes(nome);
+          const primeiroNome = nome.split(' ')[0];
+          return (
+            <div key={nome} className={`flex items-center gap-1.5 flex-shrink-0 px-2.5 py-1 rounded-full border ${isOnline ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-[#1b263b] border-zinc-700/50 text-zinc-500 opacity-60'} transition-colors cursor-default`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`}></span>
+              <span className="text-[10px] font-extrabold">{primeiroNome}</span>
+            </div>
+          );
+        })}
+      </div>
+
       {/* ÁREA DE MENSAGENS (ESTILO GOOGLE CHAT / WHATSAPP) */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-[#0d1b2a]/30 hide-scrollbar flex flex-col">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2 bg-[#0d1b2a]/30 hide-scrollbar flex flex-col">
         {mensagens.length === 0 ? (
           <div className="m-auto text-center flex flex-col items-center opacity-50">
             <span className="text-6xl mb-4">💬</span>
@@ -175,63 +206,85 @@ export default function InnovChat({ operador, onFechar }) {
             <p className="text-xs text-zinc-500 mt-1">Envie o primeiro recado para a equipa!</p>
           </div>
         ) : (
-          mensagens.filter(msg => {
-            if (msg.tipo !== 'demanda') return true; 
-            // FILTRO DE DELEGAÇÃO: Só o remetente, o destinatário, o Victor e o Lucas conseguem ver.
-            if (msg.remetente === operador || msg.destinatario_demanda === operador) return true;
-            if (operador === 'Victor (Admin)' || operador === 'Lucas (Financeiro)') return true;
-            return false;
-          }).map((msg, index) => {
-            const souEu = msg.remetente === operador;
-            const isCEO = msg.remetente === 'Victor (Admin)';
-            
-            // Renderização do Balão de Tarefa Delegada
-            if (msg.tipo === 'demanda') {
+          (() => {
+            // Filtra primeiro para garantir que a verificação de "mensagem anterior" não pega registos ocultos
+            const mensagensFiltradas = mensagens.filter(msg => {
+              if (msg.tipo !== 'demanda') return true; 
+              if (msg.remetente === operador || msg.destinatario_demanda === operador) return true;
+              if (operador === 'Victor (Admin)' || operador === 'Lucas (Financeiro)') return true;
+              return false;
+            });
+
+            return mensagensFiltradas.map((msg, index) => {
+              const souEu = msg.remetente === operador;
+              const isCEO = msg.remetente === 'Victor (Admin)';
+              
+              const msgAnterior = index > 0 ? mensagensFiltradas[index - 1] : null;
+              
+              // MÁGICA: Agrupa se for a mesma pessoa enviando textos em sequência!
+              const agrupar = msgAnterior && msgAnterior.remetente === msg.remetente && msgAnterior.tipo !== 'demanda' && msg.tipo !== 'demanda';
+
+              // Renderização do Balão de Tarefa Delegada
+              if (msg.tipo === 'demanda') {
+                return (
+                  <div key={msg.id} className="w-full flex justify-center mt-6 mb-4">
+                    <div className="bg-[#1b263b] border border-blue-500/30 rounded-xl p-4 sm:p-5 w-full max-w-md shadow-[0_4px_20px_rgba(59,130,246,0.1)] relative overflow-hidden group hover:border-blue-500/50 transition-colors">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500"></div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-[10px] font-black bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider">
+                          <IconPin /> Tarefa Delegada
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-medium">{formatarHora(msg.criado_em)}</span>
+                      </div>
+                      <p className="text-xs font-bold text-white mb-2">
+                        <span className="text-zinc-500 font-medium">De:</span> {msg.remetente.split(' ')[0]} <span className="mx-1 text-zinc-600">➔</span> <span className="text-zinc-500 font-medium">Para:</span> <span className="text-blue-400">{msg.destinatario_demanda.split(' ')[0]}</span>
+                      </p>
+                      <div className="bg-[#0d1b2a]/80 p-3 rounded-lg border border-zinc-800/80 mb-3">
+                        <p className="text-sm text-zinc-300 leading-relaxed italic">"{msg.mensagem}"</p>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 text-center uppercase tracking-widest font-bold">Verifique o Painel de Demandas</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Renderização do Balão de Conversa Padrão (ESTILO WHATSAPP)
               return (
-                <div key={msg.id} className="w-full flex justify-center my-2">
-                  <div className="bg-[#1b263b] border border-blue-500/30 rounded-xl p-4 sm:p-5 w-full max-w-md shadow-[0_4px_20px_rgba(59,130,246,0.1)] relative overflow-hidden group hover:border-blue-500/50 transition-colors">
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500"></div>
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-[10px] font-black bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider">
-                        <IconPin /> Tarefa Delegada
+                <div key={msg.id} className={`flex w-full ${souEu ? 'justify-end' : 'justify-start'} ${agrupar ? 'mt-1' : 'mt-4'}`}>
+                  <div className={`flex flex-col max-w-[85%] sm:max-w-[65%] ${souEu ? 'items-end' : 'items-start'}`}>
+                    
+                    {!agrupar && (
+                      <span className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${isCEO ? 'text-red-400' : 'text-zinc-400'} ${souEu ? 'mr-2' : 'ml-2'}`}>
+                        {msg.remetente.split(' ')[0]} {isCEO && '👑'}
                       </span>
-                      <span className="text-[10px] text-zinc-500 font-medium">{formatarHora(msg.criado_em)}</span>
+                    )}
+
+                    <div className={`relative px-3 pt-2 pb-1.5 min-w-[70px] text-sm leading-relaxed shadow-sm ${
+                      souEu 
+                        ? `bg-[#d4af37] text-[#0d1b2a] font-medium ${agrupar ? 'rounded-2xl rounded-tr-sm rounded-br-sm' : 'rounded-2xl rounded-br-sm'}` 
+                        : isCEO 
+                          ? `bg-red-500/10 border border-red-500/30 text-white shadow-[0_0_15px_rgba(239,68,68,0.1)] ${agrupar ? 'rounded-2xl rounded-tl-sm rounded-bl-sm' : 'rounded-2xl rounded-bl-sm'}` 
+                          : `bg-[#1b263b] border border-zinc-700/80 text-white ${agrupar ? 'rounded-2xl rounded-tl-sm rounded-bl-sm' : 'rounded-2xl rounded-bl-sm'}`
+                    }`}>
+                      <span className="pr-10 block whitespace-pre-wrap break-words">{msg.mensagem}</span>
+                      <span className={`absolute bottom-1 right-2 text-[9px] font-bold ${souEu ? 'text-yellow-900/60' : 'text-zinc-500'}`}>
+                        {formatarHora(msg.criado_em)}
+                      </span>
                     </div>
-                    <p className="text-xs font-bold text-white mb-2">
-                      <span className="text-zinc-500 font-medium">De:</span> {msg.remetente.split(' ')[0]} <span className="mx-1 text-zinc-600">➔</span> <span className="text-zinc-500 font-medium">Para:</span> <span className="text-blue-400">{msg.destinatario_demanda.split(' ')[0]}</span>
-                    </p>
-                    <div className="bg-[#0d1b2a]/80 p-3 rounded-lg border border-zinc-800/80 mb-3">
-                      <p className="text-sm text-zinc-300 leading-relaxed italic">"{msg.mensagem}"</p>
-                    </div>
-                    <p className="text-[10px] text-zinc-500 text-center uppercase tracking-widest font-bold">Verifique o Painel de Demandas</p>
+
+                    {/* MÁGICA: MOSTRAR VISTO POR APENAS NA ÚLTIMA MENSAGEM */}
+                    {index === mensagensFiltradas.length - 1 && usuariosOnline.filter(u => u !== msg.remetente).length > 0 && (
+                      <span className={`text-[9px] text-zinc-500 font-medium mt-1 flex items-center gap-1 ${souEu ? 'mr-1' : 'ml-1'} animate-in fade-in duration-500`}>
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" /></svg>
+                        Visualizado por {usuariosOnline.filter(u => u !== msg.remetente).map(u => u.split(' ')[0]).join(', ')}
+                      </span>
+                    )}
+
                   </div>
                 </div>
               );
-            }
-
-            // Renderização do Balão de Conversa Padrão
-            return (
-              <div key={msg.id} className={`flex w-full ${souEu ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex flex-col max-w-[85%] sm:max-w-[65%] ${souEu ? 'items-end' : 'items-start'}`}>
-                  <span className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${isCEO ? 'text-red-400' : 'text-zinc-400'} ${souEu ? 'mr-2' : 'ml-2'}`}>
-                    {msg.remetente.split(' ')[0]} {isCEO && '👑'}
-                  </span>
-                  <div className={`relative px-4 py-2.5 text-sm leading-relaxed shadow-md ${
-                    souEu 
-                      ? 'bg-[#d4af37] text-[#0d1b2a] rounded-2xl rounded-br-sm font-medium' 
-                      : isCEO 
-                        ? 'bg-red-500/10 border border-red-500/30 text-white rounded-2xl rounded-bl-sm shadow-[0_0_15px_rgba(239,68,68,0.1)]' 
-                        : 'bg-[#1b263b] border border-zinc-700/80 text-white rounded-2xl rounded-bl-sm'
-                  }`}>
-                    {msg.mensagem}
-                  </div>
-                  <span className={`text-[9px] font-medium text-zinc-500 mt-1 ${souEu ? 'mr-1' : 'ml-1'}`}>
-                    {formatarHora(msg.criado_em)}
-                  </span>
-                </div>
-              </div>
-            );
-          })
+            });
+          })()
         )}
         <div ref={chatFimRef} className="pt-2" /> {/* Ponto cego magnético do scroll */}
       </div>
