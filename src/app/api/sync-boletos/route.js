@@ -68,11 +68,11 @@ export async function GET(request) {
 
       while (temMaisPaginas) {
         try {
-          // CORREÇÃO CRÍTICA DA PAGINAÇÃO API V3: Usar paginacao.itensPorPagina e paginacao.paginaAtual
+          // CORREÇÃO DA PAGINAÇÃO API V3: Parâmetros vão direto na raiz (itensPorPagina e paginaAtual)
           const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&paginacao.itensPorPagina=100&paginacao.paginaAtual=${paginaAtual}`,
-            { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
-          );
+  `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&itensPorPagina=100&paginaAtual=${paginaAtual}`,
+  { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
+);
           
           const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
           
