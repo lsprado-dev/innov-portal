@@ -80,12 +80,14 @@ export default function InnovChat({ operador }) {
       tipo: 'texto'
     }]);
 
-    if (!error) {
+    if (error) {
+      alert("Erro ao enviar mensagem para o banco: " + error.message);
+    } else {
       // Disparo inteligente de Notificações
       if (operador === 'Victor (Admin)') {
-        dispararPush('interno', `🚨 AVISO DO CEO (Victor)`, texto);
+        dispararPush('interno', `Mensagem Victor)`, texto);
       } else {
-        dispararPush('interno', `💬 Nova mensagem no InnovChat`, `${operador.split(' ')[0]}: ${texto}`);
+        dispararPush('interno', `Nova mensagem no InnovChat`, `${operador.split(' ')[0]}: ${texto}`);
       }
     }
     setSubindo(false);
