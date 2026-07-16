@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { enviarEmailDemanda } from './lib/email';
+import { enviarEmailDemanda, enviarEmailDocumento } from './lib/email';
 import { inscreverAparelho, dispararPush } from './lib/push'; // Ajustado para a pasta real
 
 // Dicionário rápido para mapear nome da equipe para e-mail
@@ -170,9 +170,11 @@ export default function AdminPage() {
     enviar_push: true,
     enviar_agora: true,
     data_envio_programado: '',
+    hora_envio_programado: '',
+    arquivo_envio: null,
     exibir_prazo_email: true,
     exibir_vencimento_email: true,
-    tipo_alerta: 'cobranca' // NOVO: Separa Cobrança de Lembrete
+    tipo_alerta: 'cobranca' // NOVO: Separa Cobrança, Lembrete, Envio_Doc
   });
   
   // NOVOS ESTADOS DA CENTRAL DE DISPARO
@@ -549,9 +551,12 @@ export default function AdminPage() {
     e.preventDefault();
     if (!formAlerta.titulo) return mostrarToast('O Título é obrigatório.', 'erro'); 
 
-    // O Prazo só é obrigatório se for COBRANÇA. Lembretes não exigem prazo!
     if (formAlerta.tipo_alerta === 'cobranca' && !formAlerta.repetir_mensalmente && !formAlerta.prazo) {
        return mostrarToast('O Prazo p/ Confirmação é obrigatório para cobranças.', 'erro'); 
+    }
+
+    if (formAlerta.tipo_alerta === 'envio_doc' && !formAlerta.arquivo_envio) {
+       return mostrarToast('É obrigatório anexar um documento para esta opção.', 'erro'); 
     }
 
     if (formAlerta.repetir_mensalmente && !formAlerta.dia_recorrencia) return mostrarToast('Por favor, informe em que DIA DO MÊS a automação deve enviar o alerta.', 'erro');
@@ -565,9 +570,29 @@ export default function AdminPage() {
 
     setSubindo(true);
     
+    let caminhoArquivoBase = null;
+    let nomeArquivoBase = null;
+    if (formAlerta.tipo_alerta === 'envio_doc' && formAlerta.arquivo_envio) {
+      const timestamp = Date.now();
+      nomeArquivoBase = formAlerta.arquivo_envio.name;
+      const nomeSeguro = nomeArquivoBase.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
+      caminhoArquivoBase = `envios_massa/${timestamp}_${nomeSeguro}`;
+      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivoBase, formAlerta.arquivo_envio);
+      if (storageError) {
+        setSubindo(false);
+        return mostrarToast('Erro no upload do documento: ' + storageError.message, 'erro');
+      }
+    }
+
     const isRecorrente = formAlerta.repetir_mensalmente;
-    const isAgendadoFuturo = !isRecorrente && !formAlerta.enviar_agora; // Desvinculado do E-mail!
+    const isAgendadoFuturo = !isRecorrente && !formAlerta.enviar_agora;
     const novoStatus = isRecorrente ? 'recorrente' : (isAgendadoFuturo ? 'programado' : 'pendente');
+
+    let dataHoraEnvioFinal = null;
+    if (isAgendadoFuturo && formAlerta.data_envio_programado) {
+      dataHoraEnvioFinal = formAlerta.data_envio_programado;
+      if (formAlerta.hora_envio_programado) dataHoraEnvioFinal += `T${formAlerta.hora_envio_programado}:00`;
+    }
 
     const disparos = clientesAlvo.map(c => ({
       cliente_id: c.id,
@@ -581,9 +606,10 @@ export default function AdminPage() {
       dia_recorrencia: isRecorrente && formAlerta.dia_recorrencia ? parseInt(formAlerta.dia_recorrencia) : null,
       dia_vencimento: isRecorrente && formAlerta.dia_vencimento ? parseInt(formAlerta.dia_vencimento) : null,
       enviado_email: formAlerta.enviar_email,
-      data_envio_programado: isAgendadoFuturo ? (formAlerta.data_envio_programado || null) : null,
+      data_envio_programado: dataHoraEnvioFinal,
       status: novoStatus,
-      tipo_alerta: formAlerta.tipo_alerta // NOVO: Salva se é Lembrete ou Cobrança
+      caminho_arquivo: caminhoArquivoBase,
+      tipo_alerta: formAlerta.tipo_alerta 
     }));
     
     const { error } = await supabase.from('alertas_clientes').insert(disparos);
@@ -617,45 +643,56 @@ export default function AdminPage() {
         for (const cli of clientesAlvo) {
           if (cli.email && cli.email.trim() !== '') {
             try {
-              await fetch(urlGoogle, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({
-                  cliente_nome: cli.nome_empresa,
-                  cliente_email: cli.email,
-                  titulo: formAlerta.titulo,
-                  mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'), // MÁGICA: Converte Enters para quebras HTML
-                  tipo_documento: formAlerta.tipo_documento,
-                  exibir_prazo_email: formAlerta.exibir_prazo_email,
-                  exibir_vencimento_email: formAlerta.exibir_vencimento_email,
-                  prazo_texto: prazoTextoFinal,
-                  vencimento_texto: vencimentoTextoFinal
-                })
-              });
+              if (formAlerta.tipo_alerta === 'envio_doc') {
+                await enviarEmailDocumento({
+                  to: cli.email,
+                  nomeDestinatario: cli.nome_contato || cli.nome_empresa,
+                  nomeRemetente: formAlerta.responsavel || operador,
+                  tituloEmail: formAlerta.titulo,
+                  mensagem: formAlerta.mensagem,
+                  nomeArquivo: nomeArquivoBase,
+                  caminhoPasta: 'Portal > Pendências / Documentos Recebidos'
+                });
+              } else {
+                await fetch(urlGoogle, {
+                  method: 'POST',
+                  mode: 'no-cors',
+                  body: JSON.stringify({
+                    cliente_nome: cli.nome_empresa,
+                    cliente_email: cli.email,
+                    titulo: formAlerta.titulo,
+                    mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'),
+                    tipo_documento: formAlerta.tipo_documento,
+                    exibir_prazo_email: formAlerta.exibir_prazo_email,
+                    exibir_vencimento_email: formAlerta.exibir_vencimento_email,
+                    prazo_texto: prazoTextoFinal,
+                    vencimento_texto: vencimentoTextoFinal
+                  })
+                });
+              }
             } catch (err) {
-              console.error("Erro ao notificar webhook:", err);
+              console.error("Erro ao notificar:", err);
             }
           }
         }
-        // MÁGICA 1: Dispara o PUSH GENÉRICO para a lista de cobrança!
         if (formAlerta.enviar_push) {
-           dispararPush(clientesAlvo.map(c => c.id), 'Novo Aviso Disponível', 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.');
+           const pushMsg = formAlerta.tipo_alerta === 'envio_doc' ? 'Acabamos de enviar um novo documento para o seu portal.' : 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.';
+           dispararPush(clientesAlvo.map(c => c.id), formAlerta.tipo_alerta === 'envio_doc' ? 'Novo Documento Recebido' : 'Novo Aviso Disponível', pushMsg);
         }
         
-        mostrarToast(`Criado! Avisos disparados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
+        mostrarToast(`Criado! Disparos realizados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
       } else if (isAgendadoFuturo) {
         mostrarToast(`Agendada para disparo futuro!`, 'sucesso');
       } else if (isRecorrente) {
         mostrarToast(`Automação Mensal Salva!`, 'sucesso');
       } else {
-        mostrarToast(`Cobrança publicada APENAS no portal.`, 'aviso');
+        mostrarToast(`Publicada APENAS no portal.`, 'aviso');
       }
 
-      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true, tipo_alerta: 'cobranca' });
+      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', hora_envio_programado: '', arquivo_envio: null, exibir_prazo_email: true, exibir_vencimento_email: true, tipo_alerta: 'cobranca' });
       carregarDados();
     } else {
-
-      mostrarToast('Erro ao criar cobrança no sistema: ' + error.message, 'erro');
+      mostrarToast('Erro ao criar no sistema: ' + error.message, 'erro');
     }
     setSubindo(false);
   }
@@ -1663,6 +1700,7 @@ export default function AdminPage() {
 
   const alertasHistoricoCobrancas = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && (a.tipo_alerta === 'cobranca' || !a.tipo_alerta));
   const alertasHistoricoAvisos = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && a.tipo_alerta === 'lembrete');
+  const alertasHistoricoEnvios = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && a.tipo_alerta === 'envio_doc');
   const alertasAgendados = alertasFiltradosGerais.filter(a => a.status === 'programado');
   const alertasRecorrentes = alertasFiltradosGerais.filter(a => a.status === 'recorrente');
   const alertasAtrasados = alertasHistoricoCobrancas.filter(a => {
@@ -2768,15 +2806,19 @@ export default function AdminPage() {
               </h2>
               <form onSubmit={handleCriarAlerta} className="space-y-6">
                 
-                {/* NOVO: SELETOR DE TIPO (COBRANÇA OU LEMBRETE) */}
-                <div className="flex bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full mb-6">
-                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'cobranca'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all ${formAlerta.tipo_alerta === 'cobranca' ? 'bg-orange-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                {/* NOVO: SELETOR DE TIPO (COBRANÇA, LEMBRETE OU ENVIO DE DOC) */}
+                <div className="flex flex-wrap bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full mb-6 gap-1">
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'cobranca'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'cobranca' ? 'bg-orange-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                    Solicitar Documento / Cobrança
+                    Solicitar Documento
                   </button>
-                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'lembrete'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all ${formAlerta.tipo_alerta === 'lembrete' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'lembrete'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'lembrete' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    Enviar Aviso / Lembrete
+                    Enviar Aviso
+                  </button>
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'envio_doc'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'envio_doc' ? 'bg-emerald-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                    <IconDocument />
+                    Enviar Documento
                   </button>
                 </div>
 
@@ -2883,6 +2925,19 @@ export default function AdminPage() {
                   ></div>
                   <p className="text-[10px] text-zinc-500 mt-1">Selecione o texto e use os botões acima para formatar visualmente e ver o resultado na hora.</p>
                 </div>
+
+                {formAlerta.tipo_alerta === 'envio_doc' && (
+                  <div className="bg-[#0d1b2a] p-4 rounded-lg border border-emerald-500/30">
+                    <label className="block text-xs font-bold text-emerald-400 uppercase mb-2">Anexar Documento para Envio</label>
+                    <input 
+                      type="file" 
+                      required 
+                      accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                      onChange={e => setFormAlerta({...formAlerta, arquivo_envio: e.target.files[0]})} 
+                      className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20" 
+                    />
+                  </div>
+                )}
 
                 {/* BLOCO 3: DATAS E RECORRÊNCIA */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-800 pt-5">
@@ -3022,8 +3077,9 @@ export default function AdminPage() {
 
                 {/* LINHA DOS BOTÕES DE ABAS (FLEX WRAP PARA NÃO ARRASTAR) */}
                 <div className="flex flex-wrap bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full gap-1">
-                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-orange-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
                   <button onClick={() => { setSubAbaAlerta('historico_avisos'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_avisos' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Histórico Avisos</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_envios'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_envios' ? 'bg-emerald-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconDocument /> Docs Enviados</button>
                   <button onClick={() => { setSubAbaAlerta('agendados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
                   <button onClick={() => { setSubAbaAlerta('recorrentes'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
                   <button onClick={() => { setSubAbaAlerta('atrasados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
@@ -3104,6 +3160,42 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
+                        <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
+                        <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {subAbaAlerta === 'historico_envios' && renderLista(alertasHistoricoEnvios, (alerta) => {
+                  return (
+                    <div key={alerta.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${alerta.status === 'respondido' ? 'opacity-50 bg-[#0d1b2a]/40' : 'bg-[#1b263b] hover:bg-zinc-800/20'}`}>
+                      <div className="min-w-0 flex-1 w-full">
+                        <div className="flex gap-2 items-center mb-1 flex-wrap">
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase whitespace-nowrap bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Documento Enviado</span>
+                          
+                          {alerta.enviado_email ? (
+                            <span className="text-[10px] font-bold text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30 flex items-center whitespace-nowrap"><IconMail /> E-mail e Portal</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700 flex items-center whitespace-nowrap"><IconGlobe /> Apenas Portal</span>
+                          )}
+                          
+                          <span className="text-xs font-bold text-zinc-300 truncate max-w-full">{alerta.clientes?.nome_empresa}</span>
+                          {alerta.responsavel && <span className="text-[10px] bg-[#1b263b] text-zinc-400 px-2 py-0.5 rounded border border-zinc-700 whitespace-nowrap">Resp: {alerta.responsavel.split(' ')[0]}</span>}
+                        </div>
+                        <p className="text-sm font-medium text-emerald-400 mt-2 mb-1 truncate">{alerta.titulo} <span className="text-xs text-zinc-500 ml-1 font-normal">({alerta.tipo_documento})</span></p>
+                        <div className="flex gap-3 items-center flex-wrap">
+                          {alerta.visualizado_em && (
+                            <p className="text-[11px] text-blue-400 font-bold flex items-center" title="Cliente abriu a notificação no portal">
+                              <IconEye /> Visto em: {formatarDataHora(alerta.visualizado_em)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
+                        {alerta.caminho_arquivo && (
+                          <button onClick={(e) => { e.preventDefault(); baixarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2 rounded text-xs font-bold transition">Baixar Documento</button>
+                        )}
                         <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
                         <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
                       </div>

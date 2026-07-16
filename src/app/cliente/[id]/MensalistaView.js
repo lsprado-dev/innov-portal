@@ -3,7 +3,7 @@ import { useEffect, useState, use } from 'react';
 import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { enviarEmailDemanda } from '../../lib/email'; 
+import { enviarEmailDemanda, enviarEmailDocumento } from '../../lib/email'; 
 import { inscreverAparelho, dispararPush } from '../../lib/push'; 
 import DOMPurify from 'dompurify'; 
 
@@ -299,6 +299,9 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [subAbaSolicitacao, setSubAbaSolicitacao] = useState('ativas'); // NOVO: Filtro de abas
   const [subAbaAvisos, setSubAbaAvisos] = useState('recentes'); // NOVO: Filtro do Mural de Avisos
   const [avisosExpandidos, setAvisosExpandidos] = useState({}); // NOVO: Controle de abrir/fechar recados
+
+  // ESTADO DO MODAL DE E-MAIL DO DOCUMENTO
+  const [modalEmailDoc, setModalEmailDoc] = useState({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' });
 
   // ESTADOS DO MODAL DE PERFIL E SENHA
   const [mostrarModalPerfil, setMostrarModalPerfil] = useState(false);
@@ -1277,6 +1280,34 @@ export default function MensalistaView({ params: paramsPromise }) {
       if (!error) { mostrarToast('Arquivo renomeado.', 'sucesso'); await carregarDadosDaAba(); }
       setSubindoArquivo(false);
     });
+  }
+
+  async function handleEnviarEmailDoc(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    const arq = modalEmailDoc.arquivo;
+    
+    let caminhoBase = `Setor ${pastaAtiva}`;
+    if (caminhoPastas && caminhoPastas.length > 0) {
+      caminhoBase += ` / ${caminhoPastas.map(p => p.nome).join(' / ')}`;
+    }
+    
+    try {
+      await enviarEmailDocumento({
+        to: cliente.email,
+        nomeDestinatario: cliente.nome_contato || cliente.nome_empresa,
+        nomeRemetente: operador,
+        tituloEmail: modalEmailDoc.titulo,
+        mensagem: modalEmailDoc.mensagem,
+        nomeArquivo: arq.nome_original,
+        caminhoPasta: caminhoBase
+      });
+      mostrarToast('E-mail enviado com sucesso!', 'sucesso');
+      setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' });
+    } catch (err) {
+      mostrarToast('Erro ao enviar e-mail.', 'erro');
+    }
+    setSubindoArquivo(false);
   }
 
   function visualizarDocumento(caminhoStorage) {
@@ -2641,6 +2672,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                               <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
                                 {isInterno && (
                                   <>
+                                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalEmailDoc({ aberto: true, arquivo: arq, titulo: 'Novo Documento Disponível', mensagem: '' }); }} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition shadow-sm">E-mail</button>
                                     <button onClick={() => setArquivosMovendo([arq])} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
                                     <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
                                     <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
@@ -3929,6 +3961,37 @@ export default function MensalistaView({ params: paramsPromise }) {
             >
               Fazer Login Novamente
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE E-MAIL DO DOCUMENTO */}
+      {modalEmailDoc.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-[#d4af37]">Enviar por E-mail</h3>
+              <button type="button" onClick={() => setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={handleEnviarEmailDoc} className="p-5 space-y-4">
+              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 flex items-center gap-3">
+                <span className="text-xs text-zinc-300 font-mono truncate">{modalEmailDoc.arquivo?.nome_original}</span>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Título do E-mail</label>
+                <input type="text" required value={modalEmailDoc.titulo} onChange={e => setModalEmailDoc({...modalEmailDoc, titulo: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Mensagem (Opcional)</label>
+                <textarea rows="4" placeholder="Escreva uma mensagem adicional..." value={modalEmailDoc.mensagem} onChange={e => setModalEmailDoc({...modalEmailDoc, mensagem: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"></textarea>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
+                  {subindoArquivo ? 'A enviar...' : 'Enviar E-mail'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

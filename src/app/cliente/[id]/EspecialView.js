@@ -2,7 +2,7 @@
 import { useEffect, useState, use } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
-import { enviarEmailDemanda } from '../../lib/email';
+import { enviarEmailDemanda, enviarEmailDocumento } from '../../lib/email';
 import { dispararPush } from '../../lib/push';
 import DOMPurify from 'dompurify';
 
@@ -159,6 +159,9 @@ export default function EspecialView({ params }) {
     setSubindoArquivo(false);
     e.target.value = null; 
   }
+
+  // ESTADO DO MODAL DE E-MAIL DO DOCUMENTO
+  const [modalEmailDoc, setModalEmailDoc] = useState({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' });
 
   // Modais do Admin
   const [modalProcesso, setModalProcesso] = useState({ aberto: false, tipo: 'novo', processo: null });
@@ -555,6 +558,35 @@ export default function EspecialView({ params }) {
     window.open(data.publicUrl, '_blank');
   }
 
+  async function handleEnviarEmailDoc(e) {
+    e.preventDefault();
+    setSubindoArquivo(true);
+    const arq = modalEmailDoc.arquivo;
+    
+    let caminhoBase = "Processo Societário";
+    if (arq.processo_id) {
+      const proc = processos.find(p => p.id === arq.processo_id);
+      if (proc) caminhoBase += ` / ${proc.titulo}`;
+    }
+    
+    try {
+      await enviarEmailDocumento({
+        to: cliente.email,
+        nomeDestinatario: cliente.nome_contato || cliente.nome_empresa,
+        nomeRemetente: operador,
+        tituloEmail: modalEmailDoc.titulo,
+        mensagem: modalEmailDoc.mensagem,
+        nomeArquivo: arq.nome_original,
+        caminhoPasta: caminhoBase
+      });
+      mostrarToast('E-mail enviado com sucesso!', 'sucesso');
+      setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' });
+    } catch (err) {
+      mostrarToast('Erro ao enviar e-mail.', 'erro');
+    }
+    setSubindoArquivo(false);
+  }
+
   async function baixarDocumento(caminhoStorage, nomeOriginal) {
     setSubindoArquivo(true);
     
@@ -681,7 +713,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
               return (
                  <div className="space-y-10">
                    {processosFiltrados.map(proc => {
-                      const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                      const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
                       const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
                       
                       // MÁGICA: Bate 99% no passo 8 se ainda não houver a baixa do pagamento
@@ -742,7 +774,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                                   let isCompleted = proc.passo > passo.id;
                                   let isCurrent = proc.passo === passo.id;
                                   const isFuture = proc.passo < passo.id;
-                                  const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.nome_documento.includes('Comprovante Honorários'));
+                                  const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
                                   if (passo.id === 8 && proc.passo === 8) {
                                     if (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]) { isCompleted = true; isCurrent = false; }
                                   }
@@ -909,7 +941,10 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                               <p className="text-[10px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
                             </div>
                           </div>
-                          <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] flex-shrink-0 bg-purple-500 text-white hover:bg-purple-400 px-3 py-1.5 rounded transition font-bold shadow-sm">Baixar</button>
+                          <div className="flex gap-2">
+                            {isInterno && <button onClick={() => setModalEmailDoc({ aberto: true, arquivo: doc, titulo: 'Novo Documento Disponível', mensagem: '' })} className="text-[10px] flex-shrink-0 bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500 hover:text-white px-3 py-1.5 rounded transition font-bold shadow-sm">E-mail</button>}
+                            <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] flex-shrink-0 bg-purple-500 text-white hover:bg-purple-400 px-3 py-1.5 rounded transition font-bold shadow-sm">Baixar</button>
+                          </div>
                         </div>
                       ))
                     )}
@@ -964,7 +999,10 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                                   <p className="text-xs font-bold text-zinc-200 truncate">{doc.nome_original}</p>
                                   <p className="text-[9px] text-zinc-500">{new Date(doc.criado_em).toLocaleDateString('pt-BR')}</p>
                                 </div>
-                                <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] bg-purple-500 text-white px-2 py-1 rounded font-bold">Baixar</button>
+                                <div className="flex gap-2">
+                                  {isInterno && <button onClick={() => setModalEmailDoc({ aberto: true, arquivo: doc, titulo: 'Novo Documento Disponível', mensagem: '' })} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500 hover:text-white px-2 py-1 rounded font-bold transition shadow-sm">E-mail</button>}
+                                  <button onClick={() => baixarDocumento(doc.caminho_storage, doc.nome_original)} className="text-[10px] bg-purple-500 text-white px-2 py-1 rounded font-bold">Baixar</button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1458,6 +1496,37 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
             >
               Fazer Login Novamente
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE E-MAIL DO DOCUMENTO */}
+      {modalEmailDoc.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-purple-500/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
+              <h3 className="text-lg font-bold text-purple-400">Enviar por E-mail</h3>
+              <button type="button" onClick={() => setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={handleEnviarEmailDoc} className="p-5 space-y-4">
+              <div className="bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800 flex items-center gap-3">
+                <span className="text-xs text-zinc-300 font-mono truncate">{modalEmailDoc.arquivo?.nome_original}</span>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Título do E-mail</label>
+                <input type="text" required value={modalEmailDoc.titulo} onChange={e => setModalEmailDoc({...modalEmailDoc, titulo: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Mensagem (Opcional)</label>
+                <textarea rows="4" placeholder="Escreva uma mensagem adicional..." value={modalEmailDoc.mensagem} onChange={e => setModalEmailDoc({...modalEmailDoc, mensagem: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 resize-none"></textarea>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-purple-500 text-white hover:bg-purple-400 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
+                  {subindoArquivo ? 'A enviar...' : 'Enviar E-mail'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
