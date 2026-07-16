@@ -42,18 +42,15 @@ export async function GET(request) {
     const dataLocal = new Date();
     dataLocal.setMinutes(dataLocal.getMinutes() - dataLocal.getTimezoneOffset());
     
-    // MÁGICA 1: Janela do Passado (Garante que NÃO PERDE os 90 dias de boletos antigos)
-    const dataInicioBase = new Date(dataLocal);
-    dataInicioBase.setDate(dataInicioBase.getDate() - 89);
+    // MÁGICA 1: Janela do Passado OTIMIZADA (Puxa apenas do dia 1º do mês atual em diante)
+    const dataInicioBase = new Date(dataLocal.getFullYear(), dataLocal.getMonth(), 1);
     const strIniBase = dataInicioBase.toISOString().split('T')[0];
     const strFimBase = dataLocal.toISOString().split('T')[0];
 
-    // MÁGICA 2: Janela do Futuro (Garante que PUXA os boletos a vencer este mês)
-    const dataInicioFuturo = new Date(dataLocal);
-    dataInicioFuturo.setDate(dataInicioFuturo.getDate() - 44);
-    const strIniFuturo = dataInicioFuturo.toISOString().split('T')[0];
+    // MÁGICA 2: Janela do Futuro OTIMIZADA (Começa no dia 1º do mês e vai 45 dias pra frente)
+    const strIniFuturo = strIniBase; // Usa a mesma data de início para barrar lixo antigo
     const dataFimFuturo = new Date(dataLocal);
-    dataFimFuturo.setDate(dataFimFuturo.getDate() + 45); // Total 89 dias
+    dataFimFuturo.setDate(dataFimFuturo.getDate() + 45); 
     const strFimFuturo = dataFimFuturo.toISOString().split('T')[0];
 
     // EMISSAO voltou! Precisamos dele para achar os boletos que foram "Marcados como Recebido" manualmente no Inter,
