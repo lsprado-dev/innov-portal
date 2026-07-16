@@ -1973,11 +1973,17 @@ export default function MensalistaView({ params: paramsPromise }) {
     // Calcula de onde a gente parte (Qual é o ID da gaveta que o usuário soltou o arquivo em cima)
     let pDriveIdBase = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : pastaAtiva === 'contrato' ? cliente.id_drive_contratos : cliente.id_drive_raiz);
 
-    // Dispara a navegação em todas as pastas e documentos atirados
+    // HACK DE SÊNIOR: Extrair tudo de forma síncrona ANTES do primeiro await
+    // O navegador destrói o e.dataTransfer.items assim que o JS pausa no await.
+    const entriesIniciais = [];
     for (let i = 0; i < items.length; i++) {
-      const item = items[i].webkitGetAsEntry();
-      if (!item) continue;
-      await processarEntradaRecursiva(item, subpastaAtiva, pDriveIdBase);
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) entriesIniciais.push(entry);
+    }
+
+    // Dispara a navegação na lista segura em memória
+    for (const entry of entriesIniciais) {
+      await processarEntradaRecursiva(entry, subpastaAtiva, pDriveIdBase);
     }
 
     if (sucessoCount > 0) {
