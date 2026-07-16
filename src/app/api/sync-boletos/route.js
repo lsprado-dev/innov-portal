@@ -6,9 +6,6 @@ import https from 'https';
 import { getInterToken } from '../../lib/inter'; 
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 AUMENTO DE TIMEOUT PARA A VERCEL (Evita o FUNCTION_INVOCATION_TIMEOUT)
-export const maxDuration = 60;
-
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
