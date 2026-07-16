@@ -51,7 +51,12 @@ export default function InnovChat({ operador }) {
     // A mágica da fluidez: Ouve a tabela do Supabase ao vivo
     const canalChat = supabase.channel('chat_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_interno' }, (payload) => {
-        setMensagens(prev => [...prev, payload.new]);
+        setMensagens(prev => {
+          // Evita duplicar a mensagem caso você já a tenha adicionado instantaneamente
+          const jaExiste = prev.some(m => m.mensagem === payload.new.mensagem && m.remetente === payload.new.remetente);
+          if (jaExiste) return prev;
+          return [...prev, payload.new];
+        });
       })
       .subscribe();
 
@@ -73,6 +78,10 @@ export default function InnovChat({ operador }) {
     setSubindo(true);
     const texto = novaMensagem.trim();
     setNovaMensagem(''); // Limpa o input instantaneamente para fluidez
+
+    // Adiciona na tela instantaneamente antes mesmo de ir para o banco (Estilo WhatsApp)
+    const msgTemporaria = { id: Date.now(), remetente: operador, mensagem: texto, tipo: 'texto', criado_em: new Date().toISOString() };
+    setMensagens(prev => [...prev, msgTemporaria]);
 
     const { error } = await supabase.from('chat_interno').insert([{
       remetente: operador,
@@ -200,11 +209,9 @@ export default function InnovChat({ operador }) {
             return (
               <div key={msg.id} className={`flex w-full ${souEu ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex flex-col max-w-[85%] sm:max-w-[65%] ${souEu ? 'items-end' : 'items-start'}`}>
-                  {!souEu && (
-                    <span className={`text-[10px] font-bold mb-1 ml-2 flex items-center gap-1 ${isCEO ? 'text-red-400' : 'text-zinc-400'}`}>
-                      {msg.remetente.split(' ')[0]} {isCEO && '👑'}
-                    </span>
-                  )}
+                  <span className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${isCEO ? 'text-red-400' : 'text-zinc-400'} ${souEu ? 'mr-2' : 'ml-2'}`}>
+                    {msg.remetente.split(' ')[0]} {isCEO && '👑'}
+                  </span>
                   <div className={`relative px-4 py-2.5 text-sm leading-relaxed shadow-md ${
                     souEu 
                       ? 'bg-[#d4af37] text-[#0d1b2a] rounded-2xl rounded-br-sm font-medium' 
