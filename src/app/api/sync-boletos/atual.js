@@ -69,11 +69,11 @@ export async function GET(request) {
 
       while (temMaisPaginas) {
         try {
-          // CORREÇÃO DEFINITIVA DA PAGINAÇÃO: Usamos o limite real do Inter (50) e os parâmetros corretos
+          // CORREÇÃO DA PAGINAÇÃO API V3: Parâmetros vão direto na raiz (itensPorPagina e paginaAtual)
           const response = await axios.get(
-            `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&paginacao.itensPorPagina=50&paginacao.paginaAtual=${paginaAtual}`,
-            { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
-          );
+  `https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas?dataInicial=${strIni}&dataFinal=${strFim}&filtrarDataPor=${tipoFiltro}&itensPorPagina=100&paginaAtual=${paginaAtual}`,
+  { headers: { Authorization: `Bearer ${token}` }, httpsAgent }
+);
           
           const lista = response.data.cobrancas || response.data.content || (Array.isArray(response.data) ? response.data : []);
           
@@ -97,8 +97,8 @@ export async function GET(request) {
             }
           }
 
-          // TRAVA BLINDADA: Lê a flag do Inter, verifica o limite real e impede loops infinitos
-          if (response.data.ultimaPagina === true || lista.length < 50 || paginaAtual >= 20) {
+          // MÁGICA DA PAGINAÇÃO: Se a lista retornar menos de 100 itens, significa que chegamos na última página!
+          if (lista.length < 100) {
             temMaisPaginas = false;
           } else {
             paginaAtual++;
