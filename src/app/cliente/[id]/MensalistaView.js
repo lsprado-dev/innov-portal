@@ -1293,6 +1293,8 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
     
     try {
+      const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(arq.caminho_storage);
+
       await enviarEmailDocumento({
         to: cliente.email,
         nomeDestinatario: cliente.nome_contato || cliente.nome_empresa,
@@ -1300,6 +1302,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         tituloEmail: modalEmailDoc.titulo,
         mensagem: modalEmailDoc.mensagem,
         nomeArquivo: arq.nome_original,
+        urlArquivo: publicUrlData.publicUrl,
         caminhoPasta: caminhoBase
       });
       mostrarToast('E-mail enviado com sucesso!', 'sucesso');

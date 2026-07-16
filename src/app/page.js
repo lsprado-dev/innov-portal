@@ -644,6 +644,8 @@ export default function AdminPage() {
           if (cli.email && cli.email.trim() !== '') {
             try {
               if (formAlerta.tipo_alerta === 'envio_doc') {
+                const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(caminhoArquivoBase);
+                
                 await enviarEmailDocumento({
                   to: cli.email,
                   nomeDestinatario: cli.nome_contato || cli.nome_empresa,
@@ -651,7 +653,8 @@ export default function AdminPage() {
                   tituloEmail: formAlerta.titulo,
                   mensagem: formAlerta.mensagem,
                   nomeArquivo: nomeArquivoBase,
-                  caminhoPasta: 'Portal > Pendências / Documentos Recebidos'
+                  urlArquivo: publicUrlData.publicUrl,
+                  caminhoPasta: 'Enviado diretamente para o seu e-mail.'
                 });
               } else {
                 await fetch(urlGoogle, {
@@ -2816,8 +2819,8 @@ export default function AdminPage() {
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     Enviar Aviso
                   </button>
-                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'envio_doc'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'envio_doc' ? 'bg-emerald-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
-                    <IconDocument />
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'envio_doc'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'envio_doc' ? 'bg-emerald-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                     Enviar Documento
                   </button>
                 </div>
@@ -3194,7 +3197,10 @@ export default function AdminPage() {
                       </div>
                       <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
                         {alerta.caminho_arquivo && (
-                          <button onClick={(e) => { e.preventDefault(); baixarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2 rounded text-xs font-bold transition">Baixar Documento</button>
+                          <>
+                            <button onClick={(e) => { e.preventDefault(); visualizarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded text-xs font-bold transition border border-zinc-700">Visualizar</button>
+                            <button onClick={(e) => { e.preventDefault(); baixarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2 rounded text-xs font-bold transition">Baixar Documento</button>
+                          </>
                         )}
                         <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
                         <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
