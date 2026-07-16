@@ -2382,11 +2382,11 @@ export default function MensalistaView({ params: paramsPromise }) {
                     else if (diaVencimento === 30) diaAbertura = 20;
                     else if (diaVencimento === 10) diaAbertura = 1;
 
-                    // 2. Lógica Mágica de Datas
-                    const hoje = new Date();
-                    const mesPagamentoIndex = parseInt(mes.id, 10); 
-                    const dataLiberacao = new Date(hoje.getFullYear(), mesPagamentoIndex, diaAbertura);
-                    dataLiberacao.setHours(0, 0, 0, 0); 
+        // 2. Lógica Mágica de Datas
+const hoje = new Date();
+const mesPagamentoIndex = parseInt(mes.id, 10) - 1; 
+const dataLiberacao = new Date(hoje.getFullYear(), mesPagamentoIndex, diaAbertura);
+dataLiberacao.setHours(0, 0, 0, 0);
                     
                     const estaLiberado = hoje >= dataLiberacao || !!boletoInter;
                     const mesAbertura = dataLiberacao.getMonth() + 1; 
