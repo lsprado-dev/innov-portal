@@ -1293,7 +1293,14 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
     
     try {
-      const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(arq.caminho_storage);
+      let urlDoArquivo = '';
+      if (arq.caminho_storage && arq.caminho_storage.startsWith('DRIVE:')) {
+        const fileId = arq.caminho_storage.split('DRIVE:')[1];
+        urlDoArquivo = `https://drive.google.com/file/d/${fileId}/view`;
+      } else if (arq.caminho_storage) {
+        const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(arq.caminho_storage);
+        urlDoArquivo = publicUrlData.publicUrl;
+      }
 
       await enviarEmailDocumento({
         to: cliente.email,
@@ -1302,7 +1309,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         tituloEmail: modalEmailDoc.titulo,
         mensagem: modalEmailDoc.mensagem,
         nomeArquivo: arq.nome_original,
-        urlArquivo: publicUrlData.publicUrl,
+        urlArquivo: urlDoArquivo,
         caminhoPasta: caminhoBase
       });
       await supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Enviou documento por e-mail para ${cliente.email}` }]);
