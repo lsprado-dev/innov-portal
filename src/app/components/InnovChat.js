@@ -293,36 +293,36 @@ export default function InnovChat({ operador, onFechar }) {
       <div className="bg-[#0d1b2a] border-t border-zinc-800 shrink-0 relative">
         
         {modoDelegar ? (
-          <form onSubmit={handleDelegar} className="p-4 bg-[#1b263b]/80 border-t border-blue-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.3)] animate-in slide-in-from-bottom-2 duration-200">
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
+          <form onSubmit={handleDelegar} className="p-3 sm:p-4 bg-[#1b263b]/95 sm:bg-[#1b263b]/80 border-t border-blue-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.3)] animate-in slide-in-from-bottom-2 duration-200">
+            <div className="flex justify-between items-center mb-2 sm:mb-4">
+              <h4 className="text-[11px] sm:text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
                 <IconPin /> Nova Delegação Rápida
               </h4>
-              <button type="button" onClick={() => setModoDelegar(false)} className="text-zinc-500 hover:text-white font-bold p-1 transition-colors">✕</button>
+              <button type="button" onClick={() => setModoDelegar(false)} className="text-zinc-500 hover:text-white font-bold px-2 py-1 transition-colors">✕</button>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 mb-2 sm:mb-3">
               <div className="sm:col-span-8">
-                <input type="text" autoFocus required placeholder="Descreva a tarefa..." value={formDelegar.descricao} onChange={e => setFormDelegar({...formDelegar, descricao: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-400 transition-colors" />
+                <input type="text" autoFocus required placeholder="Descreva a tarefa..." value={formDelegar.descricao} onChange={e => setFormDelegar({...formDelegar, descricao: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2 sm:py-2.5 text-sm text-white focus:outline-none focus:border-blue-400 transition-colors" />
               </div>
               <div className="sm:col-span-4">
-                <select value={formDelegar.atribuido_para} onChange={e => setFormDelegar({...formDelegar, atribuido_para: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-400 cursor-pointer transition-colors">
+                <select value={formDelegar.atribuido_para} onChange={e => setFormDelegar({...formDelegar, atribuido_para: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-2 py-2 sm:py-2.5 text-sm text-white focus:outline-none focus:border-blue-400 cursor-pointer transition-colors">
                   {Object.keys(OBTER_EMAIL_FUNCIONARIO).map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
             
-            <div className="grid grid-cols-2 sm:grid-cols-12 gap-3">
-              <input type="date" required value={formDelegar.prazo} onChange={e => setFormDelegar({...formDelegar, prazo: e.target.value})} className="col-span-1 sm:col-span-3 bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 text-xs text-white focus:outline-none focus:border-blue-400 cursor-pointer transition-colors" />
+            <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 sm:gap-3">
+              <input type="date" required value={formDelegar.prazo} onChange={e => setFormDelegar({...formDelegar, prazo: e.target.value})} className="col-span-1 sm:col-span-3 bg-[#0d1b2a] border border-zinc-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-400 cursor-pointer transition-colors" />
               
-              <select value={formDelegar.prioridade} onChange={e => setFormDelegar({...formDelegar, prioridade: e.target.value})} className="col-span-1 sm:col-span-3 bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 text-xs text-white focus:outline-none focus:border-blue-400 cursor-pointer transition-colors">
-                <option value="Alta">Prioridade Alta</option>
-                <option value="Média">Prioridade Média</option>
-                <option value="Baixa">Prioridade Baixa</option>
+              <select value={formDelegar.prioridade} onChange={e => setFormDelegar({...formDelegar, prioridade: e.target.value})} className="col-span-1 sm:col-span-3 bg-[#0d1b2a] border border-zinc-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-400 cursor-pointer transition-colors">
+                <option value="Alta">Alta</option>
+                <option value="Média">Média</option>
+                <option value="Baixa">Baixa</option>
               </select>
               
-              <button type="submit" disabled={subindo} className="col-span-2 sm:col-span-6 bg-blue-500 hover:bg-blue-400 text-white font-black py-2.5 rounded-lg text-xs uppercase tracking-wider shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {subindo ? 'A processar...' : 'Delegar e Notificar'}
+              <button type="submit" disabled={subindo} className="col-span-2 sm:col-span-6 bg-blue-500 hover:bg-blue-400 text-white font-black py-2 rounded-lg text-xs uppercase tracking-wider shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {subindo ? '...' : 'Delegar e Notificar'}
               </button>
             </div>
           </form>
