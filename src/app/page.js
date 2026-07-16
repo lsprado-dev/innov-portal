@@ -125,6 +125,8 @@ export default function AdminPage() {
   const [totalArquivosSistema, setTotalArquivosSistema] = useState(0);
   const [totalArquivosSupabase, setTotalArquivosSupabase] = useState(0);
   const [totalArquivosDrive, setTotalArquivosDrive] = useState(0);
+  const [emailsEnviadosHoje, setEmailsEnviadosHoje] = useState(0);
+  const [emailsEnviadosMes, setEmailsEnviadosMes] = useState(0);
 
   // ESTADOS DE AGRUPAMENTO E MODAIS
   const [agruparPorEmpresa, setAgruparPorEmpresa] = useState(false);
@@ -322,6 +324,15 @@ export default function AdminPage() {
         setTotalArquivosDrive(driveCount);
         setTotalArquivosSistema(supaCount + driveCount);
       });
+
+      // MÁGICA: Puxa a contagem de e-mails em background
+      const hojeObj = new Date();
+      const inicioDiaStr = new Date(hojeObj.getFullYear(), hojeObj.getMonth(), hojeObj.getDate()).toISOString();
+      const inicioMesStr = new Date(hojeObj.getFullYear(), hojeObj.getMonth(), 1).toISOString();
+
+      supabase.from('logs_auditoria').select('id', { count: 'exact', head: true }).eq('acao', 'EMAIL_ENVIADO').gte('criado_em', inicioDiaStr).then(r => setEmailsEnviadosHoje(r.count || 0));
+      supabase.from('logs_auditoria').select('id', { count: 'exact', head: true }).eq('acao', 'EMAIL_ENVIADO').gte('criado_em', inicioMesStr).then(r => setEmailsEnviadosMes(r.count || 0));
+
       // Puxa a contagem sem quebrar o array real da tela!
       supabase.from('solicitacoes_cadastro').select('id', { count: 'exact', head: true }).then(r => {
          if (abaAtiva !== 'pendentes') setPendentes(new Array(r.count || 0)); 
@@ -675,6 +686,9 @@ export default function AdminPage() {
                   urlArquivo: urlDoArquivo,
                   caminhoPasta: 'Enviado diretamente para o seu e-mail.'
                 });
+                
+                // Grava para alimentar a barra de limite de cota
+                await supabase.from('logs_auditoria').insert([{ usuario_nome: formAlerta.responsavel || operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Enviou documento por e-mail para ${cli.email}` }]);
               } else {
                 await fetch(urlGoogle, {
                   method: 'POST',
@@ -845,6 +859,7 @@ export default function AdminPage() {
               descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi transferido para o seu departamento.`,
               prazo: 'Aguardando Análise'
            }).catch(()=>{});
+           supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Aviso de ticket transferido para o departamento ${valor}` }]).then();
         }
       }
       
@@ -860,6 +875,7 @@ export default function AdminPage() {
               descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi atribuído a você para resolução.`,
               prazo: 'Aguardando Análise'
            }).catch(()=>{});
+           supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Aviso de ticket atribuído para ${valor}` }]).then();
         }
         
         // MÁGICA: Notificação Push para a equipe
@@ -916,6 +932,8 @@ export default function AdminPage() {
           descricao: formDemanda.descricao.trim(),
           prazo: new Date(formDemanda.data_entrega).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
         }).catch(err => console.error("Falha no disparo automágico:", err));
+        
+        supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Aviso de nova tarefa enviado para ${formDemanda.atribuido_para}` }]).then();
       }
 
       // MÁGICA: Apita o celular da equipe avisando da nova demanda!
@@ -2262,6 +2280,46 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+
+            {/* MONITORAMENTO DE COTA RESEND */}
+            <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl mb-6">
+              <div className="flex justify-between items-center mb-5">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <IconMail /> Consumo da Cota de E-mails (Resend)
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">Monitoramento em tempo real dos limites do plano gratuito (100 diários / 3.000 mensais).</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
+                  <div className="flex justify-between items-end mb-3">
+                    <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Limite Diário</span>
+                    <span className={`text-lg font-black ${emailsEnviadosHoje >= 80 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
+                      {emailsEnviadosHoje} <span className="text-xs text-zinc-500 font-medium">/ 100</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-2 mb-2 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${emailsEnviadosHoje >= 80 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min((emailsEnviadosHoje / 100) * 100, 100)}%` }}></div>
+                  </div>
+                  {emailsEnviadosHoje >= 80 && <p className="text-[10px] text-red-400 font-bold">⚠️ Atenção: Limite diário prestes a esgotar!</p>}
+                </div>
+
+                <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
+                  <div className="flex justify-between items-end mb-3">
+                    <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Limite Mensal</span>
+                    <span className={`text-lg font-black ${emailsEnviadosMes >= 2500 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`}>
+                      {emailsEnviadosMes} <span className="text-xs text-zinc-500 font-medium">/ 3000</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-2 mb-2 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${emailsEnviadosMes >= 2500 ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min((emailsEnviadosMes / 3000) * 100, 100)}%` }}></div>
+                  </div>
+                  {emailsEnviadosMes >= 2500 && <p className="text-[10px] text-red-400 font-bold">⚠️ Atenção: Limite mensal prestes a esgotar!</p>}
+                </div>
+              </div>
+            </div>
 
             {/* TABELA DE LOGS */}
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl mb-6">

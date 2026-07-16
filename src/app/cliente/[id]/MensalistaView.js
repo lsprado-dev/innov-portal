@@ -1305,6 +1305,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         urlArquivo: publicUrlData.publicUrl,
         caminhoPasta: caminhoBase
       });
+      await supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Enviou documento por e-mail para ${cliente.email}` }]);
       mostrarToast('E-mail enviado com sucesso!', 'sucesso');
       setModalEmailDoc({ aberto: false, arquivo: null, titulo: 'Novo Documento Disponível', mensagem: '' });
     } catch (err) {
