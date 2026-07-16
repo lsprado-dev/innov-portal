@@ -638,85 +638,87 @@ export default function AdminPage() {
     if (!error) {
       let deveEnviarAgora = false;
       
-      if (formAlerta.enviar_email) {
-        if (!isRecorrente && formAlerta.enviar_agora) {
-          deveEnviarAgora = true;
-        } else if (isRecorrente) {
-          const hojeDia = new Date().getDate();
-          if (parseInt(formAlerta.dia_recorrencia) === hojeDia) deveEnviarAgora = true;
-        }
+      // MÁGICA: A lógica de decidir se dispara AGORA não pode estar presa ao Checkbox de E-mail!
+      // Se não, o Push nunca será disparado se a pessoa quiser apenas notificação pelo celular.
+      if (!isRecorrente && formAlerta.enviar_agora) {
+        deveEnviarAgora = true;
+      } else if (isRecorrente) {
+        const hojeDia = new Date().getDate();
+        if (parseInt(formAlerta.dia_recorrencia) === hojeDia) deveEnviarAgora = true;
       }
 
       if (deveEnviarAgora) {
-        const urlGoogle = "https://script.google.com/macros/s/AKfycbxEchPoftP-NOxqzmah4rV0RCAPDYfmaSZwL7jaGcu2ApI42YRW8pzKACtg7sMk4kCz/exec";
-        
-        let prazoTextoFinal = "";
-        let vencimentoTextoFinal = "";
+        // 1. Lógica de Envio de E-mails
+        if (formAlerta.enviar_email) {
+          const urlGoogle = "https://script.google.com/macros/s/AKfycbxEchPoftP-NOxqzmah4rV0RCAPDYfmaSZwL7jaGcu2ApI42YRW8pzKACtg7sMk4kCz/exec";
+          
+          let prazoTextoFinal = "";
+          let vencimentoTextoFinal = "";
 
-        if (!isRecorrente) {
-          prazoTextoFinal = formAlerta.prazo;
-          vencimentoTextoFinal = formAlerta.data_vencimento;
-        } else {
-          if (formAlerta.dia_recorrencia) prazoTextoFinal = `Todo dia ${formAlerta.dia_recorrencia}`;
-          if (formAlerta.dia_vencimento) vencimentoTextoFinal = `Todo dia ${formAlerta.dia_vencimento}`;
-        }
+          if (!isRecorrente) {
+            prazoTextoFinal = formAlerta.prazo;
+            vencimentoTextoFinal = formAlerta.data_vencimento;
+          } else {
+            if (formAlerta.dia_recorrencia) prazoTextoFinal = `Todo dia ${formAlerta.dia_recorrencia}`;
+            if (formAlerta.dia_vencimento) vencimentoTextoFinal = `Todo dia ${formAlerta.dia_vencimento}`;
+          }
 
-        for (const cli of clientesAlvo) {
-          if (cli.email && cli.email.trim() !== '') {
-            try {
-              if (formAlerta.tipo_alerta === 'envio_doc') {
-                let urlDoArquivo = '';
-                // Se for arquivo do Google Drive, monta o link oficial do Google
-                if (caminhoArquivoBase && caminhoArquivoBase.startsWith('DRIVE:')) {
-                  const fileId = caminhoArquivoBase.split('DRIVE:')[1];
-                  urlDoArquivo = `https://drive.google.com/file/d/${fileId}/view`;
-                } else if (caminhoArquivoBase) {
-                  // Fallback: se por acaso for Supabase
-                  const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(caminhoArquivoBase);
-                  urlDoArquivo = publicUrlData.publicUrl;
+          for (const cli of clientesAlvo) {
+            if (cli.email && cli.email.trim() !== '') {
+              try {
+                if (formAlerta.tipo_alerta === 'envio_doc') {
+                  let urlDoArquivo = '';
+                  if (caminhoArquivoBase && caminhoArquivoBase.startsWith('DRIVE:')) {
+                    const fileId = caminhoArquivoBase.split('DRIVE:')[1];
+                    urlDoArquivo = `https://drive.google.com/file/d/${fileId}/view`;
+                  } else if (caminhoArquivoBase) {
+                    const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(caminhoArquivoBase);
+                    urlDoArquivo = publicUrlData.publicUrl;
+                  }
+
+                  await enviarEmailDocumento({
+                    to: cli.email,
+                    nomeDestinatario: cli.nome_contato || cli.nome_empresa,
+                    nomeRemetente: formAlerta.responsavel || operador,
+                    tituloEmail: formAlerta.titulo,
+                    mensagem: formAlerta.mensagem,
+                    nomeArquivo: nomeArquivoBase,
+                    urlArquivo: urlDoArquivo,
+                    caminhoPasta: 'Enviado diretamente para o seu e-mail.'
+                  });
+                  
+                  await supabase.from('logs_auditoria').insert([{ usuario_nome: formAlerta.responsavel || operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Enviou documento por e-mail para ${cli.email}` }]);
+                } else {
+                  await fetch(urlGoogle, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({
+                      cliente_nome: cli.nome_empresa,
+                      cliente_email: cli.email,
+                      titulo: formAlerta.titulo,
+                      mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'),
+                      tipo_documento: formAlerta.tipo_documento,
+                      exibir_prazo_email: formAlerta.exibir_prazo_email,
+                      exibir_vencimento_email: formAlerta.exibir_vencimento_email,
+                      prazo_texto: prazoTextoFinal,
+                      vencimento_texto: vencimentoTextoFinal
+                    })
+                  });
                 }
-
-                await enviarEmailDocumento({
-                  to: cli.email,
-                  nomeDestinatario: cli.nome_contato || cli.nome_empresa,
-                  nomeRemetente: formAlerta.responsavel || operador,
-                  tituloEmail: formAlerta.titulo,
-                  mensagem: formAlerta.mensagem,
-                  nomeArquivo: nomeArquivoBase,
-                  urlArquivo: urlDoArquivo,
-                  caminhoPasta: 'Enviado diretamente para o seu e-mail.'
-                });
-                
-                // Grava para alimentar a barra de limite de cota
-                await supabase.from('logs_auditoria').insert([{ usuario_nome: formAlerta.responsavel || operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Enviou documento por e-mail para ${cli.email}` }]);
-              } else {
-                await fetch(urlGoogle, {
-                  method: 'POST',
-                  mode: 'no-cors',
-                  body: JSON.stringify({
-                    cliente_nome: cli.nome_empresa,
-                    cliente_email: cli.email,
-                    titulo: formAlerta.titulo,
-                    mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'),
-                    tipo_documento: formAlerta.tipo_documento,
-                    exibir_prazo_email: formAlerta.exibir_prazo_email,
-                    exibir_vencimento_email: formAlerta.exibir_vencimento_email,
-                    prazo_texto: prazoTextoFinal,
-                    vencimento_texto: vencimentoTextoFinal
-                  })
-                });
+              } catch (err) {
+                console.error("Erro ao notificar:", err);
               }
-            } catch (err) {
-              console.error("Erro ao notificar:", err);
             }
           }
         }
+        
+        // 2. Lógica de Envio de Push Notifications (Agora blindada e independente)
         if (formAlerta.enviar_push) {
            const pushMsg = formAlerta.tipo_alerta === 'envio_doc' 
-             ? `Acabamos de enviar o documento "${formAlerta.titulo}" no seu e-mail.` 
+             ? `Acabamos de disponibilizar o documento "${formAlerta.titulo}" no seu portal.` 
              : 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.';
              
-           dispararPush(clientesAlvo.map(c => c.id), formAlerta.tipo_alerta === 'envio_doc' ? 'Novo Documento Recebido' : 'Novo Aviso Disponível', pushMsg);
+           await dispararPush(clientesAlvo.map(c => c.id), formAlerta.tipo_alerta === 'envio_doc' ? 'Novo Documento Recebido' : 'Novo Aviso Disponível', pushMsg);
         }
         
         mostrarToast(`Criado! Disparos realizados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
