@@ -16,6 +16,7 @@ export async function inscreverAparelho(usuarioId, usuarioTipo) {
   if (permission !== 'granted') return false;
 
   try {
+    await navigator.serviceWorker.register('/sw.js');
     const swRegistration = await navigator.serviceWorker.ready;
     const applicationServerKey = base64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
     

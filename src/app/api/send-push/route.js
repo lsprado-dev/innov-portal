@@ -19,7 +19,7 @@ export async function POST(request) {
 
     const { usuarioId, titulo, body, url } = await request.json();
 
-    let query = supabaseAdmin.from('push_subscriptions').select('subscription');
+    let query = supabaseAdmin.from('push_subscriptions').select('id, subscription');
     
     if (usuarioId === 'interno') {
       // MÁGICA: Se o alvo for 'interno', atira para TODOS os Admins de uma vez!
@@ -39,7 +39,7 @@ export async function POST(request) {
         webpush.sendNotification(sub.subscription, payload).catch(async (e) => {
           if (e.statusCode === 404 || e.statusCode === 410) {
             // Se o cliente desinstalou o app, o sistema apaga o link quebrado automaticamente
-            await supabaseAdmin.from('push_subscriptions').delete().eq('subscription', sub.subscription);
+            await supabaseAdmin.from('push_subscriptions').delete().eq('id', sub.id);
           }
         })
       );

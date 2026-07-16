@@ -218,7 +218,7 @@ export async function enviarEmailDocumento({
 
   try {
     const { data, error } = await resend.emails.send({
-      from: 'Innov Portal <sistema@innovbusiness.com.br>',
+      from: 'Innovative Portal <sistema@innovbusiness.com.br>',
       to: [to],
       subject: `📄 ${tituloEmail}`,
       html: `
