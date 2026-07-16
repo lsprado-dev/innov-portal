@@ -21,7 +21,7 @@ const IconSend = () => <svg className="w-5 h-5" fill="none" stroke="currentColor
 const IconPin = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>;
 const IconChatTeam = () => <svg className="w-6 h-6 text-[#d4af37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>;
 
-export default function InnovChat({ operador }) {
+export default function InnovChat({ operador, onFechar }) {
   const [mensagens, setMensagens] = useState([]);
   const [novaMensagem, setNovaMensagem] = useState('');
   const [modoDelegar, setModoDelegar] = useState(false);
@@ -142,12 +142,16 @@ export default function InnovChat({ operador }) {
   }
 
   return (
-    <div className="bg-[#1b263b] rounded-xl border border-zinc-800 shadow-2xl flex flex-col w-full h-[75vh] max-h-[800px] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+    <div className="bg-[#1b263b] shadow-2xl flex flex-col w-full overflow-hidden animate-in fade-in duration-300 fixed inset-0 z-[99999] h-[100dvh] rounded-none sm:relative sm:inset-auto sm:z-auto sm:h-[75vh] sm:max-h-[800px] sm:rounded-xl sm:border sm:border-zinc-800 sm:zoom-in-95">
       
       {/* HEADER DO CHAT */}
       <div className="bg-[#0d1b2a] p-4 sm:p-5 border-b border-zinc-800 flex justify-between items-center z-10 shrink-0 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#d4af37]/10 p-2 rounded-full border border-[#d4af37]/30">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button onClick={onFechar} className="sm:hidden text-zinc-400 hover:text-white flex items-center gap-1 font-bold text-xs p-2 -ml-2 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+            Voltar
+          </button>
+          <div className="hidden sm:block bg-[#d4af37]/10 p-2 rounded-full border border-[#d4af37]/30">
             <IconChatTeam />
           </div>
           <div>

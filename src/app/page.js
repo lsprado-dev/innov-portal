@@ -2070,7 +2070,7 @@ export default function AdminPage() {
         
         {/* NOVA ABA: INNOVCHAT (CHAMANDO DE UM ARQUIVO EXTERNO) */}
         {abaAtiva === 'chat' && (
-          <InnovChat operador={operador} />
+          <InnovChat operador={operador} onFechar={() => setAbaAtiva('ativos')} />
         )}
 
         {abaAtiva === 'senhas' && (
