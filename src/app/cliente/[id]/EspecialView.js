@@ -590,7 +590,6 @@ export default function EspecialView({ params }) {
     }
     setSubindoArquivo(false);
   }
-
   async function baixarDocumento(caminhoStorage, nomeOriginal) {
     setSubindoArquivo(true);
     
