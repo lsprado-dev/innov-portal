@@ -71,6 +71,21 @@ export async function criarEstruturaClienteDrive(nomeEmpresa, tipoConta = 'mensa
 
     const pastaClienteId = pastaClienteResponse.data.id;
 
+    // 🚀 MÁGICA DA LIBERAÇÃO: Transforma a pasta do cliente em link público de leitura!
+    // Todos os arquivos e subpastas gerados aqui dentro herdarão essa permissão automaticamente.
+    try {
+      await drive.permissions.create({
+        fileId: pastaClienteId,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone',
+        },
+        supportsAllDrives: true,
+      });
+    } catch (permError) {
+      console.error(`Erro ao liberar permissão pública para a pasta ${nomeEmpresa}:`, permError);
+    }
+
     const mapeamentoIds = {
       pasta_raiz_cliente: pastaClienteId
     };
