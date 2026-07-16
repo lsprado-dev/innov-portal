@@ -14,7 +14,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
     }
 
-    // Salva o celular do cliente no banco
+    // MÁGICA: Limpa inscrições anteriores desse usuário. 
+    // Isso evita erros de "Unique Constraint" no banco e impede 
+    // que o sistema mande a mesma notificação 5 vezes para o mesmo cliente.
+    await supabaseAdmin
+      .from('push_subscriptions')
+      .delete()
+      .eq('usuario_id', usuarioId);
+
+    // Salva o celular atual do cliente no banco
     const { error } = await supabaseAdmin
       .from('push_subscriptions')
       .insert([{

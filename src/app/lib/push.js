@@ -25,13 +25,14 @@ export async function inscreverAparelho(usuarioId, usuarioTipo) {
       applicationServerKey
     });
 
-    await fetch('/api/push-subscribe', {
+    const res = await fetch('/api/push-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription, usuarioId, usuarioTipo })
     });
     
-    return true;
+    // Agora ele só retorna "true" (sucesso na tela) se o banco de dados realmente salvou!
+    return res.ok;
   } catch (e) {
     console.error("Erro no Push:", e);
     return false;
