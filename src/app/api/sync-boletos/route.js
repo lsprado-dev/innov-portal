@@ -114,7 +114,7 @@ export async function GET(request) {
     }
 
     const cobrancasInter = Array.from(boletosMap.values());
-    const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf');
+    const { data: clientesSupabase } = await supabaseAdmin.from('clientes').select('id, cnpj, cpf').limit(5000);
     let importados = 0;
 
     for (const cob of cobrancasInter) {
