@@ -178,7 +178,7 @@ export default function InnovChat({ operador, onFechar }) {
         </div>
         {operador === 'Victor (Admin)' && (
           <span className="text-[10px] font-black bg-red-500/10 text-red-500 border border-red-500/30 px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm flex items-center gap-1">
-            <span className="hidden sm:inline">Modo CEO</span> 👑
+            <span className="hidden sm:inline">Modo CEO</span>
           </span>
         )}
       </div>
