@@ -698,7 +698,10 @@ export default function AdminPage() {
           }
         }
         if (formAlerta.enviar_push) {
-           const pushMsg = formAlerta.tipo_alerta === 'envio_doc' ? 'Acabamos de enviar um novo documento para o seu portal.' : 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.';
+           const pushMsg = formAlerta.tipo_alerta === 'envio_doc' 
+             ? `Acabamos de enviar o documento "${formAlerta.titulo}" no seu e-mail.` 
+             : 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.';
+             
            dispararPush(clientesAlvo.map(c => c.id), formAlerta.tipo_alerta === 'envio_doc' ? 'Novo Documento Recebido' : 'Novo Aviso Disponível', pushMsg);
         }
         

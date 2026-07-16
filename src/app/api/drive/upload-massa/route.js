@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { drive } from '../../../../lib/googleDrive'; // Ajuste o caminho se a sua pasta lib ficar em outro lugar
+import { drive } from '../../../lib/googleDrive'; 
 import { Readable } from 'stream';
 
 const ROOT_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
