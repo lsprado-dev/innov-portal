@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { enviarEmailDemanda, enviarEmailDocumento } from './lib/email';
 import { inscreverAparelho, dispararPush } from './lib/push'; // Ajustado para a pasta real
+import InnovChat from './components/InnovChat'; // COMPONENTE DO CHAT
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -1955,6 +1956,11 @@ export default function AdminPage() {
             <img src="/logo.png" alt="Logo" className="w-32 h-auto object-contain drop-shadow-md" />
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto justify-end">
+            {/* NOVO BOTÃO INNOVCHAT PREMIUM */}
+            <button onClick={() => { setAbaAtiva('chat'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-4 py-2.5 sm:py-2 rounded-lg transition-all font-black border flex items-center gap-2 shadow-lg ${abaAtiva === 'chat' ? 'bg-yellow-500 text-[#0d1b2a] border-yellow-500 scale-105' : 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37] hover:bg-yellow-500 hover:scale-105'}`}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>
+              InnovChat
+            </button>
             <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Senhas</button>
             <button onClick={() => { setAbaAtiva('auditoria'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>
             <span className="text-sm text-zinc-400 hidden lg:inline">
@@ -2061,6 +2067,12 @@ export default function AdminPage() {
         </div>
 
         <div id="conteudo-admin"></div> {/* Âncora Invisível para Rolagem */}
+        
+        {/* NOVA ABA: INNOVCHAT (CHAMANDO DE UM ARQUIVO EXTERNO) */}
+        {abaAtiva === 'chat' && (
+          <InnovChat operador={operador} />
+        )}
+
         {abaAtiva === 'senhas' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
             <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
