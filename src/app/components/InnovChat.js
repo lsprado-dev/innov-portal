@@ -184,12 +184,12 @@ export default function InnovChat({ operador, onFechar }) {
       </div>
 
       {/* BARRA DE EQUIPA ONLINE/OFFLINE */}
-      <div className="bg-[#0d1b2a]/80 border-b border-zinc-800/50 px-4 py-2.5 flex gap-2.5 overflow-x-auto hide-scrollbar shrink-0 shadow-sm">
+      <div className="bg-[#0d1b2a]/80 border-b border-zinc-800/50 px-4 py-2 flex gap-2.5 overflow-x-auto hide-scrollbar shrink-0 shadow-sm w-full touch-pan-x snap-x cursor-grab active:cursor-grabbing">
         {Object.keys(OBTER_EMAIL_FUNCIONARIO).map(nome => {
           const isOnline = usuariosOnline.includes(nome);
           const primeiroNome = nome.split(' ')[0];
           return (
-            <div key={nome} className={`flex items-center gap-1.5 flex-shrink-0 px-2.5 py-1 rounded-full border ${isOnline ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-[#1b263b] border-zinc-700/50 text-zinc-500 opacity-60'} transition-colors cursor-default`}>
+            <div key={nome} className={`flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 sm:px-2.5 sm:py-1 rounded-full border snap-start ${isOnline ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-[#1b263b] border-zinc-700/50 text-zinc-500 opacity-60'} transition-colors cursor-default`}>
               <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`}></span>
               <span className="text-[10px] font-extrabold">{primeiroNome}</span>
             </div>
@@ -255,7 +255,7 @@ export default function InnovChat({ operador, onFechar }) {
                     
                     {!agrupar && (
                       <span className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${isCEO ? 'text-red-400' : 'text-zinc-400'} ${souEu ? 'mr-2' : 'ml-2'}`}>
-                        {msg.remetente.split(' ')[0]} {isCEO && '👑'}
+                        {msg.remetente.split(' ')[0]} {isCEO && ''}
                       </span>
                     )}
 
