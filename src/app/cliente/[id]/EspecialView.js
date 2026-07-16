@@ -667,7 +667,7 @@ export default function EspecialView({ params }) {
             {(() => {
               const processosFiltrados = processos.filter(proc => {
                 // Busca inteligente e à prova de falhas de digitação
-const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && d.tipo_documento === 'comprovante_honorario');
+const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
                 const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
                 return subAbaStatus === 'ativos' ? !isFinished : isFinished;
               });
