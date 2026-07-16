@@ -573,14 +573,24 @@ export default function AdminPage() {
     let caminhoArquivoBase = null;
     let nomeArquivoBase = null;
     if (formAlerta.tipo_alerta === 'envio_doc' && formAlerta.arquivo_envio) {
-      const timestamp = Date.now();
       nomeArquivoBase = formAlerta.arquivo_envio.name;
-      const nomeSeguro = nomeArquivoBase.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
-      caminhoArquivoBase = `envios_massa/${timestamp}_${nomeSeguro}`;
-      const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoArquivoBase, formAlerta.arquivo_envio);
-      if (storageError) {
+      
+      const formData = new FormData();
+      formData.append('file', formAlerta.arquivo_envio);
+      
+      try {
+        const res = await fetch('/api/drive/upload-massa', { method: 'POST', body: formData });
+        const resData = await res.json();
+        
+        if (resData.success) {
+          caminhoArquivoBase = `DRIVE:${resData.fileId}`;
+        } else {
+          setSubindo(false);
+          return mostrarToast('Erro no Drive: ' + resData.error, 'erro');
+        }
+      } catch (err) {
         setSubindo(false);
-        return mostrarToast('Erro no upload do documento: ' + storageError.message, 'erro');
+        return mostrarToast('Erro de conexão ao enviar para o Drive.', 'erro');
       }
     }
 
@@ -644,8 +654,17 @@ export default function AdminPage() {
           if (cli.email && cli.email.trim() !== '') {
             try {
               if (formAlerta.tipo_alerta === 'envio_doc') {
-                const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(caminhoArquivoBase);
-                
+                let urlDoArquivo = '';
+                // Se for arquivo do Google Drive, monta o link oficial do Google
+                if (caminhoArquivoBase && caminhoArquivoBase.startsWith('DRIVE:')) {
+                  const fileId = caminhoArquivoBase.split('DRIVE:')[1];
+                  urlDoArquivo = `https://drive.google.com/file/d/${fileId}/view`;
+                } else if (caminhoArquivoBase) {
+                  // Fallback: se por acaso for Supabase
+                  const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(caminhoArquivoBase);
+                  urlDoArquivo = publicUrlData.publicUrl;
+                }
+
                 await enviarEmailDocumento({
                   to: cli.email,
                   nomeDestinatario: cli.nome_contato || cli.nome_empresa,
@@ -653,7 +672,7 @@ export default function AdminPage() {
                   tituloEmail: formAlerta.titulo,
                   mensagem: formAlerta.mensagem,
                   nomeArquivo: nomeArquivoBase,
-                  urlArquivo: publicUrlData.publicUrl,
+                  urlArquivo: urlDoArquivo,
                   caminhoPasta: 'Enviado diretamente para o seu e-mail.'
                 });
               } else {
