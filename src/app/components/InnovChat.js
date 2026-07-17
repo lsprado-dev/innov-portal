@@ -344,7 +344,6 @@ export default function InnovChat({ operador, onFechar, isVisivel, setMensagensN
             </button>
             
             <input 
-              ref={inputRef}
               type="text" 
               placeholder="Digite a sua mensagem..." 
               value={novaMensagem} 
