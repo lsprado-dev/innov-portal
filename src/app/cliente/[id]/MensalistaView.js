@@ -1917,8 +1917,25 @@ export default function MensalistaView({ params: paramsPromise }) {
   }
   const caminhoPastas = subpastaAtiva ? obterCaminhoPastas(subpastaAtiva) : [];
   
+  // MÁGICA RECURSIVA: Verifica se a pasta ou qualquer subpasta filha infinita possui arquivos
+  const pastaTemArquivos = (pastaId) => {
+    // 1. Tem arquivo direto nela?
+    if (arquivos.some(a => a.subpasta_id === pastaId)) return true;
+    
+    // 2. Não tem? Busca as subpastas filhas e checa recursivamente na árvore!
+    const subpastasFilhas = pastas.filter(p => p.parent_id === pastaId);
+    return subpastasFilhas.some(filha => pastaTemArquivos(filha.id));
+  };
+
   // Filtra as pastas para mostrar apenas as que estão no nível atual
-  const pastasAtuais = pastas.filter(p => (p.parent_id || null) === (subpastaAtiva || null));
+  const pastasAtuais = pastas.filter(p => {
+    const isNivelAtual = (p.parent_id || null) === (subpastaAtiva || null);
+    if (!isNivelAtual) return false;
+    
+    // Se for a equipe interna (Admin), mostra tudo. Se for cliente, só mostra se tiver arquivo na árvore.
+    if (isInterno) return true; 
+    return pastaTemArquivos(p.id);
+  });
 
   // Lógica do Drag and Drop (Arrastar e Soltar)
   function handleDragOver(e) {
