@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -150,6 +150,7 @@ export default function AdminPage() {
   const [operador, setOperador] = useState('Administrador');
   const [subindo, setSubindo] = useState(false);
   const [progressoSync, setProgressoSync] = useState(null); // <-- MÁGICA 1 AQUI
+  const [mensagensNaoLidas, setMensagensNaoLidas] = useState(0); // Estado p/ a bolinha do Chat
 
   const [formDemanda, setFormDemanda] = useState({
     descricao: '',
@@ -307,6 +308,18 @@ export default function AdminPage() {
       carregarDadosDaAba(0, true);
     }
   }, [abaAtiva, autenticando]);
+
+  // MÁGICA DE UX: Atualiza os dados silenciosamente quando o Admin volta para a janela do painel
+  useEffect(() => {
+    const handleFocus = () => {
+      // Só recarrega se não estiver no meio de um processamento pesado
+      if (!subindo && !carregandoDados && !autenticando) {
+        carregarDadosDaAba(paginaAtual, true);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [abaAtiva, paginaAtual, subindo, carregandoDados, autenticando]);
 
   async function carregarDadosDaAba(pagina = 0, recarregar = false) {
     if (pagina === 0) {
@@ -1756,23 +1769,22 @@ export default function AdminPage() {
     return calc.texto.includes('Atrasado');
   });
 
-  const clientesFiltrados = clientes.filter(c => {
-    const termo = buscaCliente.toLowerCase().trim();
-    
-    // 🚀 HACK / EASTER EGG: Filtra apenas os clientes do grupo VAN
-    if (termo === 'clientesvan') {
-      return c.clientes_van === true;
-    }
+  const clientesFiltrados = useMemo(() => {
+    return clientes.filter(c => {
+      const termo = buscaCliente.toLowerCase().trim();
+      
+      if (termo === 'clientesvan') return c.clientes_van === true;
 
-    return (
-      (c.nome_empresa?.toLowerCase() || '').includes(termo) || 
-      (c.nome_contato?.toLowerCase() || '').includes(termo) || 
-      (c.cnpj || '').includes(termo) || 
-      (c.cpf || '').includes(termo) || 
-      (c.email?.toLowerCase() || '').includes(termo) ||
-      (c.regime_tributario?.toLowerCase() || '').includes(termo)
-    );
-  });
+      return (
+        (c.nome_empresa?.toLowerCase() || '').includes(termo) || 
+        (c.nome_contato?.toLowerCase() || '').includes(termo) || 
+        (c.cnpj || '').includes(termo) || 
+        (c.cpf || '').includes(termo) || 
+        (c.email?.toLowerCase() || '').includes(termo) ||
+        (c.regime_tributario?.toLowerCase() || '').includes(termo)
+      );
+    });
+  }, [clientes, buscaCliente]);
 
   const clientesParaAlerta = clientes.filter(c =>
     c.nome_empresa?.toLowerCase().includes(buscaAlertaInput.toLowerCase()) &&
@@ -1963,9 +1975,14 @@ export default function AdminPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto justify-end">
             {/* NOVO BOTÃO INNOVCHAT PREMIUM */}
-            <button onClick={() => { setAbaAtiva('chat'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-4 py-2.5 sm:py-2 rounded-lg transition-all font-black border flex items-center gap-2 shadow-lg ${abaAtiva === 'chat' ? 'bg-yellow-500 text-[#0d1b2a] border-yellow-500 scale-105' : 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37] hover:bg-yellow-500 hover:scale-105'}`}>
+            <button onClick={() => { setAbaAtiva('chat'); rolarPara('conteudo-admin'); setMensagensNaoLidas(0); }} className={`flex-1 sm:flex-none justify-center text-xs px-4 py-2.5 sm:py-2 rounded-lg transition-all font-black border flex items-center gap-2 shadow-lg relative ${abaAtiva === 'chat' ? 'bg-yellow-500 text-[#0d1b2a] border-yellow-500 scale-105' : 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37] hover:bg-yellow-500 hover:scale-105'}`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>
               InnovChat
+              {mensagensNaoLidas > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full animate-bounce shadow-[0_0_10px_rgba(239,68,68,0.8)] border border-red-400">
+                  {mensagensNaoLidas}
+                </span>
+              )}
             </button>
             <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Senhas</button>
             <button onClick={() => { setAbaAtiva('auditoria'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>

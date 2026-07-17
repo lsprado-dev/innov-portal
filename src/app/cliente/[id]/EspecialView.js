@@ -226,6 +226,17 @@ export default function EspecialView({ params }) {
     carregarDados();
   }, [id, router]);
 
+  // MÁGICA DE UX: Atualiza os dados societários silenciosamente ao voltar para a janela
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!subindoArquivo) {
+        carregarDados();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [id, subindoArquivo]);
+
   // NOVO: Limpa as bolinhas de notificação assim que o Admin abre a respectiva aba
   useEffect(() => {
     if (!isInterno) return;

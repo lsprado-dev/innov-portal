@@ -548,6 +548,17 @@ export default function MensalistaView({ params: paramsPromise }) {
     carregarDadosDaAba();
   }, [abaPrincipal, pastaAtiva, id]);
 
+  // MÁGICA DE UX: Atualiza os dados do cliente silenciosamente quando volta pro navegador
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!subindoArquivo && !carregandoConteudo) {
+        carregarDadosDaAba();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [abaPrincipal, pastaAtiva, id, subindoArquivo, carregandoConteudo]);
+
   // NOVO: ATUALIZAÇÃO OTIMISTA (A bolinha verde some no exato milissegundo em que o cliente abre a pasta)
   useEffect(() => {
     if (isInterno || abaPrincipal !== 'pastas' || !pastaAtiva) return;
@@ -1871,17 +1882,19 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
     setSubindoArquivo(false);
   }
-  const arquivosFiltradosDaBusca = arquivos.filter((arq) => {
-    const textoBusca = busca.toLowerCase();
-    const nomeOriginal = arq.nome_original?.toLowerCase() || '';
-    const nomeDoc = arq.nome_documento?.toLowerCase() || '';
-    const matchBusca = nomeOriginal.includes(textoBusca) || nomeDoc.includes(textoBusca);
-    
-    if (abaPrincipal === 'pastas') {
-      return matchBusca && (arq.subpasta_id || null) === subpastaAtiva;
-    }
-    return matchBusca;
-  });
+  const arquivosFiltradosDaBusca = useMemo(() => {
+    return arquivos.filter((arq) => {
+      const textoBusca = busca.toLowerCase();
+      const nomeOriginal = arq.nome_original?.toLowerCase() || '';
+      const nomeDoc = arq.nome_documento?.toLowerCase() || '';
+      const matchBusca = nomeOriginal.includes(textoBusca) || nomeDoc.includes(textoBusca);
+      
+      if (abaPrincipal === 'pastas') {
+        return matchBusca && (arq.subpasta_id || null) === subpastaAtiva;
+      }
+      return matchBusca;
+    });
+  }, [arquivos, busca, abaPrincipal, subpastaAtiva]);
 
   // Lógica de "Google Drive" - Constrói o caminho de navegação
   function obterCaminhoPastas(pastaId) {
