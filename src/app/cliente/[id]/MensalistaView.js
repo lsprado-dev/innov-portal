@@ -736,7 +736,11 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   async function processarPastaCoringa(nomePastaCoringa, parentIdAtual) {
     // TRAVA: Só espelha se for a Lsprado e ignora o Financeiro
-    if (cliente?.cnpj !== '50.457.640/0001-01') return;
+    const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
+    const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
+    const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
+    
+    if (!isCoringa) return;
     if (pastaAtiva === 'financeiro') return;
 
     const { data: allClients } = await supabase.from('clientes').select('id');
