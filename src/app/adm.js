@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { enviarEmailDemanda } from './lib/email';
+import { enviarEmailDemanda, enviarEmailDocumento } from './lib/email';
 import { inscreverAparelho, dispararPush } from './lib/push'; // Ajustado para a pasta real
+import InnovChat from './components/InnovChat'; // COMPONENTE DO CHAT
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -125,6 +126,8 @@ export default function AdminPage() {
   const [totalArquivosSistema, setTotalArquivosSistema] = useState(0);
   const [totalArquivosSupabase, setTotalArquivosSupabase] = useState(0);
   const [totalArquivosDrive, setTotalArquivosDrive] = useState(0);
+  const [emailsEnviadosHoje, setEmailsEnviadosHoje] = useState(0);
+  const [emailsEnviadosMes, setEmailsEnviadosMes] = useState(0);
 
   // ESTADOS DE AGRUPAMENTO E MODAIS
   const [agruparPorEmpresa, setAgruparPorEmpresa] = useState(false);
@@ -170,9 +173,11 @@ export default function AdminPage() {
     enviar_push: true,
     enviar_agora: true,
     data_envio_programado: '',
+    hora_envio_programado: '',
+    arquivo_envio: null,
     exibir_prazo_email: true,
     exibir_vencimento_email: true,
-    tipo_alerta: 'cobranca' // NOVO: Separa Cobrança de Lembrete
+    tipo_alerta: 'cobranca' // NOVO: Separa Cobrança, Lembrete, Envio_Doc
   });
   
   // NOVOS ESTADOS DA CENTRAL DE DISPARO
@@ -320,6 +325,15 @@ export default function AdminPage() {
         setTotalArquivosDrive(driveCount);
         setTotalArquivosSistema(supaCount + driveCount);
       });
+
+      // MÁGICA: Puxa a contagem de e-mails em background
+      const hojeObj = new Date();
+      const inicioDiaStr = new Date(hojeObj.getFullYear(), hojeObj.getMonth(), hojeObj.getDate()).toISOString();
+      const inicioMesStr = new Date(hojeObj.getFullYear(), hojeObj.getMonth(), 1).toISOString();
+
+      supabase.from('logs_auditoria').select('id', { count: 'exact', head: true }).eq('acao', 'EMAIL_ENVIADO').gte('criado_em', inicioDiaStr).then(r => setEmailsEnviadosHoje(r.count || 0));
+      supabase.from('logs_auditoria').select('id', { count: 'exact', head: true }).eq('acao', 'EMAIL_ENVIADO').gte('criado_em', inicioMesStr).then(r => setEmailsEnviadosMes(r.count || 0));
+
       // Puxa a contagem sem quebrar o array real da tela!
       supabase.from('solicitacoes_cadastro').select('id', { count: 'exact', head: true }).then(r => {
          if (abaAtiva !== 'pendentes') setPendentes(new Array(r.count || 0)); 
@@ -549,9 +563,12 @@ export default function AdminPage() {
     e.preventDefault();
     if (!formAlerta.titulo) return mostrarToast('O Título é obrigatório.', 'erro'); 
 
-    // O Prazo só é obrigatório se for COBRANÇA. Lembretes não exigem prazo!
     if (formAlerta.tipo_alerta === 'cobranca' && !formAlerta.repetir_mensalmente && !formAlerta.prazo) {
        return mostrarToast('O Prazo p/ Confirmação é obrigatório para cobranças.', 'erro'); 
+    }
+
+    if (formAlerta.tipo_alerta === 'envio_doc' && !formAlerta.arquivo_envio) {
+       return mostrarToast('É obrigatório anexar um documento para esta opção.', 'erro'); 
     }
 
     if (formAlerta.repetir_mensalmente && !formAlerta.dia_recorrencia) return mostrarToast('Por favor, informe em que DIA DO MÊS a automação deve enviar o alerta.', 'erro');
@@ -565,9 +582,39 @@ export default function AdminPage() {
 
     setSubindo(true);
     
+    let caminhoArquivoBase = null;
+    let nomeArquivoBase = null;
+    if (formAlerta.tipo_alerta === 'envio_doc' && formAlerta.arquivo_envio) {
+      nomeArquivoBase = formAlerta.arquivo_envio.name;
+      
+      const formData = new FormData();
+      formData.append('file', formAlerta.arquivo_envio);
+      
+      try {
+        const res = await fetch('/api/drive/upload-massa', { method: 'POST', body: formData });
+        const resData = await res.json();
+        
+        if (resData.success) {
+          caminhoArquivoBase = `DRIVE:${resData.fileId}`;
+        } else {
+          setSubindo(false);
+          return mostrarToast('Erro no Drive: ' + resData.error, 'erro');
+        }
+      } catch (err) {
+        setSubindo(false);
+        return mostrarToast('Erro de conexão ao enviar para o Drive.', 'erro');
+      }
+    }
+
     const isRecorrente = formAlerta.repetir_mensalmente;
-    const isAgendadoFuturo = !isRecorrente && !formAlerta.enviar_agora; // Desvinculado do E-mail!
+    const isAgendadoFuturo = !isRecorrente && !formAlerta.enviar_agora;
     const novoStatus = isRecorrente ? 'recorrente' : (isAgendadoFuturo ? 'programado' : 'pendente');
+
+    let dataHoraEnvioFinal = null;
+    if (isAgendadoFuturo && formAlerta.data_envio_programado) {
+      dataHoraEnvioFinal = formAlerta.data_envio_programado;
+      if (formAlerta.hora_envio_programado) dataHoraEnvioFinal += `T${formAlerta.hora_envio_programado}:00`;
+    }
 
     const disparos = clientesAlvo.map(c => ({
       cliente_id: c.id,
@@ -581,9 +628,10 @@ export default function AdminPage() {
       dia_recorrencia: isRecorrente && formAlerta.dia_recorrencia ? parseInt(formAlerta.dia_recorrencia) : null,
       dia_vencimento: isRecorrente && formAlerta.dia_vencimento ? parseInt(formAlerta.dia_vencimento) : null,
       enviado_email: formAlerta.enviar_email,
-      data_envio_programado: isAgendadoFuturo ? (formAlerta.data_envio_programado || null) : null,
+      data_envio_programado: dataHoraEnvioFinal,
       status: novoStatus,
-      tipo_alerta: formAlerta.tipo_alerta // NOVO: Salva se é Lembrete ou Cobrança
+      caminho_arquivo: caminhoArquivoBase,
+      tipo_alerta: formAlerta.tipo_alerta 
     }));
     
     const { error } = await supabase.from('alertas_clientes').insert(disparos);
@@ -591,71 +639,102 @@ export default function AdminPage() {
     if (!error) {
       let deveEnviarAgora = false;
       
-      if (formAlerta.enviar_email) {
-        if (!isRecorrente && formAlerta.enviar_agora) {
-          deveEnviarAgora = true;
-        } else if (isRecorrente) {
-          const hojeDia = new Date().getDate();
-          if (parseInt(formAlerta.dia_recorrencia) === hojeDia) deveEnviarAgora = true;
-        }
+      // MÁGICA: A lógica de decidir se dispara AGORA não pode estar presa ao Checkbox de E-mail!
+      // Se não, o Push nunca será disparado se a pessoa quiser apenas notificação pelo celular.
+      if (!isRecorrente && formAlerta.enviar_agora) {
+        deveEnviarAgora = true;
+      } else if (isRecorrente) {
+        const hojeDia = new Date().getDate();
+        if (parseInt(formAlerta.dia_recorrencia) === hojeDia) deveEnviarAgora = true;
       }
 
       if (deveEnviarAgora) {
-        const urlGoogle = "https://script.google.com/macros/s/AKfycbxEchPoftP-NOxqzmah4rV0RCAPDYfmaSZwL7jaGcu2ApI42YRW8pzKACtg7sMk4kCz/exec";
-        
-        let prazoTextoFinal = "";
-        let vencimentoTextoFinal = "";
+        // 1. Lógica de Envio de E-mails
+        if (formAlerta.enviar_email) {
+          const urlGoogle = "https://script.google.com/macros/s/AKfycbxEchPoftP-NOxqzmah4rV0RCAPDYfmaSZwL7jaGcu2ApI42YRW8pzKACtg7sMk4kCz/exec";
+          
+          let prazoTextoFinal = "";
+          let vencimentoTextoFinal = "";
 
-        if (!isRecorrente) {
-          prazoTextoFinal = formAlerta.prazo;
-          vencimentoTextoFinal = formAlerta.data_vencimento;
-        } else {
-          if (formAlerta.dia_recorrencia) prazoTextoFinal = `Todo dia ${formAlerta.dia_recorrencia}`;
-          if (formAlerta.dia_vencimento) vencimentoTextoFinal = `Todo dia ${formAlerta.dia_vencimento}`;
-        }
+          if (!isRecorrente) {
+            prazoTextoFinal = formAlerta.prazo;
+            vencimentoTextoFinal = formAlerta.data_vencimento;
+          } else {
+            if (formAlerta.dia_recorrencia) prazoTextoFinal = `Todo dia ${formAlerta.dia_recorrencia}`;
+            if (formAlerta.dia_vencimento) vencimentoTextoFinal = `Todo dia ${formAlerta.dia_vencimento}`;
+          }
 
-        for (const cli of clientesAlvo) {
-          if (cli.email && cli.email.trim() !== '') {
-            try {
-              await fetch(urlGoogle, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({
-                  cliente_nome: cli.nome_empresa,
-                  cliente_email: cli.email,
-                  titulo: formAlerta.titulo,
-                  mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'), // MÁGICA: Converte Enters para quebras HTML
-                  tipo_documento: formAlerta.tipo_documento,
-                  exibir_prazo_email: formAlerta.exibir_prazo_email,
-                  exibir_vencimento_email: formAlerta.exibir_vencimento_email,
-                  prazo_texto: prazoTextoFinal,
-                  vencimento_texto: vencimentoTextoFinal
-                })
-              });
-            } catch (err) {
-              console.error("Erro ao notificar webhook:", err);
+          for (const cli of clientesAlvo) {
+            if (cli.email && cli.email.trim() !== '') {
+              try {
+                if (formAlerta.tipo_alerta === 'envio_doc') {
+                  let urlDoArquivo = '';
+                  if (caminhoArquivoBase && caminhoArquivoBase.startsWith('DRIVE:')) {
+                    const fileId = caminhoArquivoBase.split('DRIVE:')[1];
+                    urlDoArquivo = `https://drive.google.com/file/d/${fileId}/view`;
+                  } else if (caminhoArquivoBase) {
+                    const { data: publicUrlData } = supabase.storage.from('documentos').getPublicUrl(caminhoArquivoBase);
+                    urlDoArquivo = publicUrlData.publicUrl;
+                  }
+
+                  await enviarEmailDocumento({
+                    to: cli.email,
+                    nomeDestinatario: cli.nome_contato || cli.nome_empresa,
+                    nomeRemetente: formAlerta.responsavel || operador,
+                    tituloEmail: formAlerta.titulo,
+                    mensagem: formAlerta.mensagem,
+                    nomeArquivo: nomeArquivoBase,
+                    urlArquivo: urlDoArquivo,
+                    caminhoPasta: 'Enviado diretamente para o seu e-mail.'
+                  });
+                  
+                  await supabase.from('logs_auditoria').insert([{ usuario_nome: formAlerta.responsavel || operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Enviou documento por e-mail para ${cli.email}` }]);
+                } else {
+                  await fetch(urlGoogle, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({
+                      cliente_nome: cli.nome_empresa,
+                      cliente_email: cli.email,
+                      titulo: formAlerta.titulo,
+                      mensagem: formAlerta.mensagem.replace(/\n/g, '<br>'),
+                      tipo_documento: formAlerta.tipo_documento,
+                      exibir_prazo_email: formAlerta.exibir_prazo_email,
+                      exibir_vencimento_email: formAlerta.exibir_vencimento_email,
+                      prazo_texto: prazoTextoFinal,
+                      vencimento_texto: vencimentoTextoFinal
+                    })
+                  });
+                }
+              } catch (err) {
+                console.error("Erro ao notificar:", err);
+              }
             }
           }
         }
-        // MÁGICA 1: Dispara o PUSH GENÉRICO para a lista de cobrança!
+        
+        // 2. Lógica de Envio de Push Notifications (Agora blindada e independente)
         if (formAlerta.enviar_push) {
-           dispararPush(clientesAlvo.map(c => c.id), 'Novo Aviso Disponível', 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.');
+           const pushMsg = formAlerta.tipo_alerta === 'envio_doc' 
+             ? `Acabamos de disponibilizar o documento "${formAlerta.titulo}" no seu portal.` 
+             : 'Você possui uma nova notificação ou cobrança no portal. Acesse para verificar.';
+             
+           await dispararPush(clientesAlvo.map(c => c.id), formAlerta.tipo_alerta === 'envio_doc' ? 'Novo Documento Recebido' : 'Novo Aviso Disponível', pushMsg);
         }
         
-        mostrarToast(`Criado! Avisos disparados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
+        mostrarToast(`Criado! Disparos realizados para ${clientesAlvo.length} empresa(s).`, 'sucesso');
       } else if (isAgendadoFuturo) {
         mostrarToast(`Agendada para disparo futuro!`, 'sucesso');
       } else if (isRecorrente) {
         mostrarToast(`Automação Mensal Salva!`, 'sucesso');
       } else {
-        mostrarToast(`Cobrança publicada APENAS no portal.`, 'aviso');
+        mostrarToast(`Publicada APENAS no portal.`, 'aviso');
       }
 
-      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', exibir_prazo_email: true, exibir_vencimento_email: true, tipo_alerta: 'cobranca' });
+      setFormAlerta({ clientesSelecionados: [], tipo_documento: 'Extratos Bancários', titulo: '', mensagem: '', prazo: '', data_vencimento: '', repetir_mensalmente: false, dia_recorrencia: '', dia_vencimento: '', enviar_email: true, enviar_push: true, enviar_agora: true, data_envio_programado: '', hora_envio_programado: '', arquivo_envio: null, exibir_prazo_email: true, exibir_vencimento_email: true, tipo_alerta: 'cobranca' });
       carregarDados();
     } else {
-
-      mostrarToast('Erro ao criar cobrança no sistema: ' + error.message, 'erro');
+      mostrarToast('Erro ao criar no sistema: ' + error.message, 'erro');
     }
     setSubindo(false);
   }
@@ -783,6 +862,7 @@ export default function AdminPage() {
               descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi transferido para o seu departamento.`,
               prazo: 'Aguardando Análise'
            }).catch(()=>{});
+           supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Aviso de ticket transferido para o departamento ${valor}` }]).then();
         }
       }
       
@@ -798,6 +878,7 @@ export default function AdminPage() {
               descricao: `O ticket #${String(pedido.numero_ticket || 0).padStart(5, '0')} foi atribuído a você para resolução.`,
               prazo: 'Aguardando Análise'
            }).catch(()=>{});
+           supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Aviso de ticket atribuído para ${valor}` }]).then();
         }
         
         // MÁGICA: Notificação Push para a equipe
@@ -854,6 +935,8 @@ export default function AdminPage() {
           descricao: formDemanda.descricao.trim(),
           prazo: new Date(formDemanda.data_entrega).toLocaleDateString('pt-BR', {timeZone: 'UTC'})
         }).catch(err => console.error("Falha no disparo automágico:", err));
+        
+        supabase.from('logs_auditoria').insert([{ usuario_nome: operador, usuario_tipo: 'interno', acao: 'EMAIL_ENVIADO', detalhe: `Aviso de nova tarefa enviado para ${formDemanda.atribuido_para}` }]).then();
       }
 
       // MÁGICA: Apita o celular da equipe avisando da nova demanda!
@@ -1663,6 +1746,7 @@ export default function AdminPage() {
 
   const alertasHistoricoCobrancas = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && (a.tipo_alerta === 'cobranca' || !a.tipo_alerta));
   const alertasHistoricoAvisos = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && a.tipo_alerta === 'lembrete');
+  const alertasHistoricoEnvios = alertasFiltradosGerais.filter(a => a.status !== 'recorrente' && a.status !== 'programado' && a.tipo_alerta === 'envio_doc');
   const alertasAgendados = alertasFiltradosGerais.filter(a => a.status === 'programado');
   const alertasRecorrentes = alertasFiltradosGerais.filter(a => a.status === 'recorrente');
   const alertasAtrasados = alertasHistoricoCobrancas.filter(a => {
@@ -1872,6 +1956,11 @@ export default function AdminPage() {
             <img src="/logo.png" alt="Logo" className="w-32 h-auto object-contain drop-shadow-md" />
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto justify-end">
+            {/* NOVO BOTÃO INNOVCHAT PREMIUM */}
+            <button onClick={() => { setAbaAtiva('chat'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-4 py-2.5 sm:py-2 rounded-lg transition-all font-black border flex items-center gap-2 shadow-lg ${abaAtiva === 'chat' ? 'bg-yellow-500 text-[#0d1b2a] border-yellow-500 scale-105' : 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37] hover:bg-yellow-500 hover:scale-105'}`}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>
+              InnovChat
+            </button>
             <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Senhas</button>
             <button onClick={() => { setAbaAtiva('auditoria'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>
             <span className="text-sm text-zinc-400 hidden lg:inline">
@@ -1978,6 +2067,12 @@ export default function AdminPage() {
         </div>
 
         <div id="conteudo-admin"></div> {/* Âncora Invisível para Rolagem */}
+        
+        {/* NOVA ABA: INNOVCHAT (CHAMANDO DE UM ARQUIVO EXTERNO) */}
+        {abaAtiva === 'chat' && (
+          <InnovChat operador={operador} onFechar={() => setAbaAtiva('ativos')} />
+        )}
+
         {abaAtiva === 'senhas' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
             <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
@@ -2199,6 +2294,46 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+
+            {/* MONITORAMENTO DE COTA RESEND */}
+            <div className="bg-[#1b263b] p-6 rounded-xl border border-zinc-800 shadow-xl mb-6">
+              <div className="flex justify-between items-center mb-5">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <IconMail /> Consumo da Cota de E-mails (Resend)
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">Monitoramento em tempo real dos limites do plano gratuito (100 diários / 3.000 mensais).</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
+                  <div className="flex justify-between items-end mb-3">
+                    <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Limite Diário</span>
+                    <span className={`text-lg font-black ${emailsEnviadosHoje >= 80 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
+                      {emailsEnviadosHoje} <span className="text-xs text-zinc-500 font-medium">/ 100</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-2 mb-2 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${emailsEnviadosHoje >= 80 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min((emailsEnviadosHoje / 100) * 100, 100)}%` }}></div>
+                  </div>
+                  {emailsEnviadosHoje >= 80 && <p className="text-[10px] text-red-400 font-bold">⚠️ Atenção: Limite diário prestes a esgotar!</p>}
+                </div>
+
+                <div className="bg-[#0d1b2a] p-4 rounded-lg border border-zinc-800/80">
+                  <div className="flex justify-between items-end mb-3">
+                    <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Limite Mensal</span>
+                    <span className={`text-lg font-black ${emailsEnviadosMes >= 2500 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`}>
+                      {emailsEnviadosMes} <span className="text-xs text-zinc-500 font-medium">/ 3000</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-2 mb-2 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${emailsEnviadosMes >= 2500 ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min((emailsEnviadosMes / 3000) * 100, 100)}%` }}></div>
+                  </div>
+                  {emailsEnviadosMes >= 2500 && <p className="text-[10px] text-red-400 font-bold">⚠️ Atenção: Limite mensal prestes a esgotar!</p>}
+                </div>
+              </div>
+            </div>
 
             {/* TABELA DE LOGS */}
             <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl mb-6">
@@ -2768,15 +2903,19 @@ export default function AdminPage() {
               </h2>
               <form onSubmit={handleCriarAlerta} className="space-y-6">
                 
-                {/* NOVO: SELETOR DE TIPO (COBRANÇA OU LEMBRETE) */}
-                <div className="flex bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full mb-6">
-                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'cobranca'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all ${formAlerta.tipo_alerta === 'cobranca' ? 'bg-orange-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                {/* NOVO: SELETOR DE TIPO (COBRANÇA, LEMBRETE OU ENVIO DE DOC) */}
+                <div className="flex flex-wrap bg-[#0d1b2a] p-1.5 rounded-lg border border-zinc-800 w-full mb-6 gap-1">
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'cobranca'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'cobranca' ? 'bg-orange-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                    Solicitar Documento / Cobrança
+                    Solicitar Documento
                   </button>
-                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'lembrete'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all ${formAlerta.tipo_alerta === 'lembrete' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'lembrete'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'lembrete' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    Enviar Aviso / Lembrete
+                    Enviar Aviso
+                  </button>
+                  <button type="button" onClick={() => setFormAlerta({...formAlerta, tipo_alerta: 'envio_doc'})} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-bold transition-all whitespace-nowrap ${formAlerta.tipo_alerta === 'envio_doc' ? 'bg-emerald-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'}`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    Enviar Documento
                   </button>
                 </div>
 
@@ -2883,6 +3022,19 @@ export default function AdminPage() {
                   ></div>
                   <p className="text-[10px] text-zinc-500 mt-1">Selecione o texto e use os botões acima para formatar visualmente e ver o resultado na hora.</p>
                 </div>
+
+                {formAlerta.tipo_alerta === 'envio_doc' && (
+                  <div className="bg-[#0d1b2a] p-4 rounded-lg border border-emerald-500/30">
+                    <label className="block text-xs font-bold text-emerald-400 uppercase mb-2">Anexar Documento para Envio</label>
+                    <input 
+                      type="file" 
+                      required 
+                      accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                      onChange={e => setFormAlerta({...formAlerta, arquivo_envio: e.target.files[0]})} 
+                      className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20" 
+                    />
+                  </div>
+                )}
 
                 {/* BLOCO 3: DATAS E RECORRÊNCIA */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-800 pt-5">
@@ -3022,8 +3174,9 @@ export default function AdminPage() {
 
                 {/* LINHA DOS BOTÕES DE ABAS (FLEX WRAP PARA NÃO ARRASTAR) */}
                 <div className="flex flex-wrap bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full gap-1">
-                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-[#d4af37] text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_cobrancas'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_cobrancas' ? 'bg-orange-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconInboxMini /> Histórico Cobranças</button>
                   <button onClick={() => { setSubAbaAlerta('historico_avisos'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_avisos' ? 'bg-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Histórico Avisos</button>
+                  <button onClick={() => { setSubAbaAlerta('historico_envios'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'historico_envios' ? 'bg-emerald-500 text-[#0d1b2a] shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconDocument /> Docs Enviados</button>
                   <button onClick={() => { setSubAbaAlerta('agendados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'agendados' ? 'bg-indigo-400 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconCalendar /> Agendados</button>
                   <button onClick={() => { setSubAbaAlerta('recorrentes'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'recorrentes' ? 'bg-purple-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconRepeat /> Automações</button>
                   <button onClick={() => { setSubAbaAlerta('atrasados'); rolarPara('area-lista-alertas'); }} className={`flex items-center justify-center gap-1 flex-1 min-w-[150px] px-4 py-2 rounded-md text-xs font-bold transition-all whitespace-nowrap ${subAbaAlerta === 'atrasados' ? 'bg-red-500 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`}><IconAlert /> Atrasados ({alertasAtrasados.length})</button>
@@ -3104,6 +3257,45 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
+                        <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
+                        <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {subAbaAlerta === 'historico_envios' && renderLista(alertasHistoricoEnvios, (alerta) => {
+                  return (
+                    <div key={alerta.id} className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${alerta.status === 'respondido' ? 'opacity-50 bg-[#0d1b2a]/40' : 'bg-[#1b263b] hover:bg-zinc-800/20'}`}>
+                      <div className="min-w-0 flex-1 w-full">
+                        <div className="flex gap-2 items-center mb-1 flex-wrap">
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase whitespace-nowrap bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Documento Enviado</span>
+                          
+                          {alerta.enviado_email ? (
+                            <span className="text-[10px] font-bold text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30 flex items-center whitespace-nowrap"><IconMail /> E-mail e Portal</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700 flex items-center whitespace-nowrap"><IconGlobe /> Apenas Portal</span>
+                          )}
+                          
+                          <span className="text-xs font-bold text-zinc-300 truncate max-w-full">{alerta.clientes?.nome_empresa}</span>
+                          {alerta.responsavel && <span className="text-[10px] bg-[#1b263b] text-zinc-400 px-2 py-0.5 rounded border border-zinc-700 whitespace-nowrap">Resp: {alerta.responsavel.split(' ')[0]}</span>}
+                        </div>
+                        <p className="text-sm font-medium text-emerald-400 mt-2 mb-1 truncate">{alerta.titulo} <span className="text-xs text-zinc-500 ml-1 font-normal">({alerta.tipo_documento})</span></p>
+                        <div className="flex gap-3 items-center flex-wrap">
+                          {alerta.visualizado_em && (
+                            <p className="text-[11px] text-blue-400 font-bold flex items-center" title="Cliente abriu a notificação no portal">
+                              <IconEye /> Visto em: {formatarDataHora(alerta.visualizado_em)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 flex-wrap sm:flex-nowrap">
+                        {alerta.caminho_arquivo && (
+                          <>
+                            <button onClick={(e) => { e.preventDefault(); visualizarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded text-xs font-bold transition border border-zinc-700">Visualizar</button>
+                            <button onClick={(e) => { e.preventDefault(); baixarDocumento(alerta.caminho_arquivo); }} className="flex-1 md:flex-none border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2 rounded text-xs font-bold transition">Baixar Documento</button>
+                          </>
+                        )}
                         <button onClick={() => preencherCopiaAlerta(alerta)} className="flex-1 md:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-3 py-2 rounded text-[#d4af37] font-bold transition flex items-center justify-center"><IconRepeat /> Repetir</button>
                         <button onClick={() => deletarAlerta(alerta.id)} className="flex-1 md:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 transition">Apagar</button>
                       </div>

@@ -2284,7 +2284,7 @@ export default function MensalistaView({ params: paramsPromise }) {
           <>
             <div className="flex flex-col md:flex-row w-full gap-4 mb-10">
               {[
-                { id: 'contabil', nome: 'Contábil', desc: 'Balanços e DREs', icon: <IconFolderLarge /> },
+                { id: 'contabil', nome: cliente?.clientes_van ? 'Contábil' : 'Documentos', desc: cliente?.clientes_van ? 'Balanços e DREs' : 'Cadastros e Registros', icon: <IconFolderLarge /> },
                 { id: 'fiscal', nome: 'Fiscal', desc: 'Guias e Impostos', icon: <IconChartLarge /> },
                 { id: 'rh', nome: 'DP / RH', desc: 'Folhas e Recibos', icon: <IconUsersLarge /> },
                 { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
