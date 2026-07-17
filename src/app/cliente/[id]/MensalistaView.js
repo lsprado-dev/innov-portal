@@ -2738,7 +2738,7 @@ dataLiberacao.setHours(0, 0, 0, 0);
                       <div className="lg:col-span-3">
                         <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Para qual setor?</label>
                         <select value={item.departamento} onChange={(e) => alterarDepartamentoEnvio(item.id, e.target.value)} className="w-full bg-[#1b263b] border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]">
-                          <option value="Contábil">Contábil</option>
+                          <option value="Contábil">{cliente?.clientes_van ? 'Contábil' : 'Documentos'}</option>
                           <option value="Fiscal">Fiscal</option>
                           <option value="DP / RH">DP / RH</option>
                           <option value="Financeiro">Financeiro</option>
@@ -2893,7 +2893,7 @@ dataLiberacao.setHours(0, 0, 0, 0);
                 <div className="w-full md:w-1/2 lg:w-1/3">
                   <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">Para qual departamento?</label>
                   <select value={departamentoPedido} onChange={(e) => setDepartamentoPedido(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] cursor-pointer transition-colors">
-                    <option value="Contábil">Contábil</option>
+                    <option value="Contábil">{cliente?.clientes_van ? 'Contábil' : 'Documentos'}</option>
                     <option value="Fiscal">Fiscal</option>
                     <option value="DP / RH">DP / RH</option>
                     <option value="Financeiro">Financeiro</option>

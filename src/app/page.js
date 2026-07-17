@@ -1757,7 +1757,13 @@ export default function AdminPage() {
   });
 
   const clientesFiltrados = clientes.filter(c => {
-    const termo = buscaCliente.toLowerCase();
+    const termo = buscaCliente.toLowerCase().trim();
+    
+    // 🚀 HACK / EASTER EGG: Filtra apenas os clientes do grupo VAN
+    if (termo === 'clientesvan') {
+      return c.clientes_van === true;
+    }
+
     return (
       (c.nome_empresa?.toLowerCase() || '').includes(termo) || 
       (c.nome_contato?.toLowerCase() || '').includes(termo) || 
