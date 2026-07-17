@@ -349,10 +349,10 @@ export default function AdminPage() {
 
       // Puxa a contagem sem quebrar o array real da tela!
       supabase.from('solicitacoes_cadastro').select('id', { count: 'exact', head: true }).then(r => {
-         if (abaAtiva !== 'pendentes') setPendentes(new Array(r.count || 0)); 
+         setPendentes(prev => (abaAtiva === 'pendentes' || (prev.length > 0 && prev[0]?.id)) ? prev : new Array(r.count || 0)); 
       });
-      supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).eq('status', 'pendente').then(r => {
-         if (abaAtiva !== 'recebidos') setRecebidos(new Array(r.count || 0));
+      supabase.from('envios_cliente').select('id', { count: 'exact', head: true }).in('status', ['pendente', 'visto']).then(r => {
+         setRecebidos(prev => (abaAtiva === 'recebidos' || (prev.length > 0 && prev[0]?.id)) ? prev : new Array(r.count || 0));
       });
     }
     
@@ -379,7 +379,7 @@ export default function AdminPage() {
       setTemMaisDados(false);
     } 
     else if (abaAtiva === 'recebidos') {
-      const { data } = await supabase.from('envios_cliente').select('*, clientes(nome_empresa)').eq('status', 'pendente').order('criado_em', { ascending: false }).range(from, to);
+      const { data } = await supabase.from('envios_cliente').select('*, clientes(nome_empresa)').in('status', ['pendente', 'visto']).order('criado_em', { ascending: false }).range(from, to);
       novaBusca = data || [];
       setRecebidos(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
     } 
