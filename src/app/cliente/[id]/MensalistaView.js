@@ -739,7 +739,8 @@ export default function MensalistaView({ params: paramsPromise }) {
   // GESTÃO DE PASTAS (APENAS ADMIN E CORINGA)
   // ===============================================
 
-  async function processarPastaCoringa(nomePastaCoringa, parentIdAtual) {
+  async function processarPastaCoringa(nomeOuArrayCoringa, parentIdAtual) {
+    const nomesCoringa = Array.isArray(nomeOuArrayCoringa) ? nomeOuArrayCoringa : [nomeOuArrayCoringa];
     const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
     const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
     const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
@@ -747,13 +748,16 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (!isCoringa) return;
     if (pastaAtiva === 'financeiro') return;
 
-    const { data: allClients } = await supabase.from('clientes').select('id');
+    const { data: allClients } = await supabase.from('clientes').select('id').limit(50000);
     const otherClients = allClients.filter(c => c.id !== id);
 
     if (!parentIdAtual) {
-      const insertData = otherClients.map(c => ({
-        cliente_id: c.id, setor: pastaAtiva, nome: nomePastaCoringa, parent_id: null
-      }));
+      const insertData = [];
+      otherClients.forEach(c => {
+        nomesCoringa.forEach(nome => {
+          insertData.push({ cliente_id: c.id, setor: pastaAtiva, nome: nome, parent_id: null });
+        });
+      });
       // 🚀 MÁGICA: Proteção de Lote (Chunking) para evitar erro de Payload da API
       for (let i = 0; i < insertData.length; i += 200) {
         await supabase.from('pastas_portal').insert(insertData.slice(i, i + 200));
@@ -803,7 +807,9 @@ export default function MensalistaView({ params: paramsPromise }) {
           const match = pastasCliente.find(p => p.nome === arvoreOriginal[arvoreOriginal.length - 1] && validarCaminho(p));
 
           if (match) {
-            insertData.push({ cliente_id: c.id, setor: pastaAtiva, nome: nomePastaCoringa, parent_id: match.id });
+            nomesCoringa.forEach(nome => {
+              insertData.push({ cliente_id: c.id, setor: pastaAtiva, nome: nome, parent_id: match.id });
+            });
           }
         });
 
@@ -896,7 +902,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (!todasPastasSetor) return [pastaAlvo.id];
 
     const idsGlobais = [];
-    const { data: allClients } = await supabase.from('clientes').select('id');
+    const { data: allClients } = await supabase.from('clientes').select('id').limit(50000);
 
     allClients.forEach(c => {
       const pastasCliente = todasPastasSetor.filter(p => p.cliente_id === c.id);
@@ -936,7 +942,10 @@ export default function MensalistaView({ params: paramsPromise }) {
          // 🚀 TRAVA DE GARANTIA: Garante que a pasta Mestra (a que vc clicou) ESTEJA na lista!
          if (!idsGlobais.includes(pasta.id)) idsGlobais.push(pasta.id);
          
-         await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).in('id', idsGlobais);
+         // 🚀 MÁGICA: Dividir Array em lotes de 100 para não quebrar a URI da API!
+         for (let i = 0; i < idsGlobais.length; i += 100) {
+           await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).in('id', idsGlobais.slice(i, i + 100));
+         }
       } else {
          await supabase.from('pastas_portal').update({ nome: novoNome.trim() }).eq('id', pasta.id);
       }
@@ -1006,6 +1015,8 @@ export default function MensalistaView({ params: paramsPromise }) {
       parentDriveId = pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta;
     }
 
+    const pastasCriadasComSucesso = [];
+
     for (let nomePasta of nomesValidos) {
       let idDrivePastaFinal = null;
       if (parentDriveId) {
@@ -1029,8 +1040,13 @@ export default function MensalistaView({ params: paramsPromise }) {
       }]).select().single();
       
       if (!error && novaPasta) {
-        await processarPastaCoringa(nomePasta.trim(), subpastaAtiva);
+        pastasCriadasComSucesso.push(nomePasta.trim());
       }
+    }
+    
+    // 🚀 MÁGICA: Só chama o Coringa UMA vez com todas as pastas para evitar Crash da API (Payload/Timeout)
+    if (pastasCriadasComSucesso.length > 0) {
+      await processarPastaCoringa(pastasCriadasComSucesso, subpastaAtiva);
     }
     
     await registrarAuditoria('PASTA_CRIADA_LOTE', `Criou ${nomesValidos.length} pastas espelhadas.`);
