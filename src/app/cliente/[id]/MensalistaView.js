@@ -740,7 +740,6 @@ export default function MensalistaView({ params: paramsPromise }) {
   // ===============================================
 
   async function processarPastaCoringa(nomePastaCoringa, parentIdAtual) {
-    // TRAVA: Só espelha se for a Lsprado e ignora o Financeiro
     const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
     const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
     const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
@@ -752,16 +751,17 @@ export default function MensalistaView({ params: paramsPromise }) {
     const otherClients = allClients.filter(c => c.id !== id);
 
     if (!parentIdAtual) {
-      // Se for na raiz, cria para todos na raiz
       const insertData = otherClients.map(c => ({
         cliente_id: c.id, setor: pastaAtiva, nome: nomePastaCoringa, parent_id: null
       }));
-      await supabase.from('pastas_portal').insert(insertData);
+      // 🚀 MÁGICA: Proteção de Lote (Chunking) para evitar erro de Payload da API
+      for (let i = 0; i < insertData.length; i += 200) {
+        await supabase.from('pastas_portal').insert(insertData.slice(i, i + 200));
+      }
     } else {
-      // 🚀 MÁGICA PROFUNDA: Reconstruir o caminho (árvore) exato da pasta pai na Lsprado
       let atual = parentIdAtual;
       const arvoreOriginal = [];
-      let dbSearchLimit = 15; // Proteção contra loops infinitos
+      let dbSearchLimit = 15; 
       
       while (atual && dbSearchLimit > 0) {
         let f = pastas.find(p => p.id === atual);
@@ -779,16 +779,17 @@ export default function MensalistaView({ params: paramsPromise }) {
       }
 
       if (arvoreOriginal.length > 0) {
-        // Puxa TODAS as pastas deste setor de uma só vez para velocidade!
+        // 🚀 MÁGICA 2: .limit(50000) evita a trava de 1000 que escondia as pastas pais dos outros clientes!
         const { data: todasPastasSetor } = await supabase.from('pastas_portal')
-          .select('id, cliente_id, nome, parent_id').eq('setor', pastaAtiva);
+          .select('id, cliente_id, nome, parent_id')
+          .eq('setor', pastaAtiva)
+          .limit(50000);
 
         const insertData = [];
         
         otherClients.forEach(c => {
           const pastasCliente = todasPastasSetor?.filter(p => p.cliente_id === c.id) || [];
           
-          // Validação de DNA (Checa se todo o caminho para trás bate com a Lsprado)
           const validarCaminho = (pastaCandidata) => {
             let currId = pastaCandidata.id;
             for (let i = arvoreOriginal.length - 1; i >= 0; i--) {
@@ -796,7 +797,7 @@ export default function MensalistaView({ params: paramsPromise }) {
               if (!p || p.nome !== arvoreOriginal[i]) return false;
               currId = p.parent_id;
             }
-            return currId === null; // Deve terminar na raiz ao mesmo tempo
+            return currId === null;
           };
 
           const match = pastasCliente.find(p => p.nome === arvoreOriginal[arvoreOriginal.length - 1] && validarCaminho(p));
@@ -806,7 +807,12 @@ export default function MensalistaView({ params: paramsPromise }) {
           }
         });
 
-        if (insertData.length > 0) await supabase.from('pastas_portal').insert(insertData);
+        // Proteção de Lote (Chunking) para evitar erro de Payload
+        if (insertData.length > 0) {
+          for (let i = 0; i < insertData.length; i += 200) {
+            await supabase.from('pastas_portal').insert(insertData.slice(i, i + 200));
+          }
+        }
       }
     }
   }
@@ -881,9 +887,11 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (arvoreOriginal.length === 0) return [pastaAlvo.id];
 
-    // Puxa as pastas em lote para ser ultra rápido
+    // 🚀 MÁGICA 3: Limite gigante para ele enxergar tudo na hora de deletar ou renomear!
     const { data: todasPastasSetor } = await supabase.from('pastas_portal')
-      .select('id, cliente_id, nome, parent_id').eq('setor', pastaAlvo.setor);
+      .select('id, cliente_id, nome, parent_id')
+      .eq('setor', pastaAlvo.setor)
+      .limit(50000);
 
     if (!todasPastasSetor) return [pastaAlvo.id];
 
@@ -967,7 +975,11 @@ export default function MensalistaView({ params: paramsPromise }) {
         idsParaDeletar = [...pastasSelecionadas];
       }
 
-      await supabase.from('pastas_portal').delete().in('id', idsParaDeletar);
+      // 🚀 MÁGICA 4: Dividir o Array em Lotes (Chunks) de 100 para evitar Erro "URI Too Long" da API
+      for (let i = 0; i < idsParaDeletar.length; i += 100) {
+        await supabase.from('pastas_portal').delete().in('id', idsParaDeletar.slice(i, i + 100));
+      }
+
       setPastasSelecionadas([]);
       setModoSelecaoPastas(false);
       setSubpastaAtiva(null);
@@ -1045,7 +1057,10 @@ export default function MensalistaView({ params: paramsPromise }) {
         // 🚀 TRAVA DE GARANTIA: Garante que a pasta Mestra seja apagada junto!
         if (!idsGlobais.includes(pasta.id)) idsGlobais.push(pasta.id);
         
-        await supabase.from('pastas_portal').delete().in('id', idsGlobais);
+        // 🚀 MÁGICA 5: Lotes de 100 para evitar bloqueio da API Supabase (URI Too Long)
+        for (let i = 0; i < idsGlobais.length; i += 100) {
+          await supabase.from('pastas_portal').delete().in('id', idsGlobais.slice(i, i + 100));
+        }
       } else {
         await supabase.from('pastas_portal').delete().eq('id', pasta.id);
       }
@@ -3921,11 +3936,20 @@ dataLiberacao.setHours(0, 0, 0, 0);
                 ))}
               </div>
               
-              {modalMultiPastas.nomes.length < 20 && (
-                <button type="button" onClick={() => setModalMultiPastas({...modalMultiPastas, nomes: [...modalMultiPastas.nomes, '']})} className="w-full bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-600 hover:text-white py-2 rounded-lg text-xs font-bold transition border-dashed">
-                  + Adicionar outro campo
+              <div className="flex gap-2">
+                {modalMultiPastas.nomes.length < 20 && (
+                  <button type="button" onClick={() => setModalMultiPastas({...modalMultiPastas, nomes: [...modalMultiPastas.nomes, '']})} className="flex-1 bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-600 hover:text-white py-2 rounded-lg text-xs font-bold transition border-dashed">
+                    + Adicionar campo
+                  </button>
+                )}
+                <button 
+                  type="button" 
+                  onClick={() => setModalMultiPastas({...modalMultiPastas, nomes: ['01 - Janeiro', '02 - Fevereiro', '03 - Março', '04 - Abril', '05 - Maio', '06 - Junho', '07 - Julho', '08 - Agosto', '09 - Setembro', '10 - Outubro', '11 - Novembro', '12 - Dezembro']})} 
+                  className="flex-1 bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500 hover:text-white py-2 rounded-lg text-xs font-bold transition border-dashed"
+                >
+                  Preencher 12 Meses
                 </button>
-              )}
+              </div>
 
               <div className="pt-4 flex justify-end gap-2 border-t border-zinc-800 mt-2">
                 <button type="button" onClick={() => setModalMultiPastas({ aberto: false, nomes: [''] })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
