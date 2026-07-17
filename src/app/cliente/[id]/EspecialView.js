@@ -643,7 +643,7 @@ export default function EspecialView({ params }) {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 bg-[#1b263b]/30 p-4 rounded-xl border border-zinc-800/60 gap-4 shadow-sm">
           <div className="flex items-center gap-4">
             {isInterno ? (
-              <button onClick={() => router.push('/')} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para o Painel Admin</button>
+              <button onClick={() => window.location.href = '/'} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para o Painel Admin</button>
             ) : cliente && (cliente.tipo_conta !== 'especiais' && cliente.tipo_conta !== 'especial') ? (
               <button onClick={() => window.location.href = `/cliente/${id}`} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para Painel Principal</button>
             ) : (
