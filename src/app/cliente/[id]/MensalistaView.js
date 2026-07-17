@@ -748,7 +748,16 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (!isCoringa) return;
     if (pastaAtiva === 'financeiro') return;
 
-    const { data: allClients } = await supabase.from('clientes').select('id').limit(50000);
+    // 🚀 MÁGICA 1: Burlar o limite oculto de 1000 do Supabase puxando clientes em lotes
+    let allClients = [];
+    let loopC = 0;
+    while (true) {
+      const { data } = await supabase.from('clientes').select('id').range(loopC, loopC + 999);
+      if (!data || data.length === 0) break;
+      allClients.push(...data);
+      if (data.length < 1000) break;
+      loopC += 1000;
+    }
     const otherClients = allClients.filter(c => c.id !== id);
 
     if (!parentIdAtual) {
@@ -758,7 +767,7 @@ export default function MensalistaView({ params: paramsPromise }) {
           insertData.push({ cliente_id: c.id, setor: pastaAtiva, nome: nome, parent_id: null });
         });
       });
-      // 🚀 MÁGICA: Proteção de Lote (Chunking) para evitar erro de Payload da API
+      // Proteção de Lote (Chunking) para evitar erro de Payload da API
       for (let i = 0; i < insertData.length; i += 200) {
         await supabase.from('pastas_portal').insert(insertData.slice(i, i + 200));
       }
@@ -783,16 +792,24 @@ export default function MensalistaView({ params: paramsPromise }) {
       }
 
       if (arvoreOriginal.length > 0) {
-        // 🚀 MÁGICA 2: .limit(50000) evita a trava de 1000 que escondia as pastas pais dos outros clientes!
-        const { data: todasPastasSetor } = await supabase.from('pastas_portal')
-          .select('id, cliente_id, nome, parent_id')
-          .eq('setor', pastaAtiva)
-          .limit(50000);
+        // 🚀 MÁGICA 2: Burlar o limite de 1000 pastas que fazia o sistema ignorar as pastas pais de outros clientes
+        let todasPastasSetor = [];
+        let loopP = 0;
+        while (true) {
+          const { data } = await supabase.from('pastas_portal')
+            .select('id, cliente_id, nome, parent_id')
+            .eq('setor', pastaAtiva)
+            .range(loopP, loopP + 999);
+          if (!data || data.length === 0) break;
+          todasPastasSetor.push(...data);
+          if (data.length < 1000) break;
+          loopP += 1000;
+        }
 
         const insertData = [];
         
         otherClients.forEach(c => {
-          const pastasCliente = todasPastasSetor?.filter(p => p.cliente_id === c.id) || [];
+          const pastasCliente = todasPastasSetor.filter(p => p.cliente_id === c.id);
           
           const validarCaminho = (pastaCandidata) => {
             let currId = pastaCandidata.id;
@@ -893,16 +910,34 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     if (arvoreOriginal.length === 0) return [pastaAlvo.id];
 
-    // 🚀 MÁGICA 3: Limite gigante para ele enxergar tudo na hora de deletar ou renomear!
-    const { data: todasPastasSetor } = await supabase.from('pastas_portal')
-      .select('id, cliente_id, nome, parent_id')
-      .eq('setor', pastaAlvo.setor)
-      .limit(50000);
+    // 🚀 MÁGICA: Burlar o limite oculto de 1000 do Supabase puxando tudo em blocos
+    let todasPastasSetor = [];
+    let loopP = 0;
+    while (true) {
+      const { data } = await supabase.from('pastas_portal')
+        .select('id, cliente_id, nome, parent_id')
+        .eq('setor', pastaAlvo.setor)
+        .range(loopP, loopP + 999);
+      if (!data || data.length === 0) break;
+      todasPastasSetor.push(...data);
+      if (data.length < 1000) break;
+      loopP += 1000;
+    }
 
-    if (!todasPastasSetor) return [pastaAlvo.id];
+    if (todasPastasSetor.length === 0) return [pastaAlvo.id];
 
     const idsGlobais = [];
-    const { data: allClients } = await supabase.from('clientes').select('id').limit(50000);
+    
+    // 🚀 MÁGICA: Puxando clientes ignorando o limite
+    let allClients = [];
+    let loopC = 0;
+    while (true) {
+      const { data } = await supabase.from('clientes').select('id').range(loopC, loopC + 999);
+      if (!data || data.length === 0) break;
+      allClients.push(...data);
+      if (data.length < 1000) break;
+      loopC += 1000;
+    }
 
     allClients.forEach(c => {
       const pastasCliente = todasPastasSetor.filter(p => p.cliente_id === c.id);
