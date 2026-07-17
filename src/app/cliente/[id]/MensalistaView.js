@@ -2074,7 +2074,7 @@ export default function MensalistaView({ params: paramsPromise }) {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 bg-[#1b263b]/30 p-4 rounded-xl border border-zinc-800/60 gap-4 shadow-sm">
           <div className="flex items-center gap-4">
             {isInterno ? (
-              <button onClick={() => window.location.href = '/'} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para o Painel Admin</button>
+              <button onClick={() => router.push('/')} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para o Painel Admin</button>
             ) : (
               <span className="text-xs text-zinc-500 font-bold tracking-wider uppercase">Portal Restrito do Cliente</span>
             )}

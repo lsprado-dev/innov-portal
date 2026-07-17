@@ -21,7 +21,7 @@ const IconSend = () => <svg className="w-5 h-5" fill="none" stroke="currentColor
 const IconPin = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>;
 const IconChatTeam = () => <svg className="w-6 h-6 text-[#d4af37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>;
 
-export default function InnovChat({ operador, onFechar }) {
+export default function InnovChat({ operador, onFechar, isVisivel, setMensagensNaoLidas }) {
   const [mensagens, setMensagens] = useState([]);
   const [novaMensagem, setNovaMensagem] = useState('');
   const [modoDelegar, setModoDelegar] = useState(false);
