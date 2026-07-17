@@ -78,6 +78,7 @@ const IconMiniClock = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none"
 const IconCheck = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>;
 const IconClip = () => <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>;
 const IconChatList = () => <svg className="w-6 h-6 text-[#d4af37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>;
+const IconDots = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>;
 const IconEye = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" /></svg>;
 const IconRestore = () => <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>;
 
@@ -182,6 +183,8 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [novoNomeArquivo, setNovoNomeArquivo] = useState('');
   
   const [selecionados, setSelecionados] = useState([]);
+  const [modoSelecao, setModoSelecao] = useState(false); // NOVO: Controla a exibição das caixinhas
+  const [menuAberto, setMenuAberto] = useState(null); // NOVO: Controla o dropdown de 3 pontinhos
 
   const [arquivos, setArquivos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -2697,52 +2700,97 @@ dataLiberacao.setHours(0, 0, 0, 0);
                       <p className="text-zinc-400 text-center py-8">Nenhum documento nesta área ainda.</p>
                     ) : (
                       <>
-                        {/* BARRA DE AÇÕES EM LOTE */}
+                        {/* BARRA DE AÇÕES EM LOTE (ESTILO GOOGLE DRIVE) */}
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1b263b] border border-[#d4af37]/30 p-3 rounded-lg mb-4 gap-3">
-                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
-                            <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0} onChange={toggleSelecionarTodos} />
-                            Selecionar Todos
-                          </label>
-                          
-                          {selecionados.length > 0 && (
-                            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-                              <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionados.length} selecionado(s)</span>
-                              {isInterno && (
-                                <>
-                                  <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="flex-1 sm:flex-none text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded text-blue-400 font-bold transition text-center">Mover</button>
-                                  <button onClick={handleExcluirSelecionados} className="flex-1 sm:flex-none text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 font-bold transition text-center">Excluir</button>
-                                </>
-                              )}
-                              <button onClick={handleBaixarSelecionados} className="flex-1 sm:flex-none text-[10px] bg-[#d4af37] text-black px-3 py-2 rounded font-bold hover:bg-yellow-500 transition shadow-sm text-center">Baixar</button>
+                          {!modoSelecao ? (
+                            <div className="w-full flex justify-between items-center">
+                              <span className="text-sm font-bold text-zinc-300">Arquivos ({arquivosFiltradosDaBusca.length})</span>
+                              <button onClick={() => setModoSelecao(true)} className="text-xs bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 font-bold px-4 py-2 rounded-lg hover:bg-[#d4af37] hover:text-[#0d1b2a] transition shadow-sm">
+                                Modo de Seleção
+                              </button>
                             </div>
+                          ) : (
+                            <>
+                              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-300 hover:text-white transition w-full sm:w-auto">
+                                <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer" checked={selecionados.length === arquivosFiltradosDaBusca.length && arquivosFiltradosDaBusca.length > 0} onChange={toggleSelecionarTodos} />
+                                Selecionar Todos
+                              </label>
+                              
+                              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+                                {selecionados.length > 0 && (
+                                  <>
+                                    <span className="text-xs font-bold text-[#d4af37] mr-2 w-full sm:w-auto">{selecionados.length} selecionado(s)</span>
+                                    {isInterno && (
+                                      <>
+                                        <button onClick={() => setArquivosMovendo(arquivosFiltradosDaBusca.filter(a => selecionados.includes(a.id)))} className="flex-1 sm:flex-none text-[10px] bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded text-blue-400 font-bold transition text-center">Mover</button>
+                                        <button onClick={handleExcluirSelecionados} className="flex-1 sm:flex-none text-[10px] bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded text-red-400 font-bold transition text-center">Excluir</button>
+                                      </>
+                                    )}
+                                    <button onClick={handleBaixarSelecionados} className="flex-1 sm:flex-none text-[10px] bg-[#d4af37] text-black px-3 py-2 rounded font-bold hover:bg-yellow-500 transition shadow-sm text-center">Baixar</button>
+                                  </>
+                                )}
+                                <button onClick={() => { setModoSelecao(false); setSelecionados([]); }} className="text-xs text-zinc-400 hover:text-white font-bold px-3 py-2 underline transition">Cancelar</button>
+                              </div>
+                            </>
                           )}
                         </div>
 
-                        <div className="space-y-3">
+                        {/* LISTAGEM DE ARQUIVOS (LAYOUT PRO DRIVE) */}
+                        <div className="grid grid-cols-1 gap-2">
                           {arquivosFiltradosDaBusca.map((arq) => (
-                            <div key={arq.id} className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-start justify-between gap-4 w-full min-w-0 transition-all ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/5 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800 hover:border-zinc-700'}`}>
-                              <div className="flex items-start gap-3 min-w-0 flex-1">
-                                <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0 mt-1" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} />
-                                <div className="flex-shrink-0 mt-0.5"><IconFile /></div>
-                                <div className="min-w-0 w-full cursor-pointer" onClick={() => toggleSelecao(arq.id)}>
-                                  <p className="text-sm text-zinc-200 font-medium break-words leading-snug pr-2">{arq.nome_original}</p>
-                                  <p className="text-[11px] text-zinc-500 mt-1 break-words">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
+                            <div key={arq.id} className={`p-3 rounded-lg border flex items-center justify-between gap-4 w-full transition-all group hover:bg-zinc-800/40 ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/10 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800/50'}`}>
+                              
+                              {/* Clica na linha toda: Se o modo seleção tiver ativo ele checa a caixa, se não ele Visualiza direto! */}
+                              <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => modoSelecao ? toggleSelecao(arq.id) : visualizarDocumento(arq.caminho_storage)}>
+                                {modoSelecao && (
+                                  <input type="checkbox" className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" checked={selecionados.includes(arq.id)} onChange={() => toggleSelecao(arq.id)} onClick={e => e.stopPropagation()} />
+                                )}
+                                <div className="flex-shrink-0 text-zinc-400 group-hover:text-[#d4af37] transition-colors"><IconFile /></div>
+                                <div className="min-w-0 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+                                  <p className="text-sm text-zinc-200 font-medium truncate group-hover:text-white transition-colors">{arq.nome_original}</p>
+                                  <p className="text-[11px] text-zinc-500 hidden sm:block truncate">Enviado por: <span className="text-zinc-400 font-semibold">{arq.enviado_por}</span> em {new Date(arq.criado_em).toLocaleDateString('pt-BR')}</p>
                                 </div>
                               </div>
-                              <div className="flex gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-                                {isInterno && (
+
+                              <div className="flex items-center gap-2 relative">
+                                {!modoSelecao && (
                                   <>
-                                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalEmailDoc({ aberto: true, arquivo: arq, titulo: 'Novo Documento Disponível', mensagem: '' }); }} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition shadow-sm">E-mail</button>
-                                    <button onClick={() => setArquivosMovendo([arq])} className="flex-1 sm:flex-none text-xs bg-blue-500/10 hover:bg-blue-500 hover:text-white border border-blue-500/30 px-3 py-2 rounded-lg text-blue-400 font-medium transition">Mover</button>
-                                    <button onClick={() => handleRenomear(arq)} className="flex-1 sm:flex-none text-xs bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 px-3 py-2 rounded-lg text-zinc-300 font-medium transition">Renomear</button>
-                                    <button onClick={() => handleMoverParaLixeira(arq, 'portal')} className="flex-1 sm:flex-none text-xs bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/30 px-3 py-2 rounded-lg text-red-400 font-medium transition">Excluir</button>
+                                    <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="hidden sm:flex text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded font-bold transition-all shadow-sm">
+                                      Baixar
+                                    </button>
+                                    
+                                    {/* MENU 3 PONTINHOS MAGICO */}
+                                    <div className="relative" onMouseLeave={() => setMenuAberto(null)}>
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === arq.id ? null : arq.id); }} 
+                                        className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
+                                      >
+                                        <IconDots />
+                                      </button>
+
+                                      {menuAberto === arq.id && (
+                                        <div className="absolute right-0 top-full mt-1 w-48 bg-[#1b263b] border border-zinc-700 rounded-lg shadow-2xl z-[999] py-1 flex flex-col">
+                                          <button onClick={() => { setMenuAberto(null); visualizarDocumento(arq.caminho_storage); }} className="px-4 py-2 text-left text-xs font-bold text-white hover:bg-zinc-700 transition">👁️ Visualizar</button>
+                                          <button onClick={() => { setMenuAberto(null); baixarDocumento(arq.caminho_storage, arq.nome_original); }} className="px-4 py-2 text-left text-xs font-bold text-white hover:bg-zinc-700 transition sm:hidden">⬇️ Baixar</button>
+                                          
+                                          {!isInterno && (
+                                            <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="px-4 py-2 text-left text-xs font-bold text-[#d4af37] hover:bg-zinc-700 transition">💬 Solicitar Suporte</button>
+                                          )}
+
+                                          {isInterno && (
+                                            <>
+                                              <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); setModalEmailDoc({ aberto: true, arquivo: arq, titulo: 'Novo Documento Disponível', mensagem: '' }); }} className="px-4 py-2 text-left text-xs font-bold text-blue-400 hover:bg-zinc-700 transition">✉️ Enviar por E-mail</button>
+                                              <button onClick={() => { setMenuAberto(null); setArquivosMovendo([arq]); }} className="px-4 py-2 text-left text-xs font-bold text-indigo-400 hover:bg-zinc-700 transition">📁 Mover</button>
+                                              <button onClick={() => { setMenuAberto(null); handleRenomear(arq); }} className="px-4 py-2 text-left text-xs font-bold text-zinc-300 hover:bg-zinc-700 transition">✏️ Renomear</button>
+                                              <div className="border-t border-zinc-700/50 my-1"></div>
+                                              <button onClick={() => { setMenuAberto(null); handleMoverParaLixeira(arq, 'portal'); }} className="px-4 py-2 text-left text-xs font-bold text-red-400 hover:bg-zinc-700 transition">🗑️ Excluir</button>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
                                   </>
                                 )}
-                                {!isInterno && (
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="flex-1 sm:flex-none text-xs bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-[#0d1b2a] border border-[#d4af37]/30 px-4 py-2.5 rounded-lg text-[#d4af37] font-bold transition-all shadow-sm whitespace-nowrap">Suporte</button>
-                                )}
-                                <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="flex-1 sm:flex-none text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 px-4 py-2.5 rounded-lg text-white font-bold transition-all shadow-sm whitespace-nowrap">Visualizar</button>
-                                <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="flex-1 sm:flex-none text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap">Baixar</button>
                               </div>
                             </div>
                           ))}
