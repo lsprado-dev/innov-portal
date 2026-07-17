@@ -303,6 +303,9 @@ export default function EspecialView({ params }) {
   async function handleAnexarComprovanteTaxa(e, proc, taxaId) {
     const file = e.target.files[0];
     if(!file) return;
+    
+    e.target.value = null; // MÁGICA: Libera o input!
+    
     setSubindoArquivo(true);
     const timestamp = Date.now();
     const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
