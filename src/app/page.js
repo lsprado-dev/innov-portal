@@ -1736,7 +1736,7 @@ export default function AdminPage() {
   // Filtra os arquivos recebidos com base em quem está logado (Protegido contra o hack de performance)
   const recebidosVisiveis = eGestor 
     ? recebidos 
-    : (Array.isArray(recebidos) ? recebidos.filter(r => departamentosVisiveis.includes(r.departamento)) : recebidos);
+    : (Array.isArray(recebidos) ? recebidos.filter(r => departamentosVisiveis.includes(r?.departamento)) : recebidos);
 
   const demandasVisiveis = demandas.filter(d => eGestor || d.atribuido_para === operador || d.criado_por === operador);
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
