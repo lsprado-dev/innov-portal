@@ -57,6 +57,11 @@ export default function InnovChat({ operador, onFechar }) {
           if (jaExiste) return prev;
           return [...prev, payload.new];
         });
+        
+        // Se a pessoa estiver em outra aba, aumenta a bolinha de notificação!
+        if (!isVisivel && setMensagensNaoLidas) {
+          setMensagensNaoLidas(prev => prev + 1);
+        }
       })
       .subscribe();
 
@@ -159,7 +164,7 @@ export default function InnovChat({ operador, onFechar }) {
   }
 
   return (
-    <div className="bg-[#1b263b] shadow-2xl flex flex-col w-full overflow-hidden animate-in fade-in duration-300 fixed inset-0 z-[99999] h-[100dvh] rounded-none sm:relative sm:inset-auto sm:z-auto sm:h-[75vh] sm:max-h-[800px] sm:rounded-xl sm:border sm:border-zinc-800 sm:zoom-in-95">
+    <div className={`${isVisivel ? 'flex' : 'hidden'} bg-[#1b263b] shadow-2xl flex-col w-full overflow-hidden animate-in fade-in duration-300 fixed inset-0 z-[99999] h-[100dvh] rounded-none sm:relative sm:inset-auto sm:z-auto sm:h-[75vh] sm:max-h-[800px] sm:rounded-xl sm:border sm:border-zinc-800 sm:zoom-in-95`}>
       
       {/* HEADER DO CHAT */}
       <div className="bg-[#0d1b2a] p-4 sm:p-5 border-b border-zinc-800 flex justify-between items-center z-10 shrink-0 shadow-md">
@@ -339,6 +344,7 @@ export default function InnovChat({ operador, onFechar }) {
             </button>
             
             <input 
+              ref={inputRef}
               type="text" 
               placeholder="Digite a sua mensagem..." 
               value={novaMensagem} 

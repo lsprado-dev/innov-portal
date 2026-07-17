@@ -2091,10 +2091,13 @@ export default function AdminPage() {
 
         <div id="conteudo-admin"></div> {/* Âncora Invisível para Rolagem */}
         
-        {/* NOVA ABA: INNOVCHAT (CHAMANDO DE UM ARQUIVO EXTERNO) */}
-        {abaAtiva === 'chat' && (
-          <InnovChat operador={operador} onFechar={() => setAbaAtiva('ativos')} />
-        )}
+        {/* NOVA ABA: INNOVCHAT (RODANDO EM BACKGROUND) */}
+        <InnovChat 
+          operador={operador} 
+          onFechar={() => setAbaAtiva('ativos')} 
+          isVisivel={abaAtiva === 'chat'} 
+          setMensagensNaoLidas={setMensagensNaoLidas} 
+        />
 
         {abaAtiva === 'senhas' && (
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
