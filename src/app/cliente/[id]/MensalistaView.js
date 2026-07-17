@@ -185,6 +185,11 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [selecionados, setSelecionados] = useState([]);
   const [modoSelecao, setModoSelecao] = useState(false); // NOVO: Controla a exibição das caixinhas
   const [menuAberto, setMenuAberto] = useState(null); // NOVO: Controla o dropdown de 3 pontinhos
+  
+  // EXCLUSIVOS DO LUCAS (FINANCEIRO) - Multi Pastas
+  const [modoSelecaoPastas, setModoSelecaoPastas] = useState(false);
+  const [pastasSelecionadas, setPastasSelecionadas] = useState([]);
+  const [modalMultiPastas, setModalMultiPastas] = useState({ aberto: false, nomes: [''] });
 
   const [arquivos, setArquivos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -931,6 +936,96 @@ export default function MensalistaView({ params: paramsPromise }) {
       await carregarDadosDaAba();
       setSubindoArquivo(false);
     });
+  }
+
+  function handleExcluirPastasEmLote() {
+    const qtd = pastasSelecionadas.length;
+    if (qtd === 0) return;
+
+    const cnpjLimpo = cliente?.cnpj?.replace(/\D/g, '') || '';
+    const nomeEmpresa = cliente?.nome_empresa?.toLowerCase() || '';
+    const isCoringa = cnpjLimpo === '50457640000101' || nomeEmpresa.includes('lsprado');
+    
+    const mensagem = isCoringa
+      ? `MODO CORINGA: Tem certeza que deseja excluir ${qtd} pasta(s) para TODOS OS CLIENTES do sistema?\n\nAs subpastas filhas também poderão ser apagadas.`
+      : `Atenção: Tem certeza que deseja excluir as ${qtd} pasta(s) selecionada(s)?\n\nOs arquivos dentro delas NÃO serão apagados, eles voltarão automaticamente para a tela inicial deste setor.`;
+
+    confirmarAcao(isCoringa ? 'Excluir Pastas Globais' : 'Excluir Pastas em Lote', mensagem, async () => {
+      setSubindoArquivo(true);
+      let idsParaDeletar = [];
+
+      if (isCoringa && pastaAtiva !== 'financeiro') {
+        for (let pid of pastasSelecionadas) {
+          const pasta = pastas.find(p => p.id === pid);
+          if (pasta) {
+            const idsGlobais = await obterIdsPastaGlobal(pasta);
+            idsParaDeletar.push(...idsGlobais);
+            if (!idsParaDeletar.includes(pasta.id)) idsParaDeletar.push(pasta.id);
+          }
+        }
+      } else {
+        idsParaDeletar = [...pastasSelecionadas];
+      }
+
+      await supabase.from('pastas_portal').delete().in('id', idsParaDeletar);
+      setPastasSelecionadas([]);
+      setModoSelecaoPastas(false);
+      setSubpastaAtiva(null);
+      await carregarDadosDaAba();
+      setSubindoArquivo(false);
+      mostrarToast(`${qtd} pastas excluídas com sucesso.`, 'sucesso');
+    });
+  }
+
+  async function handleCriarMultiPastas(e) {
+    e.preventDefault();
+    const nomesValidos = modalMultiPastas.nomes.filter(n => n.trim() !== '');
+    if (nomesValidos.length === 0) return;
+    setSubindoArquivo(true);
+
+    let parentDriveId = null;
+    if (!subpastaAtiva) {
+      if (pastaAtiva === 'contabil') parentDriveId = cliente.id_drive_contabil;
+      else if (pastaAtiva === 'fiscal') parentDriveId = cliente.id_drive_fiscal;
+      else if (pastaAtiva === 'rh') parentDriveId = cliente.id_drive_rh;
+      else if (pastaAtiva === 'contrato') parentDriveId = cliente.id_drive_contratos;
+      else parentDriveId = cliente.id_drive_raiz;
+    } else {
+      parentDriveId = pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta;
+    }
+
+    for (let nomePasta of nomesValidos) {
+      let idDrivePastaFinal = null;
+      if (parentDriveId) {
+        try {
+          const resSub = await fetch('/api/drive/criar-subpasta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nomePasta: nomePasta.trim(), parentDriveId })
+          });
+          const dataSub = await resSub.json();
+          if (dataSub.success) idDrivePastaFinal = dataSub.id_drive_pasta;
+        } catch(e) { console.error("Erro ao espelhar pasta no Drive:", e); }
+      }
+      
+      const { data: novaPasta, error } = await supabase.from('pastas_portal').insert([{
+        cliente_id: id,
+        setor: pastaAtiva,
+        nome: nomePasta.trim(),
+        parent_id: subpastaAtiva || null,
+        id_drive_pasta: idDrivePastaFinal
+      }]).select().single();
+      
+      if (!error && novaPasta) {
+        await processarPastaCoringa(nomePasta.trim(), subpastaAtiva);
+      }
+    }
+    
+    await registrarAuditoria('PASTA_CRIADA_LOTE', `Criou ${nomesValidos.length} pastas espelhadas.`);
+    await carregarDadosDaAba();
+    setModalMultiPastas({ aberto: false, nomes: [''] });
+    setSubindoArquivo(false);
+    mostrarToast(`${nomesValidos.length} pastas criadas com sucesso!`, 'sucesso');
   }
 
   function handleDeletarPasta(pasta) {
@@ -2655,8 +2750,13 @@ dataLiberacao.setHours(0, 0, 0, 0);
 
                     {isInterno && (
                       <div className="flex gap-2 w-full sm:w-auto">
-                        <button onClick={handleCriarPasta} className="flex-1 sm:flex-none bg-zinc-800 text-zinc-300 px-3 sm:px-4 py-2.5 rounded-lg font-bold border border-zinc-700 hover:bg-zinc-700 hover:text-white transition shadow-lg text-xs sm:text-sm whitespace-nowrap text-center">
-                          + Pasta
+                        {operador === 'Lucas (Financeiro)' && pastasAtuais.length > 0 && (
+                          <button onClick={() => { setModoSelecaoPastas(!modoSelecaoPastas); setPastasSelecionadas([]); }} className="flex-1 sm:flex-none bg-blue-500/10 text-blue-400 border border-blue-500/30 px-3 sm:px-4 py-2.5 rounded-lg font-bold hover:bg-blue-500 hover:text-white transition shadow-sm text-xs sm:text-sm whitespace-nowrap text-center">
+                            {modoSelecaoPastas ? 'Cancelar Seleção' : 'Selecionar Pastas'}
+                          </button>
+                        )}
+                        <button onClick={() => operador === 'Lucas (Financeiro)' ? setModalMultiPastas({ aberto: true, nomes: [''] }) : handleCriarPasta()} className="flex-1 sm:flex-none bg-zinc-800 text-zinc-300 px-3 sm:px-4 py-2.5 rounded-lg font-bold border border-zinc-700 hover:bg-zinc-700 hover:text-white transition shadow-lg text-xs sm:text-sm whitespace-nowrap text-center">
+                          + Pasta{operador === 'Lucas (Financeiro)' ? 's' : ''}
                         </button>
                         <label className="flex-1 sm:flex-none bg-[#d4af37] text-[#0d1b2a] px-3 sm:px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-xs sm:text-sm text-center whitespace-nowrap">
                           {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivos'}
@@ -2675,17 +2775,29 @@ dataLiberacao.setHours(0, 0, 0, 0);
                   </div>
                 ) : (
                   <>
+                    {/* BARRA DE AÇÃO PARA PASTAS (MULTI-SELEÇÃO) */}
+                    {modoSelecaoPastas && pastasSelecionadas.length > 0 && (
+                      <div className="flex justify-between items-center bg-red-500/10 border border-red-500/30 p-3 rounded-lg mb-4 animate-in fade-in">
+                        <span className="text-xs font-bold text-red-400">{pastasSelecionadas.length} pasta(s) selecionada(s)</span>
+                        <button onClick={handleExcluirPastasEmLote} className="bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded text-xs font-bold shadow-sm transition">Excluir Selecionadas</button>
+                      </div>
+                    )}
+
                     {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS (ESTILO GOOGLE DRIVE) */}
                     {pastasAtuais.length > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
                         {pastasAtuais.map(pasta => {
                           const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
                           return (
-                            <div key={pasta.id} className="bg-[#1b263b]/50 border border-zinc-700/60 rounded-xl flex items-center justify-between group cursor-pointer hover:bg-zinc-800/80 hover:border-[#d4af37] transition-all shadow-sm">
-                              <div className="flex items-center gap-3 p-3.5 flex-1 relative min-w-0" onClick={() => setSubpastaAtiva(pasta.id)}>
-                                <div className="flex-shrink-0 text-zinc-400 group-hover:text-[#d4af37] transition-colors">
-                                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-                                </div>
+                            <div key={pasta.id} className={`bg-[#1b263b]/50 border rounded-xl flex items-center justify-between group cursor-pointer hover:bg-zinc-800/80 transition-all shadow-sm ${pastasSelecionadas.includes(pasta.id) ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-zinc-700/60 hover:border-[#d4af37]'}`}>
+                              <div className="flex items-center gap-3 p-3.5 flex-1 relative min-w-0" onClick={() => modoSelecaoPastas ? setPastasSelecionadas(prev => prev.includes(pasta.id) ? prev.filter(p => p !== pasta.id) : [...prev, pasta.id]) : setSubpastaAtiva(pasta.id)}>
+                                {modoSelecaoPastas ? (
+                                  <input type="checkbox" checked={pastasSelecionadas.includes(pasta.id)} onChange={() => setPastasSelecionadas(prev => prev.includes(pasta.id) ? prev.filter(p => p !== pasta.id) : [...prev, pasta.id])} onClick={e => e.stopPropagation()} className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" />
+                                ) : (
+                                  <div className="flex-shrink-0 text-zinc-400 group-hover:text-[#d4af37] transition-colors">
+                                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                                  </div>
+                                )}
                                 <span className="font-semibold text-sm text-zinc-300 group-hover:text-[#d4af37] truncate pr-2 transition-colors">{pasta.nome}</span>
                                 {temNovo && <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-auto mr-1"></span>}
                               </div>
@@ -3767,6 +3879,58 @@ dataLiberacao.setHours(0, 0, 0, 0);
                 <button type="button" onClick={() => setModalRespostaPedido({ aberto: false, pedido: null, texto: '', arquivo: null })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
                   {subindoArquivo ? 'A enviar...' : 'Enviar e Finalizar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MÚLTIPLAS PASTAS (EXCLUSIVO LUCAS) */}
+      {modalMultiPastas.aberto && (
+        <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
+          <div className="bg-[#1b263b] border border-zinc-700 rounded-xl w-full max-w-md flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl sticky top-0 z-10">
+              <h3 className="text-lg font-bold text-[#d4af37]">Criar Múltiplas Pastas</h3>
+              <button type="button" onClick={() => setModalMultiPastas({ aberto: false, nomes: [''] })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+            </div>
+            <form onSubmit={handleCriarMultiPastas} className="p-5 space-y-4">
+              <p className="text-xs text-zinc-400 mb-2">Escreva o nome das pastas. Clique no botão abaixo para adicionar até 20 caixas duma vez.</p>
+              <div className="space-y-3">
+                {modalMultiPastas.nomes.map((nome, index) => (
+                  <div key={index} className="flex gap-2 items-center animate-in fade-in slide-in-from-left-2">
+                    <input 
+                      type="text" 
+                      placeholder={`Nome da Pasta ${index + 1}`}
+                      value={nome} 
+                      autoFocus={index === modalMultiPastas.nomes.length - 1}
+                      onChange={(e) => {
+                        const novos = [...modalMultiPastas.nomes];
+                        novos[index] = e.target.value;
+                        setModalMultiPastas({...modalMultiPastas, nomes: novos});
+                      }}
+                      className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+                    />
+                    {modalMultiPastas.nomes.length > 1 && (
+                      <button type="button" onClick={() => {
+                        const novos = modalMultiPastas.nomes.filter((_, i) => i !== index);
+                        setModalMultiPastas({...modalMultiPastas, nomes: novos});
+                      }} className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white px-3 py-2.5 rounded-lg transition font-bold border border-red-500/20">X</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {modalMultiPastas.nomes.length < 20 && (
+                <button type="button" onClick={() => setModalMultiPastas({...modalMultiPastas, nomes: [...modalMultiPastas.nomes, '']})} className="w-full bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-600 hover:text-white py-2 rounded-lg text-xs font-bold transition border-dashed">
+                  + Adicionar outro campo
+                </button>
+              )}
+
+              <div className="pt-4 flex justify-end gap-2 border-t border-zinc-800 mt-2">
+                <button type="button" onClick={() => setModalMultiPastas({ aberto: false, nomes: [''] })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg disabled:opacity-50">
+                  {subindoArquivo ? 'Criando...' : 'Confirmar e Criar Todas'}
                 </button>
               </div>
             </form>
