@@ -2671,22 +2671,38 @@ dataLiberacao.setHours(0, 0, 0, 0);
                   </div>
                 ) : (
                   <>
-                    {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS */}
+                    {/* EXIBIÇÃO DE SUBPASTAS DINÂMICAS (ESTILO GOOGLE DRIVE) */}
                     {pastasAtuais.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
                         {pastasAtuais.map(pasta => {
                           const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
                           return (
-                            <div key={pasta.id} className="p-4 bg-[#0d1b2a] border border-zinc-700 rounded-lg flex justify-between items-center group cursor-pointer hover:border-[#d4af37] transition shadow-md h-full">
-                              <div className="flex items-center gap-3 flex-1 relative" onClick={() => setSubpastaAtiva(pasta.id)}>
-                                <div className="flex-shrink-0"><IconFolderSolid /></div>
-                                <span className="font-bold text-zinc-200 break-words leading-snug pr-2">{pasta.nome}</span>
-                                {temNovo && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-1"></span>}
+                            <div key={pasta.id} className="bg-[#1b263b]/50 border border-zinc-700/60 rounded-xl flex items-center justify-between group cursor-pointer hover:bg-zinc-800 hover:border-zinc-500 transition-all shadow-sm">
+                              <div className="flex items-center gap-3 p-3.5 flex-1 relative min-w-0" onClick={() => setSubpastaAtiva(pasta.id)}>
+                                <div className="flex-shrink-0 text-zinc-400 group-hover:text-white transition-colors">
+                                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                                </div>
+                                <span className="font-semibold text-sm text-zinc-300 group-hover:text-white truncate pr-2">{pasta.nome}</span>
+                                {temNovo && <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0 ml-auto mr-1"></span>}
                               </div>
                               {isInterno && (
-                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition pl-2">
-                                  <button onClick={(e) => { e.stopPropagation(); handleRenomearPasta(pasta); }} className="text-[10px] bg-zinc-800 hover:bg-zinc-600 px-2 py-1 rounded font-bold text-zinc-300">Renomear</button>
-                                  <button onClick={(e) => { e.stopPropagation(); handleDeletarPasta(pasta); }} className="text-[10px] bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-2 py-1 rounded font-bold border border-red-500/20">Excluir</button>
+                                <div className="flex-shrink-0 pr-2">
+                                  {/* 3 Pontinhos da Pasta */}
+                                  <div className="relative" onClick={(e) => e.stopPropagation()} onMouseLeave={() => setMenuAberto(null)}>
+                                    <button onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === `pasta-${pasta.id}` ? null : `pasta-${pasta.id}`); }} className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors">
+                                      <IconDots />
+                                    </button>
+                                    {menuAberto === `pasta-${pasta.id}` && (
+                                      <div className="absolute right-0 top-full mt-1 w-36 bg-[#1b263b] border border-zinc-700 rounded-lg shadow-2xl z-[999] py-1 flex flex-col">
+                                        <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); handleRenomearPasta(pasta); }} className="px-4 py-2 text-left text-xs font-bold text-zinc-300 hover:bg-zinc-700 transition flex items-center">
+                                          <svg className="w-3.5 h-3.5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg> Renomear
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); handleDeletarPasta(pasta); }} className="px-4 py-2 text-left text-xs font-bold text-red-400 hover:bg-zinc-700 transition flex items-center">
+                                          <IconTrashTab /> Excluir
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -2755,35 +2771,49 @@ dataLiberacao.setHours(0, 0, 0, 0);
                               <div className="flex items-center gap-2 relative">
                                 {!modoSelecao && (
                                   <>
-                                    <button onClick={() => baixarDocumento(arq.caminho_storage, arq.nome_original)} className="hidden sm:flex text-xs bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded font-bold transition-all shadow-sm">
-                                      Baixar
+                                    <button onClick={() => visualizarDocumento(arq.caminho_storage)} className="hidden sm:flex text-xs border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] px-4 py-1.5 rounded-lg font-bold transition-all shadow-sm">
+                                      Visualizar
                                     </button>
                                     
-                                    {/* MENU 3 PONTINHOS MAGICO */}
+                                    {/* MENU 3 PONTINHOS MAGICO (SVGs VETORIZADOS) */}
                                     <div className="relative" onMouseLeave={() => setMenuAberto(null)}>
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === arq.id ? null : arq.id); }} 
-                                        className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
+                                        className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition"
                                       >
                                         <IconDots />
                                       </button>
 
                                       {menuAberto === arq.id && (
                                         <div className="absolute right-0 top-full mt-1 w-48 bg-[#1b263b] border border-zinc-700 rounded-lg shadow-2xl z-[999] py-1 flex flex-col">
-                                          <button onClick={() => { setMenuAberto(null); visualizarDocumento(arq.caminho_storage); }} className="px-4 py-2 text-left text-xs font-bold text-white hover:bg-zinc-700 transition">👁️ Visualizar</button>
-                                          <button onClick={() => { setMenuAberto(null); baixarDocumento(arq.caminho_storage, arq.nome_original); }} className="px-4 py-2 text-left text-xs font-bold text-white hover:bg-zinc-700 transition sm:hidden">⬇️ Baixar</button>
+                                          <button onClick={() => { setMenuAberto(null); visualizarDocumento(arq.caminho_storage); }} className="px-4 py-2 text-left text-xs font-bold text-white hover:bg-zinc-700 transition flex items-center sm:hidden">
+                                            <IconEye /> Visualizar
+                                          </button>
+                                          <button onClick={() => { setMenuAberto(null); baixarDocumento(arq.caminho_storage, arq.nome_original); }} className="px-4 py-2 text-left text-xs font-bold text-zinc-300 hover:bg-zinc-700 transition flex items-center">
+                                            <svg className="w-3.5 h-3.5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg> Fazer Download
+                                          </button>
                                           
                                           {!isInterno && (
-                                            <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="px-4 py-2 text-left text-xs font-bold text-[#d4af37] hover:bg-zinc-700 transition">💬 Solicitar Suporte</button>
+                                            <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); setModalDuvidaArquivo({ aberto: true, arquivo: arq, texto: '' }); }} className="px-4 py-2 text-left text-xs font-bold text-[#d4af37] hover:bg-zinc-700 transition flex items-center">
+                                              <IconChatList /> Solicitar Suporte
+                                            </button>
                                           )}
 
                                           {isInterno && (
                                             <>
-                                              <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); setModalEmailDoc({ aberto: true, arquivo: arq, titulo: 'Novo Documento Disponível', mensagem: '' }); }} className="px-4 py-2 text-left text-xs font-bold text-blue-400 hover:bg-zinc-700 transition">✉️ Enviar por E-mail</button>
-                                              <button onClick={() => { setMenuAberto(null); setArquivosMovendo([arq]); }} className="px-4 py-2 text-left text-xs font-bold text-indigo-400 hover:bg-zinc-700 transition">📁 Mover</button>
-                                              <button onClick={() => { setMenuAberto(null); handleRenomear(arq); }} className="px-4 py-2 text-left text-xs font-bold text-zinc-300 hover:bg-zinc-700 transition">✏️ Renomear</button>
+                                              <button onClick={(e) => { e.stopPropagation(); setMenuAberto(null); setModalEmailDoc({ aberto: true, arquivo: arq, titulo: 'Novo Documento Disponível', mensagem: '' }); }} className="px-4 py-2 text-left text-xs font-bold text-blue-400 hover:bg-zinc-700 transition flex items-center">
+                                                <svg className="w-3.5 h-3.5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Enviar E-mail
+                                              </button>
+                                              <button onClick={() => { setMenuAberto(null); setArquivosMovendo([arq]); }} className="px-4 py-2 text-left text-xs font-bold text-indigo-400 hover:bg-zinc-700 transition flex items-center">
+                                                <svg className="w-3.5 h-3.5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg> Mover Arquivo
+                                              </button>
+                                              <button onClick={() => { setMenuAberto(null); handleRenomear(arq); }} className="px-4 py-2 text-left text-xs font-bold text-zinc-300 hover:bg-zinc-700 transition flex items-center">
+                                                <svg className="w-3.5 h-3.5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg> Renomear
+                                              </button>
                                               <div className="border-t border-zinc-700/50 my-1"></div>
-                                              <button onClick={() => { setMenuAberto(null); handleMoverParaLixeira(arq, 'portal'); }} className="px-4 py-2 text-left text-xs font-bold text-red-400 hover:bg-zinc-700 transition">🗑️ Excluir</button>
+                                              <button onClick={() => { setMenuAberto(null); handleMoverParaLixeira(arq, 'portal'); }} className="px-4 py-2 text-left text-xs font-bold text-red-400 hover:bg-zinc-700 transition flex items-center">
+                                                <IconTrashTab /> Excluir
+                                              </button>
                                             </>
                                           )}
                                         </div>
