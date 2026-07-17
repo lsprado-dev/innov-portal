@@ -1029,7 +1029,10 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   async function handleUpload(eOrFiles) {
     let files = [];
-    if (eOrFiles?.target?.files) files = Array.from(eOrFiles.target.files);
+    if (eOrFiles?.target?.files) {
+      files = Array.from(eOrFiles.target.files);
+      eOrFiles.target.value = null; // MÁGICA: Limpa a memória do input
+    }
     else if (eOrFiles instanceof FileList) files = Array.from(eOrFiles);
     else if (Array.isArray(eOrFiles)) files = eOrFiles;
     else if (eOrFiles instanceof File) files = [eOrFiles];
@@ -1067,6 +1070,9 @@ export default function MensalistaView({ params: paramsPromise }) {
   async function handleUploadFinanceiro(e, mesRef) {
     const file = e.target.files[0];
     if (!file) return;
+    
+    e.target.value = null; // MÁGICA: Libera o input para tentar novamente
+
     if (file.size > 4.4 * 1024 * 1024) return mostrarToast('O arquivo excede 4.4MB.', 'erro');
 
     setSubindoArquivo(true);
@@ -1682,6 +1688,9 @@ export default function MensalistaView({ params: paramsPromise }) {
   async function handleResponderAlerta(e, alerta) {
     const file = e.target.files[0];
     if (!file) return;
+    
+    e.target.value = null; // MÁGICA: Libera o input
+
     if (file.size > 15 * 1024 * 1024) return mostrarToast('O arquivo excede 15MB.', 'erro');
 
     setSubindoArquivo(true);

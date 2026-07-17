@@ -105,6 +105,9 @@ export default function EspecialView({ params }) {
   async function handleUploadAdminDoc(e, procId = null) {
     const file = e.target.files[0];
     if (!file) return;
+    
+    e.target.value = null; // MÁGICA: Limpa a memória do input
+
     if (file.size > 4.4 * 1024 * 1024) return mostrarToast('Arquivo excede 4.4MB.', 'erro');
 
     setSubindoArquivo(true);
