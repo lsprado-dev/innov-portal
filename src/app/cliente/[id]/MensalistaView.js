@@ -131,7 +131,17 @@ export default function MensalistaView({ params: paramsPromise }) {
   useEffect(() => {
     const handleSessaoExpirada = () => setSessaoExpirada(true);
     window.addEventListener('sessao_expirada', handleSessaoExpirada);
-    return () => window.removeEventListener('sessao_expirada', handleSessaoExpirada);
+
+    // 🛑 BLOQUEIO GLOBAL: Proíbe o navegador de baixar ou abrir ficheiros arrastados acidentalmente
+    const bloquearDownloadBrowser = (e) => e.preventDefault();
+    window.addEventListener('dragover', bloquearDownloadBrowser, { passive: false });
+    window.addEventListener('drop', bloquearDownloadBrowser, { passive: false });
+
+    return () => {
+      window.removeEventListener('sessao_expirada', handleSessaoExpirada);
+      window.removeEventListener('dragover', bloquearDownloadBrowser);
+      window.removeEventListener('drop', bloquearDownloadBrowser);
+    };
   }, []);
 
   // ==========================================
@@ -2201,13 +2211,19 @@ export default function MensalistaView({ params: paramsPromise }) {
 
       {/* 📂 O OVERLAY DO GOOGLE DRIVE (Drag & Drop) */}
       {isDragging && (
-        <div className="fixed inset-0 z-[99998] bg-[#d4af37]/10 backdrop-blur-md flex items-center justify-center border-[6px] border-dashed border-[#d4af37] m-4 rounded-3xl pointer-events-none">
-          <div className="bg-[#1b263b] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
+        <div 
+          onDragEnter={handleDragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className="fixed inset-0 z-[99998] bg-[#d4af37]/10 backdrop-blur-md flex items-center justify-center border-[6px] border-dashed border-[#d4af37] m-4 rounded-3xl cursor-copy"
+        >
+          <div className="bg-[#1b263b] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-4 pointer-events-none">
             <span className="text-7xl animate-bounce">📂</span>
             <h2 className="text-3xl font-black text-[#d4af37]">Solte o arquivo aqui</h2>
-            <p className="text-zinc-300 font-medium text-lg">
+            <p className="text-zinc-300 font-medium text-lg text-center">
               {abaPrincipal === 'pastas' ? (
-                <>Será publicado na pasta: <span className="text-white font-bold">{pastas.find(p => p.id === subpastaAtiva)?.nome || pastaAtiva}</span></>
+                <>Será publicado na pasta: <br/><span className="text-white font-bold text-xl">{pastas.find(p => p.id === subpastaAtiva)?.nome || pastaAtiva}</span></>
               ) : abaPrincipal === 'envios' ? (
                 'O arquivo será anexado ao formulário de envio.'
               ) : (
