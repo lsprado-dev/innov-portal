@@ -2124,9 +2124,9 @@ export default function MensalistaView({ params: paramsPromise }) {
     e.stopPropagation();
     setIsDragging(false);
     
-    const items = e.dataTransfer.items;
-    const files = e.dataTransfer.files;
-    if (!items || items.length === 0) return;
+    // Extrai diretamente a lista de arquivos para evitar conflito da API de diretórios
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files || files.length === 0) return;
 
     // 1. Mágica do Drop na aba de Envios
     if (abaPrincipal === 'envios') {
@@ -2146,85 +2146,17 @@ export default function MensalistaView({ params: paramsPromise }) {
       return;
     }
 
-    // 3. Drop nas Pastas (Código Original)
-    if (abaPrincipal !== 'pastas' || !pastaAtiva || pastaAtiva === 'financeiro') {
-      return mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar arquivos diretos.', 'aviso');
-    }
-    if (!items || items.length === 0) return;
-
-    setSubindoArquivo(true);
-    let sucessoCount = 0;
-
-    // 🚀 FUNÇÃO RECURSIVA MÁGICA: Entra infinitamente nas sub-sub-pastas!
-    async function processarEntradaRecursiva(entry, parentDbId, parentDriveId) {
-      if (entry.isFile) {
-        const file = await new Promise(res => entry.file(res));
-        if (file) {
-          const uploaded = await fazerUploadUnitario(file, parentDbId, parentDriveId);
-          if (uploaded) sucessoCount++;
-        }
-      } else if (entry.isDirectory) {
-        let currentDriveId = null;
-        if (parentDriveId) {
-          try {
-            const resSub = await fetch('/api/drive/criar-subpasta', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nomePasta: entry.name, parentDriveId })
-            });
-            const dataSub = await resSub.json();
-            if (dataSub.success) currentDriveId = dataSub.id_drive_pasta;
-          } catch(e) {}
-        }
-
-        const { data: novaPasta, error } = await supabase.from('pastas_portal').insert([{
-          cliente_id: id, setor: pastaAtiva, nome: entry.name, parent_id: parentDbId || null, id_drive_pasta: currentDriveId
-        }]).select().single();
-
-        if (!error && novaPasta) {
-          await processarPastaCoringa(novaPasta.nome, parentDbId);
-          
-          const dirReader = entry.createReader();
-          // Garante que o navegador vai ler TODOS os arquivos, mesmo se a pasta tiver mais de 100 documentos
-          const readAllEntries = async (reader) => {
-            let all = [];
-            let read = await new Promise(res => reader.readEntries(res));
-            while(read.length > 0) {
-              all = all.concat(read);
-              read = await new Promise(res => reader.readEntries(res));
-            }
-            return all;
-          };
-
-          const subEntries = await readAllEntries(dirReader);
-          for (let subEntry of subEntries) {
-            await processarEntradaRecursiva(subEntry, novaPasta.id, currentDriveId); // A Mágica de chamar ela mesma
-          }
-        }
+    // 3. Drop nas Pastas (Mágica Otimizada: Reutiliza o fluxo do botão +Arquivo)
+    if (abaPrincipal === 'pastas') {
+      if (!pastaAtiva || pastaAtiva === 'financeiro') {
+        return mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar arquivos diretos.', 'aviso');
       }
+      
+      // Repassa a lista inteira de arquivos para a função principal de upload.
+      // O sistema já sabe exatamente em qual pasta/subpasta o utilizador está e sincroniza com o Drive!
+      await handleUpload(files);
+      return;
     }
-
-    // Calcula de onde a gente parte (Qual é o ID da gaveta que o usuário soltou o arquivo em cima)
-    let pDriveIdBase = subpastaAtiva ? pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta : (pastaAtiva === 'contabil' ? cliente.id_drive_contabil : pastaAtiva === 'fiscal' ? cliente.id_drive_fiscal : pastaAtiva === 'rh' ? cliente.id_drive_rh : pastaAtiva === 'contrato' ? cliente.id_drive_contratos : cliente.id_drive_raiz);
-
-    // HACK DE SÊNIOR: Extrair tudo de forma síncrona ANTES do primeiro await
-    // O navegador destrói o e.dataTransfer.items assim que o JS pausa no await.
-    const entriesIniciais = [];
-    for (let i = 0; i < items.length; i++) {
-      const entry = items[i].webkitGetAsEntry();
-      if (entry) entriesIniciais.push(entry);
-    }
-
-    // Dispara a navegação na lista segura em memória
-    for (const entry of entriesIniciais) {
-      await processarEntradaRecursiva(entry, subpastaAtiva, pDriveIdBase);
-    }
-
-    if (sucessoCount > 0) {
-      mostrarToast(`Upload de ${sucessoCount} ficheiro(s) concluído com sucesso!`, 'sucesso');
-      await carregarDadosDaAba();
-    }
-    setSubindoArquivo(false);
   }
 
   // Efeito SKELETON (Carregamento Premium)
