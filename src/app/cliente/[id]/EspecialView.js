@@ -644,6 +644,7 @@ export default function EspecialView({ params }) {
   return (
     <div 
       className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative"
+      onDragEnter={handleDragOver}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

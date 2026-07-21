@@ -2108,15 +2108,20 @@ export default function MensalistaView({ params: paramsPromise }) {
   // Lógica do Drag and Drop (Arrastar e Soltar)
   function handleDragOver(e) {
     e.preventDefault();
+    e.stopPropagation(); // MÁGICA: Impede o navegador de tentar ler o arquivo nativamente
     if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') setIsDragging(true);
     else if (abaPrincipal === 'envios' || abaPrincipal === 'solicitacoes') setIsDragging(true);
   }
   function handleDragLeave(e) {
     e.preventDefault();
+    e.stopPropagation();
+    // MÁGICA: Só desativa o overlay se o mouse realmente sair da janela do navegador
+    if (e.currentTarget && e.currentTarget.contains(e.relatedTarget)) return;
     setIsDragging(false);
   }
   async function handleDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
     
     const items = e.dataTransfer.items;
@@ -2256,6 +2261,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   return (
     <div 
       className="min-h-screen bg-[#0d1b2a] text-white font-sans p-6 md:p-12 relative"
+      onDragEnter={handleDragOver}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
