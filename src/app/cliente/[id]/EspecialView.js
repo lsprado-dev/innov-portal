@@ -642,7 +642,26 @@ export default function EspecialView({ params }) {
   );
 
   return (
-    <div className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative">
+    <div 
+      className="min-h-screen bg-[#0d1b2a] text-white p-6 md:p-12 font-sans relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      
+      {/* OVERLAY GLOBAL DRAG AND DROP */}
+      {isDragging && (
+        <div className="fixed inset-0 z-[99998] bg-purple-500/10 backdrop-blur-md flex items-center justify-center border-[6px] border-dashed border-purple-500 m-4 rounded-3xl pointer-events-none">
+          <div className="bg-[#1b263b] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
+            <span className="text-7xl animate-bounce">📂</span>
+            <h2 className="text-3xl font-black text-purple-400">Solte o arquivo aqui</h2>
+            <p className="text-zinc-300 font-medium text-lg">
+              O arquivo será anexado ao formulário de envio.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto">
         
         {/* BARRA SUPERIOR COMPACTA IGUAL MENSALISTA */}

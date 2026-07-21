@@ -2109,6 +2109,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   function handleDragOver(e) {
     e.preventDefault();
     if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') setIsDragging(true);
+    else if (abaPrincipal === 'envios' || abaPrincipal === 'solicitacoes') setIsDragging(true);
   }
   function handleDragLeave(e) {
     e.preventDefault();
@@ -2118,11 +2119,32 @@ export default function MensalistaView({ params: paramsPromise }) {
     e.preventDefault();
     setIsDragging(false);
     
-    if (abaPrincipal !== 'pastas' || !pastaAtiva || pastaAtiva === 'financeiro') {
-      return mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar arquivos ou pastas.', 'aviso');
+    const items = e.dataTransfer.items;
+    const files = e.dataTransfer.files;
+    if (!items || items.length === 0) return;
+
+    // 1. Mágica do Drop na aba de Envios
+    if (abaPrincipal === 'envios') {
+      if (files.length > 0) {
+        alterarArquivo(enviosPre[0].id, files[0]);
+        mostrarToast(`Arquivo "${files[0].name}" anexado! Preencha a descrição.`, 'sucesso');
+      }
+      return;
     }
 
-    const items = e.dataTransfer.items;
+    // 2. Mágica do Drop na aba de Solicitações (Tickets)
+    if (abaPrincipal === 'solicitacoes') {
+      if (files.length > 0) {
+        setArquivoPedido(files[0]);
+        mostrarToast(`Arquivo "${files[0].name}" anexado ao ticket!`, 'sucesso');
+      }
+      return;
+    }
+
+    // 3. Drop nas Pastas (Código Original)
+    if (abaPrincipal !== 'pastas' || !pastaAtiva || pastaAtiva === 'financeiro') {
+      return mostrarToast('Navegue até uma pasta (exceto Financeiro) para soltar arquivos diretos.', 'aviso');
+    }
     if (!items || items.length === 0) return;
 
     setSubindoArquivo(true);
@@ -2246,7 +2268,13 @@ export default function MensalistaView({ params: paramsPromise }) {
             <span className="text-7xl animate-bounce">📂</span>
             <h2 className="text-3xl font-black text-[#d4af37]">Solte o arquivo aqui</h2>
             <p className="text-zinc-300 font-medium text-lg">
-              Será publicado na pasta: <span className="text-white font-bold">{pastas.find(p => p.id === subpastaAtiva)?.nome || pastaAtiva}</span>
+              {abaPrincipal === 'pastas' ? (
+                <>Será publicado na pasta: <span className="text-white font-bold">{pastas.find(p => p.id === subpastaAtiva)?.nome || pastaAtiva}</span></>
+              ) : abaPrincipal === 'envios' ? (
+                'O arquivo será anexado ao formulário de envio.'
+              ) : (
+                'O arquivo será anexado ao seu ticket.'
+              )}
             </p>
           </div>
         </div>
