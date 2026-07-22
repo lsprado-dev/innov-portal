@@ -2542,12 +2542,14 @@ export default function MensalistaView({ params: paramsPromise }) {
                   </div>
                   
                   <div className="flex flex-col sm:flex-row items-center gap-4">
-                    {/* TOGGLE MÁGICO DE ANOS */}
-                    <div className="flex items-center bg-[#0d1b2a] rounded-lg border border-zinc-700 shadow-sm p-1">
-                      <button onClick={() => setAnoFinanceiro(prev => prev - 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition font-bold">←</button>
-                      <span className="px-4 py-1.5 text-[#d4af37] font-black text-sm">{anoFinanceiro}</span>
-                      <button onClick={() => setAnoFinanceiro(prev => prev + 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition font-bold">→</button>
-                    </div>
+                    {/* TOGGLE MÁGICO DE ANOS (Oculto para cliente até Dez/2026) */}
+                    {(isInterno || new Date().getFullYear() > 2026 || (new Date().getFullYear() === 2026 && new Date().getMonth() >= 11)) && (
+                      <div className="flex items-center bg-[#0d1b2a] rounded-lg border border-zinc-700 shadow-sm p-1">
+                        <button onClick={() => setAnoFinanceiro(prev => prev - 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition font-bold">←</button>
+                        <span className="px-4 py-1.5 text-[#d4af37] font-black text-sm">{anoFinanceiro}</span>
+                        <button onClick={() => setAnoFinanceiro(prev => prev + 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition font-bold">→</button>
+                      </div>
+                    )}
 
                     {isInterno && (
                       <div className="flex items-center gap-2 bg-[#0d1b2a] p-2.5 rounded-lg border border-zinc-700 shadow-sm">
