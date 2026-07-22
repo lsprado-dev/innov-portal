@@ -55,21 +55,27 @@ const IconDocLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="no
 const IconSocietarioLarge = () => <svg className="w-8 h-8 text-purple-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
 const IconFinanceiroLarge = () => <svg className="w-8 h-8 text-[#d4af37] mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 
-// Nova inteligência de meses do Financeiro
-const CICLO_FINANCEIRO = [
-  { id: '02', ref: 'Fevereiro', servico: 'Jan', pag: 'Fevereiro' },
-  { id: '03', ref: 'Março', servico: 'Fev', pag: 'Março' },
-  { id: '04', ref: 'Abril', servico: 'Mar', pag: 'Abril' },
-  { id: '05', ref: 'Maio', servico: 'Abr', pag: 'Maio' },
-  { id: '06', ref: 'Junho', servico: 'Mai', pag: 'Junho' },
-  { id: '07', ref: 'Julho', servico: 'Jun', pag: 'Julho' },
-  { id: '08', ref: 'Agosto', servico: 'Jul', pag: 'Agosto' },
-  { id: '09', ref: 'Setembro', servico: 'Ago', pag: 'Setembro' },
-  { id: '10', ref: 'Outubro', servico: 'Set', pag: 'Outubro' },
-  { id: '11', ref: 'Novembro', servico: 'Out', pag: 'Novembro' },
-  { id: '12', ref: 'Dezembro', servico: 'Nov', pag: 'Dezembro' },
-  { id: '13', ref: 'Janeiro', servico: 'Dez', pag: 'Janeiro 2027' }
-];
+// Nova inteligência de meses do Financeiro com suporte a Múltiplos Anos
+const getCicloFinanceiro = (ano) => {
+  // Retrocompatibilidade: Se for 2026, mantém a ref exata antiga para não sumir com os dados já salvos no banco!
+  const s = ano === 2026 ? '' : ` ${ano}`;
+  const sJan = ano === 2026 ? '' : ` ${ano + 1}`;
+  
+  return [
+    { id: '02', ref: `Fevereiro${s}`, servico: `Jan`, pag: `Fevereiro ${ano}` },
+    { id: '03', ref: `Março${s}`, servico: `Fev`, pag: `Março ${ano}` },
+    { id: '04', ref: `Abril${s}`, servico: `Mar`, pag: `Abril ${ano}` },
+    { id: '05', ref: `Maio${s}`, servico: `Abr`, pag: `Maio ${ano}` },
+    { id: '06', ref: `Junho${s}`, servico: `Mai`, pag: `Junho ${ano}` },
+    { id: '07', ref: `Julho${s}`, servico: `Jun`, pag: `Julho ${ano}` },
+    { id: '08', ref: `Agosto${s}`, servico: `Jul`, pag: `Agosto ${ano}` },
+    { id: '09', ref: `Setembro${s}`, servico: `Ago`, pag: `Setembro ${ano}` },
+    { id: '10', ref: `Outubro${s}`, servico: `Set`, pag: `Outubro ${ano}` },
+    { id: '11', ref: `Novembro${s}`, servico: `Out`, pag: `Novembro ${ano}` },
+    { id: '12', ref: `Dezembro${s}`, servico: `Nov`, pag: `Dezembro ${ano}` },
+    { id: '13', ref: `Janeiro${sJan}`, servico: `Dez`, pag: `Janeiro ${ano + 1}` }
+  ];
+};
 
 const IconFolderSolid = () => <svg className="w-6 h-6 text-[#d4af37]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>;
 const IconFile = () => <svg className="w-6 h-6 text-[#d4af37] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>;
@@ -207,6 +213,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   const [itensLixeira, setItensLixeira] = useState([]);
   const [boletosDaAPI, setBoletosDaAPI] = useState([]); 
   const [novoPedido, setNovoPedido] = useState('');
+  const [anoFinanceiro, setAnoFinanceiro] = useState(new Date().getFullYear()); // NOVO: Controle de Ano Automático
   const [processos, setProcessos] = useState([]);
   const [badgeSocietario, setBadgeSocietario] = useState(0);
   const [departamentoPedido, setDepartamentoPedido] = useState('Contábil'); // NOVO: Filtro de Departamento
@@ -429,8 +436,8 @@ export default function MensalistaView({ params: paramsPromise }) {
       const adicionados = novosVinculosIds.filter(vid => !velhosVinculosIds.includes(vid));
       const removidos = velhosVinculosIds.filter(vid => !novosVinculosIds.includes(vid));
 
-      // 1. Vai nos adicionados e pluga o cabo da "nossa" empresa neles (EM PARALELO)
-      await Promise.all(adicionados.map(async (addedId) => {
+      // 1. Vai nos adicionados e pluga o cabo da "nossa" empresa neles
+      for (const addedId of adicionados) {
         const { data: d } = await supabase.from('clientes').select('empresas_vinculadas').eq('id', addedId).single();
         if (d) {
           const v = d.empresas_vinculadas || [];
@@ -439,16 +446,16 @@ export default function MensalistaView({ params: paramsPromise }) {
             await supabase.from('clientes').update({ empresas_vinculadas: v }).eq('id', addedId);
           }
         }
-      }));
+      }
 
-      // 2. Vai nos removidos e arranca o cabo da "nossa" empresa deles (EM PARALELO)
-      await Promise.all(removidos.map(async (remId) => {
+      // 2. Vai nos removidos e arranca o cabo da "nossa" empresa deles
+      for (const remId of removidos) {
         const { data: d } = await supabase.from('clientes').select('empresas_vinculadas').eq('id', remId).single();
         if (d) {
           const v = (d.empresas_vinculadas || []).filter(x => x !== id);
           await supabase.from('clientes').update({ empresas_vinculadas: v }).eq('id', remId);
         }
-      }));
+      }
 
       mostrarToast('Dados cadastrais atualizados com sucesso!', 'sucesso');
       setCliente({ ...cliente, ...formEditar, dia_vencimento: parseInt(formEditar.dia_vencimento, 10), empresas_vinculadas: novosVinculosIds });
@@ -2533,23 +2540,33 @@ export default function MensalistaView({ params: paramsPromise }) {
                     <h3 className="text-xl font-bold text-[#d4af37]">Controle Mensalidades</h3>
                     <p className="text-sm text-zinc-400 mt-1">Acompanhe os meses pagos, visualize os boletos e anexe comprovantes.</p>
                   </div>
-                  {isInterno && (
-                    <div className="flex items-center gap-2 bg-[#0d1b2a] p-2.5 rounded-lg border border-zinc-700 shadow-sm">
-                      <span className="text-[10px] text-zinc-400 font-bold uppercase">Trocar Vencimento:</span>
-                      <select 
-                        value={cliente?.dia_vencimento || 20} 
-                        onChange={(e) => handleAlterarDiaVencimento(e.target.value)}
-                        disabled={subindoArquivo}
-                        className="bg-[#1b263b] text-[#d4af37] px-2 py-1.5 rounded text-xs font-bold border border-[#d4af37]/30 cursor-pointer focus:outline-none"
-                      >
-                        <option value="20">Dia 20 (Abre dia 10)</option>
-                        <option value="26">Dia 26 (Abre dia 15)</option>
-                        <option value="30">Dia 30 (Abre dia 20)</option>
-                        <option value="10">Dia 10 (Abre dia 01)</option>
-                        <option value="99">Isenta (Ocultar Aba)</option>
-                      </select>
+                  
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    {/* TOGGLE MÁGICO DE ANOS */}
+                    <div className="flex items-center bg-[#0d1b2a] rounded-lg border border-zinc-700 shadow-sm p-1">
+                      <button onClick={() => setAnoFinanceiro(prev => prev - 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition font-bold">←</button>
+                      <span className="px-4 py-1.5 text-[#d4af37] font-black text-sm">{anoFinanceiro}</span>
+                      <button onClick={() => setAnoFinanceiro(prev => prev + 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition font-bold">→</button>
                     </div>
-                  )}
+
+                    {isInterno && (
+                      <div className="flex items-center gap-2 bg-[#0d1b2a] p-2.5 rounded-lg border border-zinc-700 shadow-sm">
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase">Trocar Vencimento:</span>
+                        <select 
+                          value={cliente?.dia_vencimento || 20} 
+                          onChange={(e) => handleAlterarDiaVencimento(e.target.value)}
+                          disabled={subindoArquivo}
+                          className="bg-[#1b263b] text-[#d4af37] px-2 py-1.5 rounded text-xs font-bold border border-[#d4af37]/30 cursor-pointer focus:outline-none"
+                        >
+                          <option value="20">Dia 20 (Abre dia 10)</option>
+                          <option value="26">Dia 26 (Abre dia 15)</option>
+                          <option value="30">Dia 30 (Abre dia 20)</option>
+                          <option value="10">Dia 10 (Abre dia 01)</option>
+                          <option value="99">Isenta (Ocultar Aba)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {parseInt(cliente?.dia_vencimento, 10) === 99 ? (
@@ -2565,7 +2582,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                   </div>
                 ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {CICLO_FINANCEIRO.map((mes) => {
+                  {getCicloFinanceiro(anoFinanceiro).map((mes) => {
                     const boletoInter = boletosDaAPI.find(b => b.mes_ref === mes.ref); 
                     const comprovanteEnviado = arquivos.find(a => a.setor === 'financeiro' && a.caminho_storage?.includes(`/financeiro/${mes.ref}_`));
                     const pagoManualmente = mensalidadesPagas.includes(mes.ref);
@@ -2577,11 +2594,11 @@ export default function MensalistaView({ params: paramsPromise }) {
                     else if (diaVencimento === 30) diaAbertura = 20;
                     else if (diaVencimento === 10) diaAbertura = 1;
 
-        // 2. Lógica Mágica de Datas
-const hoje = new Date();
-const mesPagamentoIndex = parseInt(mes.id, 10) - 1; 
-const dataLiberacao = new Date(hoje.getFullYear(), mesPagamentoIndex, diaAbertura);
-dataLiberacao.setHours(0, 0, 0, 0);
+                    // 2. Lógica Mágica de Datas (Conectada ao Ano Selecionado)
+                    const hoje = new Date();
+                    const mesPagamentoIndex = parseInt(mes.id, 10) - 1; 
+                    const dataLiberacao = new Date(anoFinanceiro, mesPagamentoIndex, diaAbertura);
+                    dataLiberacao.setHours(0, 0, 0, 0);
                     
                     const estaLiberado = hoje >= dataLiberacao || !!boletoInter;
                     const mesAbertura = dataLiberacao.getMonth() + 1; 
