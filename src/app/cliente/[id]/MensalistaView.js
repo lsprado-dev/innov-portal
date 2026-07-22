@@ -1520,14 +1520,48 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(false);
   }
 
-  function visualizarDocumento(caminhoStorage) {
+  async function visualizarDocumento(caminhoStorage) {
     if (caminhoStorage.startsWith('DRIVE:')) {
       const fileId = caminhoStorage.split('DRIVE:')[1];
       window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
       return;
     }
-    const { data } = supabase.storage.from('documentos').getPublicUrl(caminhoStorage);
-    window.open(data.publicUrl, '_blank');
+
+    // 1. MÁGICA: Abre a aba IMEDIATAMENTE para o navegador não bloquear o Pop-up
+    const novaAba = window.open('about:blank', '_blank');
+    if (novaAba) {
+      novaAba.document.write('<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#d4af37;background-color:#0d1b2a;font-weight:bold;">A carregar o documento, por favor aguarde...</div>');
+    }
+
+    setSubindoArquivo(true);
+    const { data, error } = await supabase.storage.from('documentos').download(caminhoStorage);
+    setSubindoArquivo(false);
+
+    if (error || !data) {
+      if (novaAba) novaAba.close();
+      mostrarToast('Erro ao carregar o arquivo.', 'erro');
+      return;
+    }
+
+    // 2. MÁGICA DE SÊNIOR: Corrige o tipo do ficheiro "on the fly"
+    // Assim o navegador é obrigado a exibir em ecrã inteiro em vez de baixar!
+    let mimeType = data.type;
+    if (!mimeType || mimeType === 'application/octet-stream') {
+      const lowerPath = caminhoStorage.toLowerCase();
+      if (lowerPath.endsWith('.pdf')) mimeType = 'application/pdf';
+      else if (lowerPath.endsWith('.png')) mimeType = 'image/png';
+      else if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) mimeType = 'image/jpeg';
+      else mimeType = 'application/pdf'; // Default seguro
+    }
+
+    const blob = new Blob([data], { type: mimeType });
+    const fileUrl = URL.createObjectURL(blob);
+
+    if (novaAba) {
+      novaAba.location.href = fileUrl; // Substitui o ecrã de loading pelo PDF
+    } else {
+      window.location.href = fileUrl; // Fallback caso o Pop-up Blocker seja agressivo
+    }
   }
 
   async function baixarDocumento(caminhoStorage, nomeOriginal) {
