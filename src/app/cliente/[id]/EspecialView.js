@@ -67,8 +67,8 @@ export default function EspecialView({ params }) {
     renovarSessao();
   }, []);
 
-  const resolvedParams = use(params);
-  const { id } = resolvedParams;
+  // MÁGICA DE SÊNIOR: Desempacotamento seguro do App Router
+  const id = params?.id || '';
 
   const [cliente, setCliente] = useState(null);
   const [processos, setProcessos] = useState([]);
