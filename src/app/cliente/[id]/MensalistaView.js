@@ -2607,7 +2607,8 @@ export default function MensalistaView({ params: paramsPromise }) {
 
                     // 3. Atualizando as lógicas de Status Definitivas (Baseado no Backend)
                     const isPagoAPI = boletoInter && (boletoInter.status === 'pago' || boletoInter.status === 'pago via pix');
-                    const isMesAntigoPago = ['01', '02', '03', '04'].includes(mes.id);
+                    // MÁGICA: A isenção retroativa dos primeiros meses só vale para o ano de fundação do portal (2026)
+                    const isMesAntigoPago = anoFinanceiro === 2026 && ['01', '02', '03', '04'].includes(mes.id);
                     const isPago = isPagoAPI || comprovanteEnviado || pagoManualmente || isMesAntigoPago;
                     
                     const emAtraso = boletoInter && boletoInter.status === 'atrasado';
