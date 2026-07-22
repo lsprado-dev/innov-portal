@@ -3676,11 +3676,8 @@ dataLiberacao.setHours(0, 0, 0, 0);
                 className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-3 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37]"
               >
                 <option value="">Pasta Principal (Raiz do Setor {pastaAtiva})</option>
-                {pastas
-                  .map(p => ({ ...p, caminhoCompleto: obterCaminhoPastas(p.id).map(x => x.nome).join(' / ') }))
-                  .sort((a, b) => a.caminhoCompleto.localeCompare(b.caminhoCompleto))
-                  .map(p => (
-                    <option key={p.id} value={p.id}>📂 {p.caminhoCompleto}</option>
+                {pastas.map(p => (
+                  <option key={p.id} value={p.id}>📂 {p.nome}</option>
                 ))}
               </select>
               <div className="pt-4 flex justify-end gap-2">
