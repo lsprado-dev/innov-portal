@@ -2447,8 +2447,9 @@ export default function AdminPage() {
                   return (
                     <div key={cli.id} className={`h-full p-6 rounded-xl border shadow-xl flex flex-col justify-between transition ${isEspecial ? 'bg-[#0d1b2a] border-purple-500/30 hover:border-purple-500/60' : 'bg-[#1b263b] border-zinc-800 hover:border-zinc-700'}`}>
                       <div className="flex flex-col flex-1">
-                        <div className="flex justify-between items-start mb-4 gap-3">
-                          <h3 className="text-lg font-bold text-white leading-tight break-words" title={cli.nome_empresa || cli.nome_contato}>
+                        {/* TRAVA DE ALTURA: Ocupa sempre o espaço de 2 linhas, evitando que empurre o conteúdo abaixo */}
+                        <div className="flex justify-between items-start mb-4 gap-3 min-h-[3.5rem]">
+                          <h3 className="text-lg font-bold text-white leading-tight line-clamp-2 break-words" title={cli.nome_empresa || cli.nome_contato}>
                             {cli.nome_empresa || cli.nome_contato}
                             {cli.ultimo_login && <IconVerified />}
                           </h3>
@@ -2463,48 +2464,56 @@ export default function AdminPage() {
                         <p className="text-xs text-zinc-400 mb-1">E-mail: <span className="text-zinc-300 truncate inline-block max-w-[200px] align-bottom">{cli.email || 'Não informado'}</span></p>
                         <p className="text-xs text-zinc-400">Contato: <span className="text-zinc-300">{cli.nome_contato || 'Não informado'}</span></p>
                         
-                        {/* 🚀 O CARD INFORMATIVO DE PROCESSOS MÚLTIPLOS (Só aparece na aba Societário) */}
-                        {isEspecial && (
-                          <div className="mt-auto pt-5">
-                            <div className="p-3 bg-[#1b263b] rounded-lg border border-purple-500/20 text-center flex flex-col justify-center items-center min-h-[88px]">
-                              {quantidadeProcessos === 0 ? (
-                                <>
-                                  <p className="text-xs text-zinc-400 font-bold mb-1">Nenhum processo iniciado.</p>
-                                  <p className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight">
-                                    Para começar, clique em <strong className="text-purple-400">Perfil</strong> e <strong className="text-purple-400">+ Novo Processo</strong>
-                                  </p>
-                                </>
-                              ) : (
-                                <div className="flex gap-6 items-center justify-center w-full">
-                                  {qtdAtivos > 0 && (
-                                    <div className="flex flex-col items-center">
-                                      <span className="text-2xl font-black text-purple-400 leading-none mb-1">{qtdAtivos}</span>
-                                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Ativo{qtdAtivos > 1 ? 's' : ''}</span>
-                                    </div>
-                                  )}
-                                  
-                                  {qtdAtivos > 0 && qtdFinalizados > 0 && <div className="h-6 w-px bg-zinc-700"></div>}
-                                  
-                                  {qtdFinalizados > 0 && (
-                                    <div className="flex flex-col items-center">
-                                      <span className="text-2xl font-black text-emerald-400 leading-none mb-1">{qtdFinalizados}</span>
-                                      <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-wider">Concluído{qtdFinalizados > 1 ? 's' : ''}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                        {/* EMPURRA TUDO PARA O FUNDO, ASSIM TODOS OS CARDS ALINHAM PELA BASE */}
+                        <div className="mt-auto">
+                          {/* 🚀 O CARD INFORMATIVO DE PROCESSOS MÚLTIPLOS */}
+                          {isEspecial && (
+                            <div className="pt-5">
+                              <div className="p-3 bg-[#1b263b] rounded-lg border border-purple-500/20 text-center flex flex-col justify-center items-center min-h-[88px]">
+                                {quantidadeProcessos === 0 ? (
+                                  <>
+                                    <p className="text-xs text-zinc-400 font-bold mb-1">Nenhum processo iniciado.</p>
+                                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight">
+                                      Para começar, clique em <strong className="text-purple-400">Perfil</strong> e <strong className="text-purple-400">+ Novo Processo</strong>
+                                    </p>
+                                  </>
+                                ) : (
+                                  <div className="flex gap-6 items-center justify-center w-full">
+                                    {qtdAtivos > 0 && (
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-2xl font-black text-purple-400 leading-none mb-1">{qtdAtivos}</span>
+                                        <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Ativo{qtdAtivos > 1 ? 's' : ''}</span>
+                                      </div>
+                                    )}
+                                    
+                                    {qtdAtivos > 0 && qtdFinalizados > 0 && <div className="h-6 w-px bg-zinc-700"></div>}
+                                    
+                                    {qtdFinalizados > 0 && (
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-2xl font-black text-emerald-400 leading-none mb-1">{qtdFinalizados}</span>
+                                        <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-wider">Concluído{qtdFinalizados > 1 ? 's' : ''}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                        {cli.ultimo_login && (
-                          <p className={`text-[10px] text-zinc-500 pt-2 border-t border-zinc-800/40 ${!isEspecial ? 'mt-auto' : 'mt-3'}`}>
-                            Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
-                            {cli.ultima_cidade && (
-                              <span className="ml-1 text-zinc-400">em <strong className="text-zinc-300">{cli.ultima_cidade}</strong></span>
+                          {/* TEXTO DE LOGIN FIXO PARA NÃO QUEBRAR O LAYOUT */}
+                          <div className="pt-3 mt-3 border-t border-zinc-800/40 min-h-[36px] flex items-center">
+                            {cli.ultimo_login ? (
+                              <p className="text-[10px] text-zinc-500 truncate">
+                                Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
+                                {cli.ultima_cidade && (
+                                  <span className="ml-1 text-zinc-400 hidden lg:inline">em <strong className="text-zinc-300">{cli.ultima_cidade}</strong></span>
+                                )}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-zinc-600 italic">Nunca acessou o portal</p>
                             )}
-                          </p>
-                        )}
+                          </div>
+                        </div>
                       </div>
                       <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-2 flex-wrap sm:flex-nowrap">
                         <Link href={isEspecial ? `/cliente/${cli.id}?view=especial` : `/cliente/${cli.id}`} className={`flex-1 min-w-[100px] border text-center py-2.5 sm:py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${isEspecial ? 'border-purple-500/50 text-purple-400 hover:bg-purple-500 hover:text-white' : 'border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a]'}`}>Perfil</Link>
