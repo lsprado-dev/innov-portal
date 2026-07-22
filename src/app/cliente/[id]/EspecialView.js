@@ -501,6 +501,9 @@ export default function EspecialView({ params }) {
     e.preventDefault();
     if (!arquivoDoc || !descricaoDoc.trim()) return mostrarToast('Preencha a descrição e selecione o arquivo.', 'erro');
     if (arquivoDoc.size > 4.4 * 1024 * 1024) return mostrarToast('Arquivo excede 4.4MB.', 'erro');
+    
+    // Trava de segurança: impede documentos fantasmas se houver múltiplos processos
+    if (processos.length > 1 && !processoSelecionadoDoc) return mostrarToast('Por favor, selecione para qual processo este documento pertence.', 'erro');
 
     setSubindoArquivo(true);
     

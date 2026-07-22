@@ -429,8 +429,8 @@ export default function MensalistaView({ params: paramsPromise }) {
       const adicionados = novosVinculosIds.filter(vid => !velhosVinculosIds.includes(vid));
       const removidos = velhosVinculosIds.filter(vid => !novosVinculosIds.includes(vid));
 
-      // 1. Vai nos adicionados e pluga o cabo da "nossa" empresa neles
-      for (const addedId of adicionados) {
+      // 1. Vai nos adicionados e pluga o cabo da "nossa" empresa neles (EM PARALELO)
+      await Promise.all(adicionados.map(async (addedId) => {
         const { data: d } = await supabase.from('clientes').select('empresas_vinculadas').eq('id', addedId).single();
         if (d) {
           const v = d.empresas_vinculadas || [];
@@ -439,16 +439,16 @@ export default function MensalistaView({ params: paramsPromise }) {
             await supabase.from('clientes').update({ empresas_vinculadas: v }).eq('id', addedId);
           }
         }
-      }
+      }));
 
-      // 2. Vai nos removidos e arranca o cabo da "nossa" empresa deles
-      for (const remId of removidos) {
+      // 2. Vai nos removidos e arranca o cabo da "nossa" empresa deles (EM PARALELO)
+      await Promise.all(removidos.map(async (remId) => {
         const { data: d } = await supabase.from('clientes').select('empresas_vinculadas').eq('id', remId).single();
         if (d) {
           const v = (d.empresas_vinculadas || []).filter(x => x !== id);
           await supabase.from('clientes').update({ empresas_vinculadas: v }).eq('id', remId);
         }
-      }
+      }));
 
       mostrarToast('Dados cadastrais atualizados com sucesso!', 'sucesso');
       setCliente({ ...cliente, ...formEditar, dia_vencimento: parseInt(formEditar.dia_vencimento, 10), empresas_vinculadas: novosVinculosIds });

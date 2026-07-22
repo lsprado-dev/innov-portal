@@ -98,8 +98,8 @@ export async function POST(request) {
     if (senhaDoBanco && senhaDoBanco.startsWith('$2')) {
       loginAprovado = await bcrypt.compare(password, senhaDoBanco);
     } 
-    // Se não for, testa a regra antiga (XOR) OU a senha padrão (CNPJ)
-    else if (senhaDoBanco === encriptarSenhaAntiga(password) || password === senhaPadrao) {
+    // Se não for, testa a regra antiga (XOR)
+    else if (senhaDoBanco === encriptarSenhaAntiga(password)) {
       loginAprovado = true;
       precisaAtualizarParaBcrypt = true; // O cliente logou com o velho, vamos atualizar!
     }
