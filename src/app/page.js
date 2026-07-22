@@ -2436,6 +2436,10 @@ export default function AdminPage() {
                   const processosDoCliente = processosSocietarios.filter(p => p.cliente_id === cli.id);
                   const quantidadeProcessos = processosDoCliente.length;
                   
+                  // MÁGICA: Considera finalizado apenas quem passou por todas as etapas e pagou os honorários
+                  const qtdFinalizados = processosDoCliente.filter(p => p.passo === 8 && p.honorario_pago).length;
+                  const qtdAtivos = quantidadeProcessos - qtdFinalizados;
+                  
                   // MÁGICA: O card assume o visual e as funções baseadas na ABA que o admin está visualizando!
                   // Se estiver na aba Societário, mostra roxo e o banner de processos. Se estiver na Mensalistas, fica normal!
                   const isEspecial = subAbaAtivos === 'especiais';
@@ -2470,12 +2474,23 @@ export default function AdminPage() {
                                 </p>
                               </>
                             ) : (
-                              <>
-                                <span className="text-3xl font-black text-purple-400 block mb-1 leading-none">{quantidadeProcessos}</span>
-                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                                  {quantidadeProcessos > 1 ? 'Processos Ativos' : 'Processo Ativo'}
-                                </span>
-                              </>
+                              <div className="flex gap-6 items-center justify-center w-full">
+                                {qtdAtivos > 0 && (
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-2xl font-black text-purple-400 leading-none mb-1">{qtdAtivos}</span>
+                                    <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Ativo{qtdAtivos > 1 ? 's' : ''}</span>
+                                  </div>
+                                )}
+                                
+                                {qtdAtivos > 0 && qtdFinalizados > 0 && <div className="h-6 w-px bg-zinc-700"></div>}
+                                
+                                {qtdFinalizados > 0 && (
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-2xl font-black text-emerald-400 leading-none mb-1">{qtdFinalizados}</span>
+                                    <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-wider">Concluído{qtdFinalizados > 1 ? 's' : ''}</span>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
