@@ -543,9 +543,9 @@ export default function MensalistaView({ params: paramsPromise }) {
       const { data: nLidos } = await supabase.from('arquivos_portal').select('id, setor, subpasta_id').eq('cliente_id', id).is('visualizado_cliente', false);
       if (nLidos) setArquivosNaoLidos(nLidos);
 
-      // NOVO: Puxa o Account Switcher (Empresas Vinculadas)
+      // NOVO: Puxa o Account Switcher (Empresas Vinculadas incluindo CPF/Societário)
       if (data.empresas_vinculadas && data.empresas_vinculadas.length > 0) {
-        const { data: ligadas } = await supabase.from('clientes').select('id, nome_empresa, cnpj').in('id', data.empresas_vinculadas);
+        const { data: ligadas } = await supabase.from('clientes').select('id, nome_empresa, cnpj, cpf, tipo_conta').in('id', data.empresas_vinculadas);
         if (ligadas) setEmpresasLigadas(ligadas);
       }
 
@@ -2338,12 +2338,21 @@ export default function MensalistaView({ params: paramsPromise }) {
                     <div onClick={() => { localStorage.setItem('usuario_id', cliente.id); window.location.href = `/cliente/${cliente.id}`; }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50">
                       <p className="text-xs font-bold text-[#d4af37] truncate">{cliente.nome_empresa} (Atual)</p>
                     </div>
-                    {empresasLigadas.map(emp => (
-                      <div key={emp.id} onClick={() => { localStorage.setItem('usuario_id', emp.id); window.location.href = `/cliente/${emp.id}`; }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0">
-                        <p className="text-xs font-medium text-white truncate">{emp.nome_empresa}</p>
-                        <p className="text-[10px] text-zinc-500 font-mono">{emp.cnpj}</p>
-                      </div>
-                    ))}
+                    {empresasLigadas.map(emp => {
+                      const isEspecial = emp.tipo_conta === 'especiais' || emp.tipo_conta === 'especial';
+                      return (
+                        <div key={emp.id} onClick={() => { 
+                          localStorage.setItem('usuario_id', emp.id); 
+                          window.location.href = isEspecial ? `/cliente/${emp.id}?view=especial` : `/cliente/${emp.id}`; 
+                        }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0 flex justify-between items-center">
+                          <div className="truncate pr-2">
+                            <p className="text-xs font-medium text-white truncate">{emp.nome_empresa}</p>
+                            <p className="text-[10px] text-zinc-500 font-mono">{emp.cnpj || emp.cpf}</p>
+                          </div>
+                          {isEspecial && <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">Societário</span>}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2393,7 +2402,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                         setModalEditarCliente(true);
                         
                         // 🚀 Busca rápida de empresas para o campo de pesquisa
-                        supabase.from('clientes').select('id, nome_empresa, cnpj').neq('id', id).then(({data}) => {
+                        supabase.from('clientes').select('id, nome_empresa, cnpj, cpf, tipo_conta').neq('id', id).then(({data}) => {
                           if (data) setTodosClientesParaLink(data);
                         });
                       }
@@ -4356,7 +4365,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                   <div className="relative mb-3">
                     <input
                       type="text"
-                      placeholder="Pesquisar por nome ou CNPJ..."
+                      placeholder="Pesquisar por nome, CNPJ ou CPF..."
                       value={buscaLink}
                       onChange={(e) => { setBuscaLink(e.target.value); setMostrarAutoLink(true); }}
                       onFocus={() => setMostrarAutoLink(true)}
@@ -4366,22 +4375,28 @@ export default function MensalistaView({ params: paramsPromise }) {
                     {mostrarAutoLink && buscaLink.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d1b2a] border border-zinc-700 rounded-lg shadow-2xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                         {todosClientesParaLink
-                          .filter(c => (c.nome_empresa?.toLowerCase().includes(buscaLink.toLowerCase()) || c.cnpj?.includes(buscaLink)) && !empresasLigadasForm.some(l => l.id === c.id))
-                          .map((cli) => (
-                          <div
-                            key={`auto-link-${cli.id}`}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setEmpresasLigadasForm([...empresasLigadasForm, cli]);
-                              setBuscaLink('');
-                              setMostrarAutoLink(false);
-                            }}
-                            className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between"
-                          >
-                            <span className="truncate pr-2">{cli.nome_empresa}</span>
-                            <span className="text-[10px] text-zinc-500 flex-shrink-0">{cli.cnpj}</span>
-                          </div>
-                        ))}
+                          .filter(c => (c.nome_empresa?.toLowerCase().includes(buscaLink.toLowerCase()) || c.cnpj?.includes(buscaLink) || c.cpf?.includes(buscaLink)) && !empresasLigadasForm.some(l => l.id === c.id))
+                          .map((cli) => {
+                            const isEspecial = cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial';
+                            return (
+                              <div
+                                key={`auto-link-${cli.id}`}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setEmpresasLigadasForm([...empresasLigadasForm, cli]);
+                                  setBuscaLink('');
+                                  setMostrarAutoLink(false);
+                                }}
+                                className="px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer truncate border-b border-zinc-800/50 last:border-0 transition flex items-center justify-between"
+                              >
+                                <div className="truncate pr-2 flex items-center gap-2">
+                                  <span>{cli.nome_empresa}</span>
+                                  {isEspecial && <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">Societário</span>}
+                                </div>
+                                <span className="text-[10px] text-zinc-500 flex-shrink-0">{cli.cnpj || cli.cpf}</span>
+                              </div>
+                            )
+                        })}
                       </div>
                     )}
                   </div>
@@ -4394,8 +4409,11 @@ export default function MensalistaView({ params: paramsPromise }) {
                     {empresasLigadasForm.map(emp => (
                       <div key={emp.id} className="flex justify-between items-center bg-[#0d1b2a] border border-blue-500/20 p-2.5 rounded-lg">
                         <div className="truncate pr-2">
-                          <p className="text-xs font-bold text-white truncate">{emp.nome_empresa}</p>
-                          <p className="text-[10px] text-zinc-500 truncate">{emp.cnpj}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-white truncate">{emp.nome_empresa}</p>
+                            {(emp.tipo_conta === 'especiais' || emp.tipo_conta === 'especial') && <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">Societário</span>}
+                          </div>
+                          <p className="text-[10px] text-zinc-500 truncate">{emp.cnpj || emp.cpf}</p>
                         </div>
                         <button
                           type="button"
