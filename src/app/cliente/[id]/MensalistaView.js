@@ -268,7 +268,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   // NOVO: ESTADOS PARA OS DISCLAIMERS E BOLINHAS VERDES
   const [textosPastas, setTextosPastas] = useState({});
   const [arquivosNaoLidos, setArquivosNaoLidos] = useState([]);
-  const [modalTextoPasta, setModalTextoPasta] = useState({ aberto: false, setor: '', texto: '' });
+  const [modalTextoPasta, setModalTextoPasta] = useState({ aberto: false, setor: '', textoPadrao: '', textoVan: '' });
   
   // ESTADO DO MODAL DE RESPOSTA A SOLICITAÇÕES (ADMIN DENTRO DO PERFIL)
   const [modalRespostaPedido, setModalRespostaPedido] = useState({ aberto: false, pedido: null, texto: '', arquivo: null });
@@ -527,7 +527,16 @@ export default function MensalistaView({ params: paramsPromise }) {
       const { data: txts } = await supabase.from('textos_pastas').select('*');
       if (txts) {
         const map = {};
-        txts.forEach(t => map[t.setor] = t.descricao);
+        txts.forEach(t => {
+          try {
+            // MÁGICA: Tenta ler como JSON (Pacotinho com Padrao e Van)
+            const parsed = JSON.parse(t.descricao);
+            map[t.setor] = parsed;
+          } catch(e) {
+            // Fallback de segurança: Se ainda estiver como texto simples antigo
+            map[t.setor] = { padrao: t.descricao || '', van: t.descricao || '' };
+          }
+        });
         setTextosPastas(map);
       }
       
@@ -557,12 +566,16 @@ export default function MensalistaView({ params: paramsPromise }) {
   async function salvarTextoPasta(e) {
     e.preventDefault();
     setSubindoArquivo(true);
-    const { setor, texto } = modalTextoPasta;
-    const { error } = await supabase.from('textos_pastas').upsert({ setor, descricao: texto });
+    const { setor, textoPadrao, textoVan } = modalTextoPasta;
+    
+    // MÁGICA: Empacota os dois textos num JSON antes de mandar pro banco
+    const payloadDescricao = JSON.stringify({ padrao: textoPadrao, van: textoVan });
+
+    const { error } = await supabase.from('textos_pastas').upsert({ setor, descricao: payloadDescricao });
     if (!error) {
-       setTextosPastas(prev => ({...prev, [setor]: texto}));
-       mostrarToast('Explicação atualizada para todos os clientes!', 'sucesso');
-       setModalTextoPasta({ aberto: false, setor: '', texto: '' });
+       setTextosPastas(prev => ({...prev, [setor]: { padrao: textoPadrao, van: textoVan }}));
+       mostrarToast('Explicações atualizadas para todos os clientes!', 'sucesso');
+       setModalTextoPasta({ aberto: false, setor: '', textoPadrao: '', textoVan: '' });
     } else {
        mostrarToast('Erro ao salvar: ' + error.message, 'erro');
     }
@@ -2532,7 +2545,7 @@ export default function MensalistaView({ params: paramsPromise }) {
           <>
             <div className="flex flex-col md:flex-row w-full gap-4 mb-10">
               {[
-                { id: 'contabil', nome: cliente?.clientes_van ? 'Contábil' : 'Documentos', desc: cliente?.clientes_van ? 'Balanços e DREs' : 'Contrato social, alterações e documentos legais da empresa.', icon: <IconFolderLarge /> },
+                { id: 'contabil', nome: cliente?.clientes_van ? 'Contábil' : 'Documentos', desc: cliente?.clientes_van ? 'Balanços e DREs' : 'Documentos legais da empresa.', icon: <IconFolderLarge /> },
                 { id: 'fiscal', nome: 'Fiscal', desc: 'Guias e Impostos', icon: <IconChartLarge /> },
                 { id: 'rh', nome: 'DP / RH', desc: 'Folhas e Recibos', icon: <IconUsersLarge /> },
                 { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
@@ -2826,11 +2839,20 @@ export default function MensalistaView({ params: paramsPromise }) {
                 <div className="bg-[#0d1b2a]/50 p-4 rounded-lg border border-zinc-800/60 mb-6 flex justify-between items-start gap-4">
                    <div>
                      <h4 className="text-sm font-bold text-[#d4af37] uppercase tracking-wider mb-1">Sobre esta pasta</h4>
-                     <p className="text-sm text-zinc-300 leading-relaxed">{textosPastas[pastaAtiva] || 'Documentos importantes desta categoria.'}</p>
+                     <p className="text-sm text-zinc-300 leading-relaxed">
+                       {textosPastas[pastaAtiva] 
+                          ? (cliente?.clientes_van ? textosPastas[pastaAtiva].van : textosPastas[pastaAtiva].padrao) 
+                          : 'Documentos importantes desta categoria.'}
+                     </p>
                    </div>
                    {isInterno && (
-                     <button onClick={() => setModalTextoPasta({ aberto: true, setor: pastaAtiva, texto: textosPastas[pastaAtiva] || '' })} className="flex-shrink-0 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded border border-zinc-700 transition font-bold shadow-sm">
-                       Editar Texto
+                     <button onClick={() => setModalTextoPasta({ 
+                       aberto: true, 
+                       setor: pastaAtiva, 
+                       textoPadrao: textosPastas[pastaAtiva]?.padrao || '',
+                       textoVan: textosPastas[pastaAtiva]?.van || ''
+                     })} className="flex-shrink-0 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded border border-zinc-700 transition font-bold shadow-sm">
+                       Editar Textos
                      </button>
                    )}
                 </div>
@@ -4205,28 +4227,43 @@ export default function MensalistaView({ params: paramsPromise }) {
       {/* MODAL PARA EDITAR DISCLAIMER DA PASTA (ADMIN) */}
       {modalTextoPasta.aberto && (
         <div className="fixed inset-0 bg-[#0d1b2a]/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999999]">
-          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-md flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-[#1b263b] border border-[#d4af37]/50 rounded-xl w-full max-w-lg flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-zinc-800 bg-[#0d1b2a] flex justify-between items-center rounded-t-xl">
-              <h3 className="text-lg font-bold text-[#d4af37]">Editar Explicação</h3>
-              <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', texto: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
+              <h3 className="text-lg font-bold text-[#d4af37]">Editar Explicações da Pasta</h3>
+              <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', textoPadrao: '', textoVan: '' })} className="text-zinc-400 hover:text-white font-bold text-xl">✕</button>
             </div>
             <form onSubmit={salvarTextoPasta} className="p-5 space-y-4">
-              <p className="text-xs text-zinc-400">Esta explicação aparecerá para <strong>todos os clientes</strong> quando entrarem na pasta <strong className="text-white uppercase">{modalTextoPasta.setor}</strong>.</p>
-              <div>
+              <p className="text-xs text-zinc-400">Personalize o que os clientes lerão ao abrir a pasta <strong className="text-white uppercase">{modalTextoPasta.setor}</strong>.</p>
+              
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-zinc-300 uppercase">Texto para Clientes (Simples Nacional)</label>
                 <textarea 
-                  rows="4" 
+                  rows="3" 
                   autoFocus
                   required
-                  placeholder="Escreva a explicação para clientes leigos..." 
-                  value={modalTextoPasta.texto} 
-                  onChange={(e) => setModalTextoPasta({...modalTextoPasta, texto: e.target.value})}
+                  placeholder="Escreva a explicação padrão..." 
+                  value={modalTextoPasta.textoPadrao} 
+                  onChange={(e) => setModalTextoPasta({...modalTextoPasta, textoPadrao: e.target.value})}
                   className="w-full bg-[#0d1b2a] border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#d4af37] resize-none"
                 ></textarea>
               </div>
+
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-purple-400 uppercase">Texto para Clientes VAN (Lucro Real/Presumido)</label>
+                <textarea 
+                  rows="3" 
+                  required
+                  placeholder="Escreva a explicação personalizada..." 
+                  value={modalTextoPasta.textoVan} 
+                  onChange={(e) => setModalTextoPasta({...modalTextoPasta, textoVan: e.target.value})}
+                  className="w-full bg-[#0d1b2a] border border-purple-500/30 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-400 resize-none"
+                ></textarea>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', texto: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
+                <button type="button" onClick={() => setModalTextoPasta({ aberto: false, setor: '', textoPadrao: '', textoVan: '' })} className="bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">Cancelar</button>
                 <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 px-6 py-2.5 rounded-lg text-sm font-extrabold transition shadow-lg">
-                  {subindoArquivo ? 'Salvando...' : 'Salvar para Todos'}
+                  {subindoArquivo ? 'Salvando...' : 'Salvar Textos'}
                 </button>
               </div>
             </form>
