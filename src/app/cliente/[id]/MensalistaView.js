@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation';
 import { enviarEmailDemanda, enviarEmailDocumento } from '../../lib/email'; 
 import { inscreverAparelho, dispararPush } from '../../lib/push'; 
 import DOMPurify from 'dompurify'; 
+import bcrypt from 'bcryptjs'; // <-- NOVO: Importando criptografia forte
+
+// Função de Criptografia Definitiva (Bcrypt) para novos Sócios
+const encriptarSenha = (text) => {
+  if (!text) return '';
+  const salt = bcrypt.genSaltSync(10);
+  return bcrypt.hashSync(text, salt);
+};
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -1659,7 +1667,10 @@ export default function MensalistaView({ params: paramsPromise }) {
     try {
       const res = await fetch('/api/alterar-senha', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}` // <-- MÁGICA: Envia a carteirinha do usuário
+        },
         body: JSON.stringify({
           clienteId: id,
           novaSenha: novaSenha.trim(),

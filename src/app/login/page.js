@@ -7,11 +7,6 @@ import { useRouter } from 'next/navigation';
 // FUNÇÕES DE VALIDAÇÃO E MÁSCARA (UX AVANÇADA)
 // ==========================================
 
-const encriptarSenha = (text) => {
-  if (!text) return '';
-  return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
-};
-
 const maskCNPJ = (value) => {
   return value
     .replace(/\D/g, '')
@@ -141,7 +136,8 @@ export default function LoginPage() {
     nome_contato: '', 
     email: '',
     celular: '', 
-    regime_tributario: ''
+    regime_tributario: '',
+    fantasma: '' // <-- NOVO: O nosso Pote de Mel (Honeypot)
   });
 
   const router = useRouter();
@@ -191,10 +187,19 @@ export default function LoginPage() {
           console.log('Não foi possível rastrear a cidade.');
         }
 
-        await supabase.from('clientes').update({ 
-          ultimo_login: new Date().toISOString(),
-          ultima_cidade: cidadeFormatada
-        }).eq('id', data.id);
+        // MÁGICA: Injeta o Token fresquinho no cabeçalho para o RLS permitir a edição!
+        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/clientes?id=eq.${data.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${data.token}`
+          },
+          body: JSON.stringify({
+            ultimo_login: new Date().toISOString(),
+            ultima_cidade: cidadeFormatada
+          })
+        });
         
         router.push(`/cliente/${data.id}`);
       }
@@ -208,6 +213,16 @@ export default function LoginPage() {
   async function handleSolicitarConta(e) {
     e.preventDefault();
     setCarregando(true);
+
+    // 🍯 MÁGICA DO HONEYPOT: Se o campo fantasma foi preenchido, é um bot!
+    if (formCadastro.fantasma !== '') {
+      // Simulamos um sucesso para enganar o bot e ele parar de tentar nos atacar
+      mostrarToast('Pedido enviado! A contabilidade liberará o acesso em breve.', 'sucesso');
+      setModo('login');
+      setFormCadastro({ nome_empresa: '', cnpj: '', nome_contato: '', email: '', celular: '', regime_tributario: '', fantasma: '' });
+      setCarregando(false);
+      return;
+    }
 
     if (!validarCNPJ(formCadastro.cnpj)) {
       mostrarToast('O CNPJ introduzido é inválido ou não existe.', 'erro');
@@ -313,6 +328,13 @@ export default function LoginPage() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              
+              {/* 🍯 CAMPO FANTASMA (HONEYPOT) - Invisível para humanos, visível (e tentador) para bots */}
+              <div style={{ display: 'none' }} aria-hidden="true">
+                <label>Não preencha este campo se você for humano</label>
+                <input type="text" name="url_site_empresa" tabIndex="-1" autoComplete="off" value={formCadastro.fantasma} onChange={e => setFormCadastro({...formCadastro, fantasma: e.target.value})} />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Nome da Empresa (Razão Social)</label>
                 <input type="text" required placeholder="Ex: Innovative Business LTDA" value={formCadastro.nome_empresa} onChange={e => setFormCadastro({...formCadastro, nome_empresa: e.target.value})} className="w-full bg-[#0d1b2a] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-[#d4af37] focus:outline-none" />

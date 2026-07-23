@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { enviarEmailDemanda, enviarEmailDocumento } from './lib/email';
 import { inscreverAparelho, dispararPush } from './lib/push'; // Ajustado para a pasta real
 import InnovChat from './components/InnovChat'; // COMPONENTE DO CHAT
+import bcrypt from 'bcryptjs'; // <-- NOVO: Importando criptografia forte
 
 // Dicionário rápido para mapear nome da equipe para e-mail
 const OBTER_EMAIL_FUNCIONARIO = {
@@ -20,10 +21,11 @@ const OBTER_EMAIL_FUNCIONARIO = {
   'Lucas (Financeiro)': 'lucas@innovbusiness.com.br'
 };
 
-// Funções de Criptografia Reversível com tolerância a senhas antigas
+// Nova Criptografia Definitiva (Bcrypt) rodando no momento do cadastro
 const encriptarSenha = (text) => {
   if (!text) return '';
-  return btoa(text.split('').map(c => String.fromCharCode(c.charCodeAt(0) ^ 42)).join(''));
+  const salt = bcrypt.genSaltSync(10);
+  return bcrypt.hashSync(text, salt);
 };
 
 
@@ -529,7 +531,10 @@ export default function AdminPage() {
       try {
         const res = await fetch('/api/resetar-senha', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('supabase_token')}` // <-- MÁGICA: Envia o token do Admin
+          },
           body: JSON.stringify({ clienteId: cliente.id })
         });
         const data = await res.json();

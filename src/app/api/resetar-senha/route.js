@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken'; // <-- NOVO: Para verificar a "carteirinha"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -9,6 +10,15 @@ const supabaseAdmin = createClient(
 
 export async function POST(request) {
   try {
+    // 🚨 TRAVA DE SEGURANÇA: Verifica se quem chamou é realmente um Admin logado
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) throw new Error('Acesso negado: Token não fornecido.');
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
+
+    if (!decoded.is_admin) throw new Error('Acesso negado: Apenas administradores podem resetar senhas.');
+
     const { clienteId } = await request.json();
 
     // 1. Pega os dados do cliente para descobrir o CNPJ/CPF
