@@ -1251,18 +1251,18 @@ export default function AdminPage() {
     setSubindo(false);
   }
 
-  // --- 🚀 FUNÇÃO MÁGICA: CLONAR ESTRUTURA DO LSPRADO ---
-  async function clonarPastasLsprado(novoClienteId) {
+  // --- 🚀 FUNÇÃO MÁGICA: CLONAR ESTRUTURA BASEADA NO REGIME ---
+  async function clonarPastasPadrao(novoClienteId, cnpjBase = '50.457.640/0001-01') {
     try {
-      const { data: lsprado } = await supabase.from('clientes').select('id').eq('cnpj', '50.457.640/0001-01').single();
-      if (!lsprado) return;
+      const { data: clienteBase } = await supabase.from('clientes').select('id').eq('cnpj', cnpjBase).single();
+      if (!clienteBase) return;
 
-      let { data: pastasLsprado } = await supabase.from('pastas_portal').select('*').eq('cliente_id', lsprado.id);
-      if (!pastasLsprado || pastasLsprado.length === 0) return;
+      let { data: pastasBase } = await supabase.from('pastas_portal').select('*').eq('cliente_id', clienteBase.id);
+      if (!pastasBase || pastasBase.length === 0) return;
 
       // 🧠 MÁGICA: Ordenação Topológica
       const mapPais = {};
-      pastasLsprado.forEach(sp => { mapPais[sp.id] = sp.parent_id; });
+      pastasBase.forEach(sp => { mapPais[sp.id] = sp.parent_id; });
       const calcularProfundidade = (id) => {
         let profundidade = 0;
         let idPaiAtual = mapPais[id];
@@ -1274,15 +1274,14 @@ export default function AdminPage() {
         }
         return profundidade;
       };
-      pastasLsprado = pastasLsprado.sort((a, b) => calcularProfundidade(a.id) - calcularProfundidade(b.id));
+      pastasBase = pastasBase.sort((a, b) => calcularProfundidade(a.id) - calcularProfundidade(b.id));
 
       const mapaIds = {};
-      const totalPastas = pastasLsprado.length;
+      const totalPastas = pastasBase.length;
       
       for (let i = 0; i < totalPastas; i++) {
-        const pasta = pastasLsprado[i];
+        const pasta = pastasBase[i];
         
-        // FEEDBACK VISUAL EM TEMPO REAL COM A BARRA DE %
         setProgressoSync({
           fase: 1,
           totalFases: 1,
@@ -1304,14 +1303,14 @@ export default function AdminPage() {
         if (novaPasta) mapaIds[pasta.id] = novaPasta.id;
       }
       
-      setProgressoSync(null); // Limpa a barra ao terminar
+      setProgressoSync(null);
     } catch(e) { 
-      console.error('Erro clone Lsprado:', e); 
+      console.error('Erro clone pastas:', e); 
       setProgressoSync(null);
     }
   }
 
-  async function inicializarPastasDrive(clienteId, nomeEmpresa, mensagemSucesso) {
+  async function inicializarPastasDrive(clienteId, nomeEmpresa, mensagemSucesso, isVan = false) {
     mostrarToast('Criando pastas no Google Drive... Aguarde.', 'aviso');
     try {
       const resDrive = await fetch('/api/drive/criar', {
@@ -1333,7 +1332,8 @@ export default function AdminPage() {
             id_drive_lixeira: dataDrive.folders.pasta_lixeira
          }).eq('id', clienteId);
          
-         await clonarPastasLsprado(clienteId);
+         const cnpjBase = isVan ? '62.379.589/0001-38' : '50.457.640/0001-01';
+         await clonarPastasPadrao(clienteId, cnpjBase);
          mostrarToast(mensagemSucesso, 'sucesso');
       }
     } catch (e) {
@@ -1359,6 +1359,7 @@ export default function AdminPage() {
 
     const isEspecial = tipoAdicionar === 'especiais';
     const campoBusca = isEspecial ? 'cpf' : 'cnpj';
+    const isVan = formManual.regime_tributario === 'Lucro Real' || formManual.regime_tributario === 'Lucro Presumido';
     
     const payload = {
       nome_empresa: formManual.nome_empresa,
@@ -1368,7 +1369,8 @@ export default function AdminPage() {
       regime_tributario: formManual.regime_tributario,
       tipo_conta: isEspecial ? 'especiais' : 'mensalista',
       senha: encriptarSenha(docNumeros.substring(0, 6)),
-      senha_alterada: false
+      senha_alterada: false,
+      clientes_van: isVan
     };
     payload[campoBusca] = formManual.documento;
 
@@ -1380,7 +1382,7 @@ export default function AdminPage() {
       const { data: novoClienteInserido, error } = await supabase.from('clientes').insert([payload]).select().single();
       if (!error && novoClienteInserido) {
         
-        await inicializarPastasDrive(novoClienteInserido.id, formManual.nome_empresa, 'Cliente criado e pastas padrão clonadas!');
+        await inicializarPastasDrive(novoClienteInserido.id, formManual.nome_empresa, 'Cliente criado e pastas padrão clonadas!', isVan);
 
         mostrarToast('Cliente cadastrado com sucesso!', 'sucesso');
         setModalAdicionar(false);
@@ -1524,15 +1526,20 @@ export default function AdminPage() {
           .eq('id', clienteExistente.id);
       } else {
         const senhaGerada = documentoPrincipal.replace(/\D/g, '').substring(0, 6);
+        const isVan = cli.regime_tributario === 'Lucro Real' || cli.regime_tributario === 'Lucro Presumido';
         const clienteNovo = {
           ...cli,
           senha: encriptarSenha(senhaGerada),
-          senha_alterada: false
+          senha_alterada: false,
+          clientes_van: isVan
         };
         const { data: novoCsv } = await supabase.from('clientes').insert([clienteNovo]).select('id').single(); 
         
-        // 🚀 MÁGICA: Clona a árvore para cada cliente criado no CSV!
-        if (novoCsv) await clonarPastasLsprado(novoCsv.id);
+        // 🚀 MÁGICA: Clona a árvore baseada no regime
+        if (novoCsv) {
+            const cnpjBase = isVan ? '62.379.589/0001-38' : '50.457.640/0001-01';
+            await clonarPastasPadrao(novoCsv.id, cnpjBase);
+        }
       }
     }
 
@@ -1568,23 +1575,25 @@ export default function AdminPage() {
       // 2. É uma Conta Nova ou um "Novo Vínculo" (Cria a conta do zero)
       const documentoSeguro = solicitacao.cnpj || solicitacao.cpf || '';
       const senhaGerada = documentoSeguro.replace(/\D/g, '').substring(0, 6);
+      const isVan = solicitacao.regime_tributario === 'Lucro Real' || solicitacao.regime_tributario === 'Lucro Presumido';
       
       const { data: novoCliente, error } = await supabase.from('clientes').insert([{ 
         nome_empresa: solicitacao.nome_empresa, 
         cnpj: solicitacao.cnpj, 
-        cpf: solicitacao.cpf, // <-- MÁGICA 1: Agora salva o CPF corretamente
-        tipo_conta: solicitacao.tipo_conta || 'mensalista', // <-- MÁGICA 2: Define se é Mensalista ou Societário
+        cpf: solicitacao.cpf, 
+        tipo_conta: solicitacao.tipo_conta || 'mensalista', 
         nome_contato: solicitacao.nome_contato, 
-        email: solicitacao.email ? solicitacao.email.trim().toLowerCase() : '', // <-- MÁGICA 3: Limpa espaços e letras maiúsculas para o login não falhar
+        email: solicitacao.email ? solicitacao.email.trim().toLowerCase() : '', 
         celular: solicitacao.celular, 
         regime_tributario: solicitacao.regime_tributario, 
         senha: encriptarSenha(senhaGerada), 
-        senha_alterada: false 
+        senha_alterada: false,
+        clientes_van: isVan
       }]).select().single();
 
       if (!error && novoCliente) { 
         
-        await inicializarPastasDrive(novoCliente.id, solicitacao.nome_empresa, 'Cliente ativado e pastas padrão clonadas!');
+        await inicializarPastasDrive(novoCliente.id, solicitacao.nome_empresa, 'Cliente ativado e pastas padrão clonadas!', isVan);
 
         // Se a pessoa pediu para criar essa conta NOVA mas atrelada à conta DELE, faz a conexão:
         if (solicitacao.tipo_solicitacao === 'novo_vinculo' && solicitacao.vinculo_origem_id) {

@@ -634,26 +634,56 @@ export default function MensalistaView({ params: paramsPromise }) {
     setCarregandoConteudo(true); // <--- Inicia a animação de loading
     try {
       if (abaPrincipal === 'pastas' && pastaAtiva) {
-        // MÁGICA: Prepara as consultas e dispara juntas em paralelo (Muito mais rápido!)
-      const reqPastas = supabase.from('pastas_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).order('nome');
-      const reqArquivos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', pastaAtiva).is('data_exclusao', null).order('criado_em', { ascending: false });
-      const reqFinanceiro = pastaAtiva === 'financeiro' ? supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id) : Promise.resolve({ data: null });
-      const reqBoletosInter = pastaAtiva === 'financeiro' ? supabase.from('boletos_api').select('*').eq('cliente_id', id) : Promise.resolve({ data: null }); // NOVO: Puxa boletos_api em paralelo
+        // MÁGICA: Prepara as consultas e dispara juntas em paralelo
+        let setoresBusca = [pastaAtiva];
+        // Busca ampla para viabilizar a "Virtualização" de pastas
+        if (cliente?.clientes_van && (pastaAtiva === 'contabil' || pastaAtiva === 'contrato')) {
+          setoresBusca = ['contabil', 'contrato'];
+        }
 
-      const [resPastas, resArquivos, resFinanceiro, resBoletos] = await Promise.all([reqPastas, reqArquivos, reqFinanceiro, reqBoletosInter]);
+        const reqPastas = supabase.from('pastas_portal').select('*').eq('cliente_id', id).in('setor', setoresBusca).order('nome');
+        const reqArquivos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).in('setor', setoresBusca).is('data_exclusao', null).order('criado_em', { ascending: false });
+        const reqFinanceiro = pastaAtiva === 'financeiro' ? supabase.from('mensalidades_status').select('mes_ref').eq('cliente_id', id) : Promise.resolve({ data: null });
+        const reqBoletosInter = pastaAtiva === 'financeiro' ? supabase.from('boletos_api').select('*').eq('cliente_id', id) : Promise.resolve({ data: null });
 
-      if (resPastas.data) setPastas(resPastas.data);
-      else setPastas([]);
+        const [resPastas, resArquivos, resFinanceiro, resBoletos] = await Promise.all([reqPastas, reqArquivos, reqFinanceiro, reqBoletosInter]);
 
-      if (resFinanceiro.data) setMensalidadesPagas(resFinanceiro.data.map(p => p.mes_ref));
-      if (resBoletos && resBoletos.data) setBoletosDaAPI(resBoletos.data); // NOVO: Popula o estado financeiro automático
-      else if (pastaAtiva === 'financeiro') setBoletosDaAPI([]);
+        let processedPastas = resPastas.data || [];
+        let processedArquivos = resArquivos.data || [];
 
-      if (resArquivos.data) {
-        setArquivos(resArquivos.data);
+        // 🚀 MÁGICA DE VIRTUALIZAÇÃO: Se for cliente Van, move "Documentos Empresa" (fisicamente no Contábil) para a aba Contratos visualmente
+        if (cliente?.clientes_van && (pastaAtiva === 'contabil' || pastaAtiva === 'contrato')) {
+          const docsEmpresaFolder = processedPastas.find(p => p.nome === 'Documentos Empresa' && p.setor === 'contabil');
+          if (docsEmpresaFolder) {
+            const descendants = new Set([docsEmpresaFolder.id]);
+            let added = true;
+            while (added) {
+              added = false;
+              for (const p of processedPastas) {
+                if (!descendants.has(p.id) && descendants.has(p.parent_id)) {
+                  descendants.add(p.id);
+                  added = true;
+                }
+              }
+            }
+            // Mapeia adicionando o selo "original_setor"
+            processedPastas = processedPastas.map(p => descendants.has(p.id) ? { ...p, setor: 'contrato', original_setor: 'contabil' } : p);
+            processedArquivos = processedArquivos.map(a => descendants.has(a.subpasta_id) ? { ...a, setor: 'contrato', original_setor: 'contabil' } : a);
+          }
+        }
+
+        const finalPastas = processedPastas.filter(p => p.setor === pastaAtiva);
+        const finalArquivos = processedArquivos.filter(a => a.setor === pastaAtiva);
+
+        setPastas(finalPastas);
+        if (resFinanceiro.data) setMensalidadesPagas(resFinanceiro.data.map(p => p.mes_ref));
+        if (resBoletos && resBoletos.data) setBoletosDaAPI(resBoletos.data);
+        else if (pastaAtiva === 'financeiro') setBoletosDaAPI([]);
+
+        setArquivos(finalArquivos);
         const tipoSalvo = localStorage.getItem('usuario_tipo');
         if (tipoSalvo !== 'interno') {
-           const arquivosNaTela = resArquivos.data.filter(a => (a.subpasta_id || null) === (subpastaAtiva || null) && !a.visualizado_cliente);
+           const arquivosNaTela = finalArquivos.filter(a => (a.subpasta_id || null) === (subpastaAtiva || null) && !a.visualizado_cliente);
            if (arquivosNaTela.length > 0) {
              const ids = arquivosNaTela.map(a => a.id);
              setArquivosNaoLidos(prev => prev.filter(a => !ids.includes(a.id)));
@@ -661,9 +691,6 @@ export default function MensalistaView({ params: paramsPromise }) {
              supabase.from('arquivos_portal').update({ visualizado_cliente: true }).in('id', ids).then();
            }
         }
-      } else {
-        setArquivos([]);
-      }
     } 
     else if (abaPrincipal === 'envios') {
       const { data } = await supabase.from('envios_cliente').select('*').eq('cliente_id', id).is('data_exclusao', null).order('criado_em', { ascending: false });
@@ -862,12 +889,20 @@ export default function MensalistaView({ params: paramsPromise }) {
       if (!nomePasta || nomePasta.trim() === '') return;
       setSubindoArquivo(true);
 
+      // Respeita o setor original caso estejamos criando dentro de uma pasta virtualizada
+      let setorReal = pastaAtiva;
+      if (subpastaAtiva) {
+         const p = pastas.find(x => x.id === subpastaAtiva);
+         if (p && p.original_setor) setorReal = p.original_setor;
+      }
+
       // 1. Descobre qual é a pasta Pai no Google Drive para colocar a nova dentro dela
       let parentDriveId = null;
       if (!subpastaAtiva) {
-        if (pastaAtiva === 'contabil') parentDriveId = cliente.id_drive_contabil;
-        else if (pastaAtiva === 'fiscal') parentDriveId = cliente.id_drive_fiscal;
-        else if (pastaAtiva === 'rh') parentDriveId = cliente.id_drive_rh;
+        if (setorReal === 'contabil') parentDriveId = cliente.id_drive_contabil;
+        else if (setorReal === 'fiscal') parentDriveId = cliente.id_drive_fiscal;
+        else if (setorReal === 'rh') parentDriveId = cliente.id_drive_rh;
+        else if (setorReal === 'contrato') parentDriveId = cliente.id_drive_contratos;
         else parentDriveId = cliente.id_drive_raiz;
       } else {
         parentDriveId = pastas.find(p => p.id === subpastaAtiva)?.id_drive_pasta;
@@ -889,7 +924,7 @@ export default function MensalistaView({ params: paramsPromise }) {
       
       const { error } = await supabase.from('pastas_portal').insert([{
         cliente_id: id,
-        setor: pastaAtiva,
+        setor: setorReal,
         nome: nomePasta.trim(),
         parent_id: subpastaAtiva || null,
         id_drive_pasta: idDrivePastaFinal // Amarra o ID do Drive no banco
@@ -1148,12 +1183,19 @@ export default function MensalistaView({ params: paramsPromise }) {
       return false;
     }
 
+    let setorReal = pastaAtiva;
+    if (targetPastaId) {
+      const pastaAlvo = pastas.find(p => p.id === targetPastaId);
+      if (pastaAlvo && pastaAlvo.original_setor) {
+         setorReal = pastaAlvo.original_setor;
+      }
+    }
+
     // 1. Identifica dinamicamente qual a pasta alvo correta do Google Drive
-    let folderIdDrive = directDriveId; // Usa o passe livre se vier do Drag & Drop
+    let folderIdDrive = directDriveId; 
     
     if (!folderIdDrive) {
       if (targetPastaId) {
-        // Tenta achar na memória da tela. Se não achar, puxa direto da base de dados!
         let achouNaTela = pastas.find(p => p.id === targetPastaId)?.id_drive_pasta;
         if (achouNaTela) {
           folderIdDrive = achouNaTela;
@@ -1162,17 +1204,16 @@ export default function MensalistaView({ params: paramsPromise }) {
           if (dbPasta) folderIdDrive = dbPasta.id_drive_pasta;
         }
       } else {
-        if (pastaAtiva === 'contabil') folderIdDrive = cliente.id_drive_contabil;
-        else if (pastaAtiva === 'fiscal') folderIdDrive = cliente.id_drive_fiscal;
-        else if (pastaAtiva === 'rh') folderIdDrive = cliente.id_drive_rh;
-        else if (pastaAtiva === 'contrato') folderIdDrive = cliente.id_drive_contratos; // <-- Gaveta oficial de Contratos!
+        if (setorReal === 'contabil') folderIdDrive = cliente.id_drive_contabil;
+        else if (setorReal === 'fiscal') folderIdDrive = cliente.id_drive_fiscal;
+        else if (setorReal === 'rh') folderIdDrive = cliente.id_drive_rh;
+        else if (setorReal === 'contrato') folderIdDrive = cliente.id_drive_contratos; 
         else folderIdDrive = cliente.id_drive_raiz;
       }
     }
 
     let caminhoFinal = null;
 
-    // 2. Se a pasta do Drive existir, arremessa o arquivo direto para lá!
     if (folderIdDrive) {
       const formData = new FormData();
       formData.append('file', file);
@@ -1191,7 +1232,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (!caminhoFinal) {
       const timestamp = Date.now();
       const nomeSeguro = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
-      caminhoFinal = `${id}/${pastaAtiva}/${timestamp}_${nomeSeguro}`;
+      caminhoFinal = `${id}/${setorReal}/${timestamp}_${nomeSeguro}`;
       const { error: storageError } = await supabase.storage.from('documentos').upload(caminhoFinal, file);
       if (storageError) {
         mostrarToast(`Erro no arquivo "${file.name}": ${storageError.message}`, 'erro');
@@ -1201,7 +1242,7 @@ export default function MensalistaView({ params: paramsPromise }) {
 
     await supabase.from('arquivos_portal').insert([{ 
       cliente_id: id, 
-      setor: pastaAtiva, 
+      setor: setorReal, 
       subpasta_id: targetPastaId, 
       nome_original: file.name, 
       caminho_storage: caminhoFinal, 
@@ -2480,7 +2521,7 @@ export default function MensalistaView({ params: paramsPromise }) {
           <>
             <div className="flex flex-col md:flex-row w-full gap-4 mb-10">
               {[
-                { id: 'contabil', nome: cliente?.clientes_van ? 'Contábil' : 'Documentos', desc: cliente?.clientes_van ? 'Balanços e DREs' : 'Cadastros e Registros', icon: <IconFolderLarge /> },
+                { id: 'contabil', nome: cliente?.clientes_van ? 'Contábil' : 'Documentos', desc: cliente?.clientes_van ? 'Balanços e DREs' : 'Contrato social, alterações e documentos legais da empresa.', icon: <IconFolderLarge /> },
                 { id: 'fiscal', nome: 'Fiscal', desc: 'Guias e Impostos', icon: <IconChartLarge /> },
                 { id: 'rh', nome: 'DP / RH', desc: 'Folhas e Recibos', icon: <IconUsersLarge /> },
                 { id: 'contrato', nome: 'Contratos', desc: 'Atos e Alterações', icon: <IconDocLarge /> },
@@ -2787,7 +2828,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                   {/* BREADCRUMBS INTELIGENTES TIPO GOOGLE DRIVE */}
                   <h3 className="text-lg sm:text-xl font-bold text-[#d4af37] capitalize flex items-center gap-1.5 sm:gap-2 flex-wrap w-full lg:w-auto leading-relaxed">
                     <span className={`transition ${subpastaAtiva ? 'cursor-pointer hover:underline text-zinc-400 hover:text-white' : 'text-[#d4af37]'}`} onClick={() => setSubpastaAtiva(null)}>
-                      Setor {pastaAtiva}
+                      Setor {pastaAtiva === 'contabil' ? (cliente?.clientes_van ? 'Contábil' : 'Empresa') : pastaAtiva}
                     </span>
                     {caminhoPastas.map((p, index) => (
                       <span key={p.id} className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
