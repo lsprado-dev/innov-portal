@@ -2180,6 +2180,15 @@ export default function MensalistaView({ params: paramsPromise }) {
     return subpastasFilhas.some(filha => pastaTemArquivos(filha.id));
   };
 
+  // 🟢 MÁGICA RECURSIVA 2: A Bolinha Verde Inteligente (Bubbling)
+  const pastaTemNaoLidos = (pastaId) => {
+    // 1. Tem novidade direto nela? Acende!
+    if (arquivosNaoLidos.some(a => a.subpasta_id === pastaId)) return true;
+    // 2. Não tem? Pergunta para as filhas se alguma delas tem novidade lá no fundo!
+    const subpastasFilhas = pastas.filter(p => p.parent_id === pastaId);
+    return subpastasFilhas.some(filha => pastaTemNaoLidos(filha.id));
+  };
+
   // Filtra as pastas para mostrar apenas as que estão no nível atual
   const pastasAtuais = pastas.filter(p => {
     const isNivelAtual = (p.parent_id || null) === (subpastaAtiva || null);
@@ -2941,7 +2950,8 @@ export default function MensalistaView({ params: paramsPromise }) {
                     {pastasAtuais.length > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
                         {pastasAtuais.map(pasta => {
-                          const temNovo = !isInterno && arquivosNaoLidos.filter(a => a.subpasta_id === pasta.id).length > 0;
+                          // 🟢 Usa a nova função recursiva para a bolinha verde "subir" até a raiz!
+                          const temNovo = !isInterno && pastaTemNaoLidos(pasta.id);
                           return (
                             <div key={pasta.id} className={`bg-[#1b263b]/50 border rounded-xl flex items-center justify-between group cursor-pointer hover:bg-zinc-800/80 transition-all shadow-sm ${pastasSelecionadas.includes(pasta.id) ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-zinc-700/60 hover:border-[#d4af37]'}`}>
                               <div className="flex items-center gap-3 p-3.5 flex-1 relative min-w-0" onClick={() => modoSelecaoPastas ? setPastasSelecionadas(prev => prev.includes(pasta.id) ? prev.filter(p => p !== pasta.id) : [...prev, pasta.id]) : setSubpastaAtiva(pasta.id)}>
