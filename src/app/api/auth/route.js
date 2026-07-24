@@ -3,6 +3,9 @@ import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs'; // <-- NOVO
 
+// 🛑 MÁGICA 1: Memória temporária para Rate Limit (In-memory anti brute-force)
+const rateLimitMap = new Map();
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -28,6 +31,20 @@ const encriptarSenhaAntiga = (text) => {
 
 export async function POST(request) {
   try {
+    // 🛑 MÁGICA 1 (Continuação): Checagem do IP (Rate Limit de 10 tentativas / min)
+    const ip = request.headers.get('x-forwarded-for') || 'ip-desconhecido';
+    const limit = rateLimitMap.get(ip) || { count: 0, lastReset: Date.now() };
+    
+    if (Date.now() - limit.lastReset > 60000) {
+      limit.count = 0; // Reseta a contagem a cada 1 minuto
+      limit.lastReset = Date.now();
+    }
+    if (limit.count >= 10) {
+      return NextResponse.json({ success: false, error: 'Muitas tentativas. Por segurança, aguarde 1 minuto.' }, { status: 429 });
+    }
+    limit.count += 1;
+    rateLimitMap.set(ip, limit);
+
     const { email, password } = await request.json();
 
     let emailTratado = email.trim().toLowerCase(); 
@@ -48,7 +65,7 @@ export async function POST(request) {
         const tokenAdmin = jwt.sign(
           { aud: 'authenticated', role: 'authenticated', sub: authData.user.id, email: emailFinal, is_admin: true },
           process.env.SUPABASE_JWT_SECRET,
-          { expiresIn: '30d' }
+          { expiresIn: '8h' } // <-- 🛑 MÁGICA 4: Token de 30 dias reduzido para 8 horas
         );
         return NextResponse.json({ success: true, tipo: 'interno', nome: nomeAdmin, id: authData.user.id, token: tokenAdmin });
       } else {
@@ -123,7 +140,7 @@ export async function POST(request) {
       const token = jwt.sign(
         { aud: 'authenticated', role: 'authenticated', sub: clienteFinal.id, email: emailFinal },
         process.env.SUPABASE_JWT_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: '8h' } // <-- 🛑 MÁGICA 4: Token de 30 dias reduzido para 8 horas
       );
 
       return NextResponse.json({ success: true, tipo: 'cliente', nome: nomePainel, id: clienteFinal.id, token: token });

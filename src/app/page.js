@@ -366,7 +366,12 @@ export default function AdminPage() {
 
     if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
       // Ampliando o limite de segurança para 5.000 clientes (Evita limite padrão do PostgREST)
-      const { data } = await supabase.from('clientes').select('*').order('nome_empresa').limit(5000);
+      // 🛑 MÁGICA 3: Select explícito! A coluna "senha" nunca mais viajará pela rede!
+      const { data } = await supabase
+        .from('clientes')
+        .select('id, nome_empresa, cnpj, cpf, nome_contato, email, celular, regime_tributario, tipo_conta, ultimo_login, ultima_cidade, empresas_vinculadas, status, socios, clientes_van, senha_alterada')
+        .order('nome_empresa')
+        .limit(5000);
       if (data) setClientes(data);
       
       // Carrega os processos vinculados a esses clientes
