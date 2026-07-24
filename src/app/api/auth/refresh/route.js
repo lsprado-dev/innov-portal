@@ -12,7 +12,7 @@ export async function POST(request) {
     // 1. Verifica se o token atual ainda é válido e legítimo
     const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
 
-    // 2. Se for válido, gera um NOVO token com os mesmos dados, mas com validade zerada para +30 dias de HOJE
+    // 2. Se for válido, gera um NOVO token com os mesmos dados, mas com validade zerada para +8 horas
     const novoToken = jwt.sign(
       { 
         aud: decoded.aud, 
@@ -22,7 +22,7 @@ export async function POST(request) {
         is_admin: decoded.is_admin 
       },
       process.env.SUPABASE_JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: '8h' } // <-- MÁGICA: Mantém a regra rigorosa de 8 horas na renovação!
     );
 
     return NextResponse.json({ success: true, token: novoToken });
