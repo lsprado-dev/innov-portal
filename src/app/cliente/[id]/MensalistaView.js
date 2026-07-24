@@ -513,7 +513,10 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (tipoSalvo === 'interno') setIsInterno(true);
 
     async function carregarCliente() {
-      const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single();
+      // 🛑 MÁGICA DE SEGURANÇA: Select explícito para NUNCA trafegar a senha do cliente!
+      const COLUNAS_SEGURAS = 'id, nome_empresa, nome_contato, cnpj, cpf, email, celular, regime_tributario, tipo_conta, empresas_vinculadas, docs_solicitados, dia_vencimento, clientes_van, socios, links, id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_contratos, id_drive_recebidos, id_drive_enviados, id_drive_lixeira';
+
+      const { data, error } = await supabase.from('clientes').select(COLUNAS_SEGURAS).eq('id', id).single();
       if (error || !data) {
         alert('Cliente não encontrado.');
         router.push(tipoSalvo === 'interno' ? '/' : '/login');

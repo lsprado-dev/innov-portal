@@ -207,8 +207,11 @@ export default function EspecialView({ params }) {
   }
 
   async function carregarDados() {
+    // 🛑 MÁGICA DE SEGURANÇA: Select explícito para NUNCA trafegar a senha do cliente!
+    const COLUNAS_SEGURAS = 'id, nome_empresa, nome_contato, cnpj, cpf, email, celular, regime_tributario, tipo_conta, empresas_vinculadas, docs_solicitados, dia_vencimento, clientes_van, socios, links, id_drive_raiz, id_drive_contabil, id_drive_fiscal, id_drive_rh, id_drive_contratos, id_drive_recebidos, id_drive_enviados, id_drive_lixeira';
+
     // 1. Dispara TODAS as buscas ao mesmo tempo (Paralelo = Muito mais rápido!)
-    const reqCli = supabase.from('clientes').select('*').eq('id', id).single();
+    const reqCli = supabase.from('clientes').select(COLUNAS_SEGURAS).eq('id', id).single();
     const reqProcs = supabase.from('processos_societarios').select('*').eq('cliente_id', id).order('criado_em', { ascending: true });
     const reqRecebidos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', 'societario').order('criado_em', { ascending: false });
     const reqEnviados = supabase.from('envios_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
