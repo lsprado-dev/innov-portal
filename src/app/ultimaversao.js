@@ -380,18 +380,14 @@ export default function AdminPage() {
     
     let novaBusca = [];
 
-    // 🛑 COLUNAS BLINDADAS: Apenas as exatas do banco. "senha" e a inexistente "status" ficam de fora!
-    const COLUNAS_SEGURAS = 'id, nome_empresa, cnpj, cpf, nome_contato, email, celular, regime_tributario, tipo_conta, ultimo_login, ultima_cidade, empresas_vinculadas, socios, clientes_van, senha_alterada';
-
     if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
       // Ampliando o limite de segurança para 5.000 clientes (Evita limite padrão do PostgREST)
-      const { data, error } = await supabase
+      // 🛑 MÁGICA 3: Select explícito! A coluna "senha" nunca mais viajará pela rede!
+      const { data } = await supabase
         .from('clientes')
-        .select(COLUNAS_SEGURAS)
+        .select('id, nome_empresa, cnpj, cpf, nome_contato, email, celular, regime_tributario, tipo_conta, ultimo_login, ultima_cidade, empresas_vinculadas, status, socios, clientes_van, senha_alterada')
         .order('nome_empresa')
         .limit(5000);
-      
-      if (error) console.error('🚨 Erro ao buscar clientes (Coluna inválida?):', error);
       if (data) setClientes(data);
       
       // Carrega os processos vinculados a esses clientes
@@ -420,8 +416,7 @@ export default function AdminPage() {
       novaBusca = data || [];
       setAlertas(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
       if (recarregar) {
-        const { data: clis, error } = await supabase.from('clientes').select(COLUNAS_SEGURAS).order('nome_empresa');
-        if (error) console.error('🚨 Erro (Alertas):', error);
+        const { data: clis } = await supabase.from('clientes').select('*').order('nome_empresa');
         if (clis) setClientes(clis);
       }
     } 
@@ -435,8 +430,7 @@ export default function AdminPage() {
       novaBusca = data || [];
       setLogs(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
       if (recarregar) {
-        const { data: clis, error } = await supabase.from('clientes').select(COLUNAS_SEGURAS).order('nome_empresa');
-        if (error) console.error('🚨 Erro (Auditoria):', error);
+        const { data: clis } = await supabase.from('clientes').select('*').order('nome_empresa');
         if (clis) setClientes(clis);
       }
     }
