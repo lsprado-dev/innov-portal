@@ -174,6 +174,10 @@ export default function EspecialView({ params }) {
   const [modalDocs, setModalDocs] = useState(false);
   const [textoDocs, setTextoDocs] = useState('');
 
+  // NOVO: Estados para o Switcher de Empresas
+  const [empresasLigadas, setEmpresasLigadas] = useState([]);
+  const [mostrarSwitcher, setMostrarSwitcher] = useState(false);
+
   // Notificação do Google Sheets
   async function notificarGoogleSheets(acao, detalhes) {
     const URL_WEBHOOK_SHEETS = "SUA_URL_DO_GOOGLE_APPS_SCRIPT_AQUI"; 
@@ -214,6 +218,12 @@ export default function EspecialView({ params }) {
 
     if (!resCli.data) { router.push('/login'); return; }
     setCliente(resCli.data);
+
+    // Busca as contas vinculadas (para o Account Switcher)
+    if (resCli.data.empresas_vinculadas && resCli.data.empresas_vinculadas.length > 0) {
+      const { data: ligadas } = await supabase.from('clientes').select('id, nome_empresa, cnpj, cpf, tipo_conta').in('id', resCli.data.empresas_vinculadas);
+      if (ligadas) setEmpresasLigadas(ligadas);
+    }
 
     if (resProcs.data) setProcessos(resProcs.data);
     if (resRecebidos.data) setDocsRecebidos(resRecebidos.data);
@@ -664,6 +674,45 @@ export default function EspecialView({ params }) {
             <span className="text-sm text-zinc-400 hidden sm:inline">
               Conectado como: <strong className="text-purple-400 font-extrabold">{operador || cliente.nome_contato}</strong>
             </span>
+            
+            {/* SWITCHER DE CONTAS */}
+            {empresasLigadas.length > 0 && (
+              <div className="relative z-[999]">
+                <button onClick={() => setMostrarSwitcher(!mostrarSwitcher)} className="text-xs bg-[#1b263b] border border-zinc-700 hover:border-purple-500 px-3 py-2 rounded-lg transition-all font-bold flex items-center gap-2">
+                  Trocar Conta ▼
+                </button>
+                {mostrarSwitcher && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-[#0d1b2a] border border-zinc-700 rounded-xl shadow-2xl overflow-hidden text-left">
+                    <div className="px-4 py-3 border-b border-zinc-800 bg-[#1b263b]/50">
+                      <p className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">Contas Vinculadas</p>
+                    </div>
+                    <div onClick={() => { localStorage.setItem('usuario_id', cliente.id); window.location.href = `/cliente/${cliente.id}?view=especial`; }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 flex justify-between items-center">
+                      <div className="truncate pr-2">
+                        <p className="text-xs font-bold text-purple-400 truncate">{cliente.nome_empresa} (Atual)</p>
+                        <p className="text-[10px] text-zinc-500 font-mono">{cliente.cnpj || cliente.cpf}</p>
+                      </div>
+                      <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">Societário</span>
+                    </div>
+                    {empresasLigadas.map(emp => {
+                      const isEspecial = emp.tipo_conta === 'especiais' || emp.tipo_conta === 'especial';
+                      return (
+                        <div key={emp.id} onClick={() => { 
+                          localStorage.setItem('usuario_id', emp.id); 
+                          window.location.href = isEspecial ? `/cliente/${emp.id}?view=especial` : `/cliente/${emp.id}`; 
+                        }} className="px-4 py-3 cursor-pointer hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0 flex justify-between items-center">
+                          <div className="truncate pr-2">
+                            <p className="text-xs font-medium text-white truncate">{emp.nome_empresa}</p>
+                            <p className="text-[10px] text-zinc-500 font-mono">{emp.cnpj || emp.cpf}</p>
+                          </div>
+                          {isEspecial && <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">Societário</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button onClick={() => { localStorage.clear(); router.push('/login'); }} className="text-xs bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-4 py-2 rounded-lg transition-all font-bold">Sair</button>
           </div>
         </div>
