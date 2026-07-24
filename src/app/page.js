@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './lib/supabase'; // Ajustado para a pasta real
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { enviarEmailDemanda, enviarEmailDocumento } from './lib/email';
 import { inscreverAparelho, dispararPush } from './lib/push'; // Ajustado para a pasta real
@@ -69,6 +69,7 @@ function formatarDataHora(dataString) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const pathname = usePathname(); // NOVO: O espião de rotas do Next.js
   const [sessaoExpirada, setSessaoExpirada] = useState(false);
 
   useEffect(() => {
@@ -314,14 +315,29 @@ export default function AdminPage() {
   // MÁGICA DE UX: Atualiza os dados silenciosamente quando o Admin volta para a janela do painel
   useEffect(() => {
     const handleFocus = () => {
-      // Só recarrega se não estiver no meio de um processamento pesado
       if (!subindo && !carregandoDados && !autenticando) {
         carregarDadosDaAba(paginaAtual, true);
       }
     };
+    
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') handleFocus();
+    });
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleFocus);
+    };
   }, [abaAtiva, paginaAtual, subindo, carregandoDados, autenticando]);
+
+  // 🛑 O ANTÍDOTO DO NEXT.JS (Corrige o bug de 0 clientes ao voltar):
+  // Toda vez que a URL da página mudar (ex: voltando do perfil do cliente), forçamos a barra de recarregar os dados!
+  useEffect(() => {
+    if (!autenticando && !carregandoDados) {
+      carregarDadosDaAba(paginaAtual, true);
+    }
+  }, [pathname]); // <-- O gatilho é a navegação (voltar para a página)!
 
   async function carregarDadosDaAba(pagina = 0, recarregar = false) {
     if (pagina === 0) {
