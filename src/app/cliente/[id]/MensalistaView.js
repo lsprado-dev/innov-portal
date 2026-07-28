@@ -1448,6 +1448,26 @@ export default function MensalistaView({ params: paramsPromise }) {
     setSubindoArquivo(false);
   }
 
+  // 🚀 MÁGICA: Função acionada quando você solta o arquivo em cima de uma pasta!
+  async function handleDropNaPasta(e, pastaDestinoId) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('ring-2', 'ring-[#d4af37]', 'bg-[#d4af37]/10'); // Limpa o brilho
+
+    const arqId = e.dataTransfer.getData('text/plain'); // Pega o ID do arquivo arrastado
+    if (arqId && isInterno) {
+      setSubindoArquivo(true);
+      const { error } = await supabase.from('arquivos_portal').update({ subpasta_id: pastaDestinoId }).eq('id', arqId);
+      if (!error) {
+        mostrarToast('Arquivo movido com sucesso!', 'sucesso');
+        await carregarDadosDaAba(); // Recarrega a tela instantaneamente
+      } else {
+        mostrarToast('Erro ao mover: ' + error.message, 'erro');
+      }
+      setSubindoArquivo(false);
+    }
+  }
+
   function handleMoverParaLixeira(arq, origem) {
     confirmarAcao('Mover para a Lixeira', 'Deseja mover este arquivo para a gaveta Lixeira do Drive? Ele ficará protegido lá.', async () => {
       setSubindoArquivo(true);
@@ -2203,6 +2223,10 @@ export default function MensalistaView({ params: paramsPromise }) {
   function handleDragOver(e) {
     e.preventDefault();
     e.stopPropagation(); // MÁGICA: Impede o navegador de tentar ler o arquivo nativamente
+    
+    // 🛑 MÁGICA DE DRAG INTERNO: Ignora o overlay global se o que estiver arrastando for um elemento da tela
+    if (!e.dataTransfer.types.includes('Files')) return; 
+
     if (abaPrincipal === 'pastas' && pastaAtiva && pastaAtiva !== 'financeiro') setIsDragging(true);
     else if (abaPrincipal === 'envios' || abaPrincipal === 'solicitacoes') setIsDragging(true);
   }
@@ -2953,7 +2977,13 @@ export default function MensalistaView({ params: paramsPromise }) {
                           // 🟢 Usa a nova função recursiva para a bolinha verde "subir" até a raiz!
                           const temNovo = !isInterno && pastaTemNaoLidos(pasta.id);
                           return (
-                            <div key={pasta.id} className={`bg-[#1b263b]/50 border rounded-xl flex items-center justify-between group cursor-pointer hover:bg-zinc-800/80 transition-all shadow-sm ${pastasSelecionadas.includes(pasta.id) ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-zinc-700/60 hover:border-[#d4af37]'}`}>
+                            <div 
+                              key={pasta.id} 
+                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if(isInterno) e.currentTarget.classList.add('ring-2', 'ring-[#d4af37]', 'bg-[#d4af37]/10'); }}
+                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('ring-2', 'ring-[#d4af37]', 'bg-[#d4af37]/10'); }}
+                              onDrop={(e) => handleDropNaPasta(e, pasta.id)}
+                              className={`bg-[#1b263b]/50 border rounded-xl flex items-center justify-between group cursor-pointer hover:bg-zinc-800/80 transition-all shadow-sm ${pastasSelecionadas.includes(pasta.id) ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-zinc-700/60 hover:border-[#d4af37]'}`}
+                            >
                               <div className="flex items-center gap-3 p-3.5 flex-1 relative min-w-0" onClick={() => modoSelecaoPastas ? setPastasSelecionadas(prev => prev.includes(pasta.id) ? prev.filter(p => p !== pasta.id) : [...prev, pasta.id]) : setSubpastaAtiva(pasta.id)}>
                                 {modoSelecaoPastas ? (
                                   <input type="checkbox" checked={pastasSelecionadas.includes(pasta.id)} onChange={() => setPastasSelecionadas(prev => prev.includes(pasta.id) ? prev.filter(p => p !== pasta.id) : [...prev, pasta.id])} onClick={e => e.stopPropagation()} className="accent-[#d4af37] w-4 h-4 cursor-pointer flex-shrink-0" />
@@ -3036,7 +3066,12 @@ export default function MensalistaView({ params: paramsPromise }) {
                         {/* LISTAGEM DE ARQUIVOS (LAYOUT PRO DRIVE) */}
                         <div className="grid grid-cols-1 gap-2">
                           {arquivosFiltradosDaBusca.map((arq) => (
-                            <div key={arq.id} className={`p-3 rounded-lg border flex items-center justify-between gap-4 w-full transition-all group hover:bg-zinc-800/40 ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/10 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800/50'}`}>
+                            <div 
+                              key={arq.id} 
+                              draggable={isInterno && !modoSelecao}
+                              onDragStart={(e) => { if(isInterno) e.dataTransfer.setData('text/plain', arq.id); }}
+                              className={`p-3 rounded-lg border flex items-center justify-between gap-4 w-full transition-all group hover:bg-zinc-800/40 ${isInterno && !modoSelecao ? 'cursor-grab active:cursor-grabbing' : ''} ${selecionados.includes(arq.id) ? 'bg-[#d4af37]/10 border-[#d4af37]/50' : 'bg-[#0d1b2a] border-zinc-800/50'}`}
+                            >
                               
                               {/* Clica na linha toda: Se o modo seleção tiver ativo ele checa a caixa, se não ele Visualiza direto! */}
                               <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => modoSelecao ? toggleSelecao(arq.id) : visualizarDocumento(arq.caminho_storage)}>
