@@ -412,6 +412,7 @@ export default function MensalistaView({ params: paramsPromise }) {
 
   const [operador, setOperador] = useState('Desconhecido');
   const [isInterno, setIsInterno] = useState(false);
+  const [listaClientesAdmin, setListaClientesAdmin] = useState([]); // 🚀 NOVO: Guarda a fila de navegação
   
   // NOVO: Estados para edição manual do cliente pelo Admin na página do cliente
   const [modalEditarCliente, setModalEditarCliente] = useState(false);
@@ -510,7 +511,13 @@ export default function MensalistaView({ params: paramsPromise }) {
     }
     
     if (nomeSalvo) setOperador(nomeSalvo);
-    if (tipoSalvo === 'interno') setIsInterno(true);
+    if (tipoSalvo === 'interno') {
+      setIsInterno(true);
+      // 🚀 MÁGICA DE NAVEGAÇÃO: Puxa a lista de clientes ordenada para os botões Anterior/Próximo
+      supabase.from('clientes').select('id, nome_empresa, tipo_conta').order('nome_empresa').then(({data}) => {
+        if(data) setListaClientesAdmin(data);
+      });
+    }
 
     async function carregarCliente() {
       // 🛑 MÁGICA DE SEGURANÇA: Select explícito para NUNCA trafegar a senha do cliente!
@@ -2347,14 +2354,48 @@ export default function MensalistaView({ params: paramsPromise }) {
         
         {/* BARRA SUPERIOR COMPACTA */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 bg-[#1b263b]/30 p-4 rounded-xl border border-zinc-800/60 gap-4 shadow-sm">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 w-full sm:w-auto">
             {isInterno ? (
-              <button onClick={() => router.push('/')} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition">← Voltar para o Painel Admin</button>
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+                <button onClick={() => router.push('/')} className="text-sm font-bold text-[#d4af37] hover:underline hover:text-yellow-400 transition whitespace-nowrap">← Voltar para o Painel Admin</button>
+                
+                {/* 🚀 MÁGICA: BOTÕES DE NAVEGAÇÃO RÁPIDA (ANTERIOR / PRÓXIMO) */}
+                {listaClientesAdmin.length > 0 && (
+                  <div className="flex items-center bg-[#0d1b2a] rounded-lg border border-zinc-700 p-1 shadow-inner">
+                    {(() => {
+                      const currentIndex = listaClientesAdmin.findIndex(c => c.id === id);
+                      const prevClient = currentIndex > 0 ? listaClientesAdmin[currentIndex - 1] : null;
+                      const nextClient = currentIndex < listaClientesAdmin.length - 1 ? listaClientesAdmin[currentIndex + 1] : null;
+                      return (
+                        <>
+                          <button 
+                            onClick={() => { if (prevClient) window.location.href = (prevClient.tipo_conta === 'especiais' || prevClient.tipo_conta === 'especial') ? `/cliente/${prevClient.id}?view=especial` : `/cliente/${prevClient.id}`; }} 
+                            disabled={!prevClient} 
+                            title={prevClient ? `Ir para: ${prevClient.nome_empresa}` : ''}
+                            className="px-3 py-1.5 text-[11px] font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition disabled:opacity-30 flex items-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg> Anterior
+                          </button>
+                          <div className="w-px h-4 bg-zinc-700 mx-1"></div>
+                          <button 
+                            onClick={() => { if (nextClient) window.location.href = (nextClient.tipo_conta === 'especiais' || nextClient.tipo_conta === 'especial') ? `/cliente/${nextClient.id}?view=especial` : `/cliente/${nextClient.id}`; }} 
+                            disabled={!nextClient} 
+                            title={nextClient ? `Ir para: ${nextClient.nome_empresa}` : ''}
+                            className="px-3 py-1.5 text-[11px] font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition disabled:opacity-30 flex items-center gap-1"
+                          >
+                            Próximo <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                          </button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
             ) : (
               <span className="text-xs text-zinc-500 font-bold tracking-wider uppercase">Portal Restrito do Cliente</span>
             )}
           </div>
-          <div className="flex items-center gap-4 relative">
+          <div className="flex items-center gap-4 relative mt-4 sm:mt-0">
             <span className="text-sm text-zinc-400 hidden sm:inline">
               Conectado como: <strong onClick={() => setMostrarModalPerfil(true)} className="text-[#d4af37] font-extrabold cursor-pointer hover:underline" title="Configurações da Conta">{operador}</strong>
             </span>
