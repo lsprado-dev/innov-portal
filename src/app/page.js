@@ -1774,10 +1774,9 @@ export default function AdminPage() {
     ? pedidosCliente 
     : pedidosCliente.filter(p => departamentosVisiveis.includes(p.departamento) || p.responsavel === operador);
 
-  // Filtra os arquivos recebidos com base em quem está logado (Protegido contra o hack de performance)
-  const recebidosVisiveis = eGestor 
-    ? recebidos 
-    : (Array.isArray(recebidos) ? recebidos.filter(r => departamentosVisiveis.includes(r?.departamento)) : recebidos);
+  // 🚀 MÁGICA: Agora TODOS os funcionários veem TODOS os documentos recebidos, independente do setor!
+  // Isso evita que um documento enviado para o setor errado pelo cliente fique "perdido".
+  const recebidosVisiveis = Array.isArray(recebidos) ? recebidos : [];
 
   const demandasVisiveis = demandas.filter(d => eGestor || d.atribuido_para === operador || d.criado_por === operador);
   const demandasMinhasPendentes = demandasVisiveis.filter(d => d.atribuido_para === operador && d.status === 'pendente').length;
