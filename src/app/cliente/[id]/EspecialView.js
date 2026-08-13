@@ -815,12 +815,17 @@ export default function EspecialView({ params }) {
             </div>
 
             {(() => {
-              const processosFiltrados = processos.filter(proc => {
-                // Busca inteligente e à prova de falhas de digitação
-const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
-                const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
+              const processosFiltrados = processos?.filter(proc => {
+                let listaPassos = [];
+                try { listaPassos = typeof proc?.passos_snapshot === 'string' ? JSON.parse(proc.passos_snapshot) : proc?.passos_snapshot; } catch(e){}
+                if (!listaPassos || !Array.isArray(listaPassos) || listaPassos.length === 0) listaPassos = PASSOS_BACKUP;
+                const ultimoPassoId = listaPassos[listaPassos.length - 1]?.id || 8;
+
+                // MÁGICA: Os pontos de interrogação (?.) impedem a quebra se o documento não tiver nome no banco!
+                const temComprovanteEnviado = docsEnviados?.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d?.nome_documento?.includes('Comprovante Honorários')));
+                const isFinished = proc.passo === ultimoPassoId && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
                 return subAbaStatus === 'ativos' ? !isFinished : isFinished;
-              });
+              }) || [];
 
               if (processosFiltrados.length === 0) return (
                  <div className="text-center py-12 bg-[#0d1b2a] rounded-xl border border-zinc-800">
