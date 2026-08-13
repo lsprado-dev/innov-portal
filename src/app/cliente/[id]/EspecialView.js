@@ -16,21 +16,26 @@ const IconFileMini = () => <svg className="w-5 h-5 text-purple-400 flex-shrink-0
 const IconLock = () => <svg className="w-8 h-8 mx-auto text-zinc-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>;
 const IconCheck = () => <svg className="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>;
 
-// CONSTANTES DOS PASSOS SOCIETÁRIOS
-const PASSOS_SOCIETARIO = [
+// BACKUP DOS PASSOS CASO O PROCESSO ANTIGO NÃO TENHA SNAPSHOT NO BANCO
+const PASSOS_BACKUP = [
   { id: 1, nome: 'Viabilidade', desc: 'Análise prévia de viabilidade na Junta Comercial e Prefeitura.' },
-  { id: 2, nome: 'DBE (Documento Básico de Entrada)', desc: 'Solicitação do CNPJ na Receita Federal.' },
-  { id: 3, nome: 'Pagamento da Taxa DARE', desc: 'Emissão e pagamento das taxas estaduais.' },
-  { id: 4, nome: 'Emissão de Docs e Contrato', desc: 'Elaboração do Contrato Social e documentos complementares.' },
-  { id: 5, nome: 'Assinatura de Documentos', desc: 'Aguardando a sua assinatura digital ou física.' },
-  { id: 6, nome: 'Registro na Junta Comercial', desc: 'Envio do processo para análise final da Junta Comercial.' },
-  { id: 7, nome: 'Protocolar Processo', desc: 'Acompanhamento do protocolo nos órgãos competentes.' },
+  { id: 2, nome: 'DBE', desc: 'Solicitação do CNPJ na Receita Federal.' },
+  { id: 3, nome: 'Pagamento da Taxa', desc: 'Emissão e pagamento das taxas.' },
+  { id: 4, nome: 'Emissão de Docs', desc: 'Elaboração do Contrato Social e documentos.' },
+  { id: 5, nome: 'Assinatura', desc: 'Aguardando a sua assinatura.' },
+  { id: 6, nome: 'Registro', desc: 'Envio do processo para análise.' },
+  { id: 7, nome: 'Protocolar', desc: 'Acompanhamento do protocolo.' },
   { id: 8, nome: 'Deferido (Concluído)', desc: 'Processo finalizado com sucesso!' }
 ];
 
 export default function EspecialView({ params }) {
   const router = useRouter();
   const [sessaoExpirada, setSessaoExpirada] = useState(false);
+  
+  // NOVO: Estados de Templates
+  const [templatesProcessos, setTemplatesProcessos] = useState([]);
+  const [modalTemplate, setModalTemplate] = useState(false);
+  const [novoTemplate, setNovoTemplate] = useState({ nome: '', passos: [{ id: 1, nome: '', desc: '' }, { id: 2, nome: '', desc: '' }, { id: 3, nome: '', desc: '' }, { id: 4, nome: '', desc: '' }, { id: 5, nome: '', desc: '' }, { id: 6, nome: '', desc: '' }, { id: 7, nome: '', desc: '' }, { id: 8, nome: '', desc: '' }] });
 
   useEffect(() => {
     const handleSessaoExpirada = () => setSessaoExpirada(true);
@@ -215,9 +220,12 @@ export default function EspecialView({ params }) {
     const reqProcs = supabase.from('processos_societarios').select('*').eq('cliente_id', id).order('criado_em', { ascending: true });
     const reqRecebidos = supabase.from('arquivos_portal').select('*').eq('cliente_id', id).eq('setor', 'societario').order('criado_em', { ascending: false });
     const reqEnviados = supabase.from('envios_cliente').select('*').eq('cliente_id', id).order('criado_em', { ascending: false });
+    const reqTemplates = supabase.from('templates_processos').select('*').order('criado_em', { ascending: true });
 
     // 2. Aguarda a resposta conjunta
-    const [resCli, resProcs, resRecebidos, resEnviados] = await Promise.all([reqCli, reqProcs, reqRecebidos, reqEnviados]);
+    const [resCli, resProcs, resRecebidos, resEnviados, resTemplates] = await Promise.all([reqCli, reqProcs, reqRecebidos, reqEnviados, reqTemplates]);
+    
+    if (resTemplates.data) setTemplatesProcessos(resTemplates.data);
 
     if (!resCli.data) { router.push('/login'); return; }
     setCliente(resCli.data);
@@ -846,8 +854,15 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
 
                             {isExpanded && (
                               <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                                {PASSOS_SOCIETARIO.map((passo, index) => {
-                                  let isCompleted = proc.passo > passo.id;
+                                {(() => {
+                                  let passosRender = [];
+                                  try {
+                                    passosRender = typeof proc.passos_snapshot === 'string' ? JSON.parse(proc.passos_snapshot) : proc.passos_snapshot;
+                                  } catch (e) {}
+                                  if (!passosRender || !Array.isArray(passosRender) || passosRender.length === 0) passosRender = PASSOS_BACKUP;
+                                  
+                                  return passosRender.map((passo, index) => {
+                                    let isCompleted = proc.passo > passo.id;
                                   let isCurrent = proc.passo === passo.id;
                                   const isFuture = proc.passo < passo.id;
                                   const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
