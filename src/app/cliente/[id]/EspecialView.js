@@ -801,7 +801,7 @@ export default function EspecialView({ params }) {
              {isInterno && (
                 <div className="flex gap-2 w-full sm:w-auto">
                   <button onClick={() => setModalGerenciarTemplates(true)} className="bg-zinc-800 text-purple-300 border border-purple-500/30 hover:bg-purple-500 hover:text-white font-bold px-4 py-2.5 rounded-lg text-xs sm:text-sm transition shadow-md">
-                    ⚙ Templates
+                    + Templates
                   </button>
                   <button onClick={() => { 
                     setFormProcesso({ titulo: '', passo: 1, valor_honorarios: '', valor_entrada: '' }); 
