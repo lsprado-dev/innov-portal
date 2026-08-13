@@ -102,7 +102,6 @@ export default function EspecialView({ params }) {
   const [isPix, setIsPix] = useState(false);
   const [chavePix, setChavePix] = useState('');
   const [taxaBoleto, setTaxaBoleto] = useState(null);
-  const [semTaxas, setSemTaxas] = useState(false); // NOVO: Checkbox sem taxas
 
   // Estado para controle de pagamento de honorários (Cliente)
   const [honorarioPagoManual, setHonorarioPagoManual] = useState({});
@@ -804,7 +803,7 @@ export default function EspecialView({ params }) {
                   </button>
                   <button onClick={() => { 
                     setFormProcesso({ titulo: '', passo: 1, valor_honorarios: '', valor_entrada: '' }); 
-                    setListaTaxas([]); setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix(''); setSemTaxas(false);
+                    setListaTaxas([]); setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix(''); 
                     setTemplateSelecionadoId(templatesProcessos[0]?.id || '');
                     setModalProcesso({ aberto: true, tipo: 'novo', processo: null }); 
                   }} className="bg-purple-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg">
@@ -830,25 +829,19 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
 
               return (
                  <div className="space-y-10">
-                   {processosFiltrados?.map(proc => {
-                      let listaPassos = [];
-                      try { listaPassos = typeof proc?.passos_snapshot === 'string' ? JSON.parse(proc.passos_snapshot) : proc?.passos_snapshot; } catch(e){}
-                      if (!listaPassos || !Array.isArray(listaPassos) || listaPassos.length === 0) listaPassos = PASSOS_BACKUP;
+                   {processosFiltrados.map(proc => {
+                      const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
+                      const isFinished = proc.passo === 8 && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
                       
-                      const totalPassos = listaPassos.length;
-                      const ultimoPassoId = listaPassos[totalPassos - 1]?.id || totalPassos;
-
-                      const temComprovanteEnviado = docsEnviados?.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d?.nome_documento?.includes('Comprovante Honorários')));
-                      const isFinished = proc.passo === ultimoPassoId && (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]);
-                      
-                      let porcentagem = Math.round((proc.passo / totalPassos) * 100);
-                      if (proc.passo === ultimoPassoId && !isFinished) {
+                      // MÁGICA: Bate 99% no passo 8 se ainda não houver a baixa do pagamento
+                      let porcentagem = Math.round((proc.passo / 8) * 100);
+                      if (proc.passo === 8 && !isFinished) {
                         porcentagem = 99;
                       }
                       
                       const isExpanded = processosFiltrados.length === 1 || expandidos[proc.id];
                       let historicoObj = {};
-                      try { historicoObj = typeof proc?.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc?.historico_passos || {}); } catch(e) {}
+                      try { historicoObj = typeof proc.historico_passos === 'string' ? JSON.parse(proc.historico_passos) : (proc.historico_passos || {}); } catch(e) {}
 
                       return (
                         <div key={proc.id} className="bg-[#0d1b2a] p-6 rounded-xl border border-purple-500/20 relative overflow-hidden shadow-lg transition-all duration-300">
@@ -876,7 +869,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                                     <button onClick={() => { 
                                       let parsed = [];
                                       try { parsed = JSON.parse(proc.taxas_pendentes || '[]'); if (!Array.isArray(parsed)) parsed = [parsed]; } catch(err) { parsed = []; }
-                                      setListaTaxas(parsed); setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix(''); setSemTaxas(parsed.length === 0);
+                                      setListaTaxas(parsed); setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix('');
                                       setFormProcesso({ 
                                         titulo: proc.titulo, passo: proc.passo, valor_honorarios: proc.valor_honorarios || '', valor_entrada: proc.valor_entrada || '', honorario_pago: proc.honorario_pago || false
                                       }); 
@@ -894,13 +887,19 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
 
                             {isExpanded && (
                               <div className="relative ml-2 sm:ml-6 space-y-6 pb-2 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                                {listaPassos?.map((passo, index) => {
-                                  let isCompleted = proc.passo > passo.id;
+                                {(() => {
+                                  let passosRender = [];
+                                  try {
+                                    passosRender = typeof proc.passos_snapshot === 'string' ? JSON.parse(proc.passos_snapshot) : proc.passos_snapshot;
+                                  } catch (e) {}
+                                  if (!passosRender || !Array.isArray(passosRender) || passosRender.length === 0) passosRender = PASSOS_BACKUP;
+                                  
+                                  return passosRender.map((passo, index) => {
+                                    let isCompleted = proc.passo > passo.id;
                                   let isCurrent = proc.passo === passo.id;
                                   const isFuture = proc.passo < passo.id;
-                                  const isUltimoPasso = passo.id === ultimoPassoId;
-                                  
-                                  if (isUltimoPasso && proc.passo === ultimoPassoId) {
+                                  const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id && (d.tipo_documento === 'comprovante_honorario' || d.nome_documento.includes('Comprovante Honorários')));
+                                  if (passo.id === 8 && proc.passo === 8) {
                                     if (proc.honorario_pago || temComprovanteEnviado || honorarioPagoManual[proc.id]) { isCompleted = true; isCurrent = false; }
                                   }
 
@@ -912,7 +911,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
 
                                   return (
                                     <div key={passo.id} className={`relative pl-12 sm:pl-16 transition-all duration-500 ${isCurrent ? 'scale-[1.01]' : isFuture ? 'opacity-40 grayscale' : ''}`}>
-                                      {index !== listaPassos.length - 1 && (
+                                      {index !== PASSOS_SOCIETARIO.length - 1 && (
                                         <div className={`absolute left-4 -ml-[1px] top-[36px] w-[2px] ${isCompleted ? 'bg-emerald-500/50' : 'bg-zinc-700'} z-0`} style={{ bottom: '-28px' }}></div>
                                       )}
                                       <div className={`absolute left-0 top-1 w-8 h-8 rounded-full border-4 flex items-center justify-center font-black text-xs z-10 ${colorClass}`}>
@@ -921,13 +920,13 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                                       <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${isCurrent ? 'bg-[#1b263b] border-purple-500/50 shadow-lg' : 'bg-[#1b263b]/30 border-zinc-800'}`}>
                                         <div className="flex-1">
                                           <h3 className={`text-sm font-bold mb-1 ${isCurrent ? 'text-purple-400' : isCompleted ? 'text-emerald-400' : 'text-zinc-300'}`}>
-                                            {isUltimoPasso && isCurrent ? 'Pagar Honorários / Finalizar' : passo.nome}
+                                            {passo.id === 8 && isCurrent ? 'Pagar Honorários / Finalizar' : passo.nome}
                                           </h3>
                                           <p className="text-xs text-zinc-400 leading-relaxed">
-                                            {isUltimoPasso && isCurrent ? 'Seu processo foi deferido! Clique ao lado para ir ao financeiro, efetuar o acerto dos honorários e liberar a documentação 100% concluída.' : passo.desc}
+                                            {passo.id === 8 && isCurrent ? 'Seu processo foi deferido! Clique ao lado para ir ao financeiro, efetuar o acerto dos honorários e liberar a documentação 100% concluída.' : passo.desc}
                                           </p>
                                         </div>
-                                        {isUltimoPasso && isCurrent && !isInterno && (
+                                        {passo.id === 8 && isCurrent && !isInterno && (
                                           <button 
                                             type="button"
                                             onClick={() => { setAbaAtiva('financeiro'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
@@ -1513,62 +1512,47 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                     </div>
                     
                     <div className="space-y-3 border-t border-zinc-800 pt-3">
-                      <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
-                        <label className="block text-[10px] font-bold text-[#d4af37] uppercase">Taxas do Processo</label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${semTaxas ? 'text-purple-400' : 'text-zinc-500'}`}>Sem taxas</span>
-                          <input type="checkbox" checked={semTaxas} onChange={e => {
-                            setSemTaxas(e.target.checked);
-                            if (e.target.checked) {
-                              setTaxaNome(''); setTaxaValor(''); setTaxaBoleto(null); setIsPix(false); setChavePix('');
-                            }
-                          }} className="accent-purple-500 w-4 h-4 cursor-pointer" />
-                        </label>
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase pb-1 border-b border-zinc-800">Nova Taxa Governamental</label>
+                      
+                      <div>
+                        <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Nome da Taxa</label>
+                        <input type="text" placeholder="Ex: DARE JUCESP" value={taxaNome} onChange={e => setTaxaNome(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
                       </div>
                       
-                      {!semTaxas && (
-                        <div className="space-y-3 animate-in fade-in duration-300">
-                          <div>
-                            <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Nome da Taxa</label>
-                            <input type="text" placeholder="Ex: DARE JUCESP" value={taxaNome} onChange={e => setTaxaNome(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Valor da Taxa</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1.5 text-xs text-zinc-500 font-bold">R$</span>
+                            <input type="text" placeholder="150,00" value={taxaValor} onChange={e => setTaxaValor(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded pl-7 pr-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
                           </div>
-                          
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Valor da Taxa</label>
-                              <div className="relative">
-                                <span className="absolute left-2 top-1.5 text-xs text-zinc-500 font-bold">R$</span>
-                                <input type="text" placeholder="150,00" value={taxaValor} onChange={e => setTaxaValor(e.target.value)} className="w-full bg-[#1b263b] border border-zinc-700 rounded pl-7 pr-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
-                              </div>
-                            </div>
-                            <div className="flex items-end pb-1">
-                              <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300 font-bold">
-                                <input type="checkbox" checked={isPix} onChange={e => setIsPix(e.target.checked)} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
-                                Pagamento via PIX
-                              </label>
-                            </div>
-                          </div>
+                        </div>
+                        <div className="flex items-end pb-1">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300 font-bold">
+                            <input type="checkbox" checked={isPix} onChange={e => setIsPix(e.target.checked)} className="accent-[#d4af37] w-4 h-4 cursor-pointer" />
+                            Pagamento via PIX
+                          </label>
+                        </div>
+                      </div>
 
-                          {isPix ? (
-                            <div>
-                              <label className="block text-[9px] text-emerald-400 font-bold uppercase mb-0.5">Chave PIX (Copia e Cola)</label>
-                              <input type="text" placeholder="Cole a chave PIX aqui..." value={chavePix} onChange={e => setChavePix(e.target.value)} className="w-full bg-[#1b263b] border border-emerald-500/50 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500" />
-                            </div>
-                          ) : (
-                            <div>
-                              <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Anexar Guia/Boleto (PDF ou Imagem)</label>
-                              <input type="file" accept="application/pdf,image/*" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-1 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
-                            </div>
-                          )}
-                          
-                          <button type="button" onClick={handleAdicionarTaxa} disabled={subindoArquivo} className="w-full text-[10px] bg-zinc-800 hover:bg-zinc-700 text-[#d4af37] py-2 rounded font-bold uppercase tracking-wider transition border border-[#d4af37]/30">
-                            + Adicionar à Lista de Taxas
-                          </button>
+                      {isPix ? (
+                        <div>
+                          <label className="block text-[9px] text-emerald-400 font-bold uppercase mb-0.5">Chave PIX (Copia e Cola)</label>
+                          <input type="text" placeholder="Cole a chave PIX aqui..." value={chavePix} onChange={e => setChavePix(e.target.value)} className="w-full bg-[#1b263b] border border-emerald-500/50 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500" />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Anexar Guia/Boleto (PDF ou Imagem)</label>
+                          <input type="file" accept="application/pdf,image/*" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-1 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
                         </div>
                       )}
+                      
+                      <button type="button" onClick={handleAdicionarTaxa} disabled={subindoArquivo} className="w-full text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded font-bold uppercase tracking-wider transition border border-zinc-700">
+                        + Adicionar à Lista
+                      </button>
                     </div>
 
-                    {!semTaxas && listaTaxas.length > 0 && (
+                    {listaTaxas.length > 0 && (
                       <div className="space-y-2 mt-4 pt-3 border-t border-zinc-800">
                         <label className="block text-[10px] font-bold text-[#d4af37] uppercase">Taxas do Processo</label>
                         {listaTaxas.map(taxa => (
@@ -1638,7 +1622,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
               <div>
                 <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Modelos Cadastrados</h4>
                 <div className="space-y-3">
-                  {templatesProcessos?.map(tpl => {
+                  {templatesProcessos.map(tpl => {
                     let pList = [];
                     try { pList = typeof tpl.passos === 'string' ? JSON.parse(tpl.passos) : tpl.passos; } catch(e){}
                     return (
@@ -1676,8 +1660,8 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                 <h4 className="text-xs font-bold text-[#d4af37] uppercase tracking-wider mb-4">+ Criar Novo Modelo de Processo</h4>
                 <form onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!novoTemplateForm?.nome?.trim()) return mostrarToast('Preencha o nome do modelo.', 'erro');
-                  if (novoTemplateForm?.passos?.some(p => !p.nome.trim())) return mostrarToast('Preencha o nome de todas as etapas.', 'erro');
+                  if (!novoTemplateForm.nome.trim()) return mostrarToast('Preencha o nome do modelo.', 'erro');
+                  if (novoTemplateForm.passos.some(p => !p.nome.trim())) return mostrarToast('Preencha o nome de todas as etapas.', 'erro');
 
                   setSubindoArquivo(true);
                   const { error } = await supabase.from('templates_processos').insert([{
@@ -1698,7 +1682,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
                     <input 
                       type="text" 
                       required 
-                      value={novoTemplateForm?.nome || ''} 
+                      value={novoTemplateForm.nome} 
                       onChange={e => setNovoTemplateForm({...novoTemplateForm, nome: e.target.value})} 
                       placeholder="Nome do modelo..." 
                       className="w-full bg-[#1b263b] border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500" 
@@ -1707,7 +1691,7 @@ const temComprovanteEnviado = docsEnviados.some(d => d.processo_id === proc.id &
 
                   <div className="space-y-3">
                     <label className="block text-xs font-semibold text-zinc-300">Etapas do Processo:</label>
-                    {novoTemplateForm?.passos?.map((p, idx) => (
+                    {novoTemplateForm.passos.map((p, idx) => (
                       <div key={idx} className="p-3 bg-[#1b263b] border border-zinc-700 rounded-lg space-y-2 relative">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-purple-400">Etapa {idx + 1}</span>
