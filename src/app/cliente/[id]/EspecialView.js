@@ -34,8 +34,9 @@ export default function EspecialView({ params }) {
   
   // NOVO: Estados de Templates
   const [templatesProcessos, setTemplatesProcessos] = useState([]);
-  const [modalTemplate, setModalTemplate] = useState(false);
-  const [novoTemplate, setNovoTemplate] = useState({ nome: '', passos: [{ id: 1, nome: '', desc: '' }, { id: 2, nome: '', desc: '' }, { id: 3, nome: '', desc: '' }, { id: 4, nome: '', desc: '' }, { id: 5, nome: '', desc: '' }, { id: 6, nome: '', desc: '' }, { id: 7, nome: '', desc: '' }, { id: 8, nome: '', desc: '' }] });
+  const [modalGerenciarTemplates, setModalGerenciarTemplates] = useState(false);
+  const [novoTemplateForm, setNovoTemplateForm] = useState({ nome: '', passos: [{ id: 1, nome: '', desc: '' }, { id: 2, nome: '', desc: '' }, { id: 3, nome: '', desc: '' }, { id: 4, nome: '', desc: '' }, { id: 5, nome: '', desc: '' }, { id: 6, nome: '', desc: '' }, { id: 7, nome: '', desc: '' }, { id: 8, nome: '', desc: '' }] });
+  const [templateSelecionadoId, setTemplateSelecionadoId] = useState('');
 
   useEffect(() => {
     const handleSessaoExpirada = () => setSessaoExpirada(true);
