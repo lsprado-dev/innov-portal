@@ -1252,6 +1252,7 @@ export default function AdminPage() {
   // Função para forçar o download real
   async function baixarDocumento(caminho, nomeOriginal) {
     setSubindo(true); // Trava a tela para ficheiros grandes
+    mostrarToast('Baixando Arquivo...', 'aviso');
     
     if (caminho.startsWith('DRIVE:')) {
       const fileId = caminho.split('DRIVE:')[1];
@@ -1262,6 +1263,7 @@ export default function AdminPage() {
       document.body.appendChild(a);
       a.click();
       a.remove();
+      mostrarToast('Download concluído!', 'sucesso');
       setSubindo(false);
       return;
     }
@@ -1286,6 +1288,7 @@ export default function AdminPage() {
     a.remove();
     URL.revokeObjectURL(url); // Limpa a memória do navegador
     
+    mostrarToast('Download concluído!', 'sucesso');
     setSubindo(false);
   }
 

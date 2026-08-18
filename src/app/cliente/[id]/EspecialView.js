@@ -658,6 +658,7 @@ export default function EspecialView({ params }) {
   }
   async function baixarDocumento(caminhoStorage, nomeOriginal) {
     setSubindoArquivo(true);
+    mostrarToast('Baixando Arquivo...', 'aviso');
     
     if (caminhoStorage.startsWith('DRIVE:')) {
       const fileId = caminhoStorage.split('DRIVE:')[1];
@@ -668,6 +669,7 @@ export default function EspecialView({ params }) {
       document.body.appendChild(a);
       a.click();
       a.remove();
+      mostrarToast('Download concluído!', 'sucesso');
       setSubindoArquivo(false);
       return;
     }
@@ -687,6 +689,7 @@ export default function EspecialView({ params }) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url); 
+    mostrarToast('Download concluído!', 'sucesso');
     setSubindoArquivo(false);
   }
 
