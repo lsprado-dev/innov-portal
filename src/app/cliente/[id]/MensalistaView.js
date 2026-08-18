@@ -1634,7 +1634,13 @@ export default function MensalistaView({ params: paramsPromise }) {
     
     if (caminhoStorage.startsWith('DRIVE:')) {
       const fileId = caminhoStorage.split('DRIVE:')[1];
-      window.open(`https://drive.google.com/uc?export=download&id=${fileId}`, '_blank');
+      const url = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nomeOriginal || 'documento';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setSubindoArquivo(false);
       return;
     }
