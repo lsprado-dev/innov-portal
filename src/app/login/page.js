@@ -176,32 +176,43 @@ export default function LoginPage() {
       if (data.tipo === 'interno') {
         router.push('/');
       } else {
-        let cidadeFormatada = null;
-        try {
-          const geoRes = await fetch('https://ipapi.co/json/');
-          const geoData = await geoRes.json();
-          if (geoData.city && geoData.region) {
-            cidadeFormatada = `${geoData.city} - ${geoData.region}`;
-          }
-        } catch (e) {
-          console.log('Não foi possível rastrear a cidade.');
-        }
-
-        // MÁGICA: Injeta o Token fresquinho no cabeçalho para o RLS permitir a edição!
-        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/clientes?id=eq.${data.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${data.token}`
-          },
-          body: JSON.stringify({
-            ultimo_login: new Date().toISOString(),
-            ultima_cidade: cidadeFormatada
-          })
-        });
-        
+        // MÁGICA: Libera o cliente imediatamente para não ficar preso no "A processar..."
         router.push(`/cliente/${data.id}`);
+
+        // O rastreamento de IP e a gravação rodam em background
+        (async () => {
+          let cidadeFormatada = null;
+          try {
+            // Adicionado limite de 3 segundos para não ficar pendurado em redes lentas
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            const geoRes = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            const geoData = await geoRes.json();
+            if (geoData.city && geoData.region) {
+              cidadeFormatada = `${geoData.city} - ${geoData.region}`;
+            }
+          } catch (e) {
+            console.log('Rastreamento ignorado devido à lentidão ou bloqueio da rede.');
+          }
+
+          try {
+            await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/clientes?id=eq.${data.id}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${data.token}`
+              },
+              body: JSON.stringify({
+                ultimo_login: new Date().toISOString(),
+                ultima_cidade: cidadeFormatada
+              })
+            });
+          } catch (e) {}
+        })();
       }
     } catch (err) {
       mostrarToast('Erro de conexão com o servidor.', 'erro');
