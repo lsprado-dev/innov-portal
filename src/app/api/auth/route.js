@@ -112,22 +112,22 @@ export async function POST(request) {
     // ==========================================
     
     // Testa se a senha no banco já é o hash novo (Bcrypt começa com $2a$ ou $2b$)
-    if (senhaDoBanco && senhaDoBanco.startsWith('$2')) {
-      loginAprovado = await bcrypt.compare(password, senhaDoBanco);
-    } 
-    // Se não for, testa a regra antiga (XOR)
-    else if (senhaDoBanco === encriptarSenhaAntiga(password)) {
-      loginAprovado = true;
-      precisaAtualizarParaBcrypt = true; // O cliente logou com o velho, vamos atualizar!
-    }
+        if (senhaDoBanco && senhaDoBanco.startsWith('$2')) {
+          loginAprovado = bcrypt.compareSync(password, senhaDoBanco);
+        } 
+        // Se não for, testa a regra antiga (XOR)
+        else if (senhaDoBanco === encriptarSenhaAntiga(password)) {
+          loginAprovado = true;
+          precisaAtualizarParaBcrypt = true; // O cliente logou com o velho, vamos atualizar!
+        }
 
-    if (loginAprovado) {
-      const nomePainel = isSocio ? socioDados.nome : (clienteFinal.nome_contato || clienteFinal.nome_empresa || 'Cliente');
+        if (loginAprovado) {
+          const nomePainel = isSocio ? socioDados.nome : (clienteFinal.nome_contato || clienteFinal.nome_empresa || 'Cliente');
 
-      // Atualiza o banco sem o cliente perceber!
-      if (precisaAtualizarParaBcrypt) {
-        const salt = await bcrypt.genSalt(10);
-        const hashNovo = await bcrypt.hash(password, salt);
+          // Atualiza o banco sem o cliente perceber!
+          if (precisaAtualizarParaBcrypt) {
+            const salt = bcrypt.genSaltSync(10);
+            const hashNovo = bcrypt.hashSync(password, salt);
 
         if (isSocio) {
           const sociosAtualizados = clienteFinal.socios.map(s => s.email === socioDados.email ? { ...s, senha: hashNovo } : s);
