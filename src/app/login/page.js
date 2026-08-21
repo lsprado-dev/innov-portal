@@ -137,6 +137,7 @@ export default function LoginPage() {
     email: '',
     celular: '', 
     regime_tributario: '',
+    aceito_lgpd: false, // <-- NOVO: Consentimento explícito LGPD
     fantasma: '' // <-- NOVO: O nosso Pote de Mel (Honeypot)
   });
 
@@ -255,6 +256,13 @@ export default function LoginPage() {
 
     if (!formCadastro.regime_tributario) {
       mostrarToast('Por favor, selecione um Regime Tributário.', 'erro');
+      setCarregando(false);
+      return;
+    }
+
+    // 🚀 NOVO: Validação da LGPD
+    if (!formCadastro.aceito_lgpd) {
+      mostrarToast('Você precisa aceitar a Política de Privacidade para prosseguir.', 'erro');
       setCarregando(false);
       return;
     }
@@ -399,6 +407,14 @@ export default function LoginPage() {
                   </select>
                 </div>
               </div>
+            </div>
+
+            {/* CHECKBOX LGPD */}
+            <div className="flex items-start gap-3 mt-4 bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800">
+              <input type="checkbox" id="lgpd_check" checked={formCadastro.aceito_lgpd} onChange={e => setFormCadastro({...formCadastro, aceito_lgpd: e.target.checked})} className="accent-[#d4af37] w-5 h-5 mt-0.5 cursor-pointer flex-shrink-0" />
+              <label htmlFor="lgpd_check" className="text-xs text-zinc-400 cursor-pointer select-none leading-relaxed">
+                Li e concordo com a <a href="/privacidade" target="_blank" className="text-[#d4af37] hover:underline">Política de Privacidade</a> e os Termos de Uso. Compreendo que os meus dados serão processados para fins de contabilidade e prestação de serviços.
+              </label>
             </div>
 
             <div className="pt-6 mt-4 border-t border-zinc-800 flex flex-col sm:flex-row gap-3">

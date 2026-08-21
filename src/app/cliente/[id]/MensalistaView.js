@@ -4083,6 +4083,44 @@ export default function MensalistaView({ params: paramsPromise }) {
                 </div>
               )}
 
+              {/* DIREITOS LGPD - DIREITO AO ESQUECIMENTO */}
+              {!isInterno && (
+                <div className="border-t border-zinc-800 pt-5 mt-2">
+                  <h4 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    🛡️ Privacidade e Dados (LGPD)
+                  </h4>
+                  <p className="text-xs text-zinc-400 mb-4">Você tem o direito de solicitar a exclusão dos seus dados pessoais do nosso portal. Note que dados fiscais e contábeis podem ser retidos por exigência legal, mesmo após o pedido (Art. 16, LGPD).</p>
+                  <button 
+                    onClick={() => {
+                      setMostrarModalPerfil(false);
+                      confirmarAcao(
+                        'Solicitar Exclusão (LGPD)', 
+                        'Deseja abrir um chamado oficial solicitando o encerramento da conta e a exclusão dos seus dados? A nossa equipa avaliará o pedido considerando as obrigações legais de retenção fiscal.', 
+                        async () => {
+                          setSubindoArquivo(true);
+                          const { error } = await supabase.from('pedidos_cliente').insert([{ 
+                            cliente_id: id, 
+                            descricao: 'SOLICITAÇÃO LGPD (Direito ao Esquecimento): Desejo o encerramento da minha conta e a exclusão dos meus dados pessoais do portal.', 
+                            status: 'pendente',
+                            departamento: 'Outros'
+                          }]);
+                          if (!error) {
+                            mostrarToast('Solicitação oficial enviada à equipa de Privacidade.', 'sucesso');
+                            carregarDadosDaAba();
+                          } else {
+                            mostrarToast('Erro ao solicitar: ' + error.message, 'erro');
+                          }
+                          setSubindoArquivo(false);
+                        }
+                      );
+                    }}
+                    className="w-full text-xs bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white px-4 py-3 rounded-lg font-bold transition"
+                  >
+                    Solicitar Exclusão de Dados
+                  </button>
+                </div>
+              )}
+
             </div>
           </div>
         </div>
