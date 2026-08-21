@@ -137,13 +137,14 @@ export async function POST(request) {
         }
       }
 
+      // 🚀 Correção do Bug: Inclui as empresas vinculadas no payload do JWT para liberar visibilidade em cascata (A -> B -> C)
       const token = jwt.sign(
-        { aud: 'authenticated', role: 'authenticated', sub: clienteFinal.id, email: emailFinal },
+        { aud: 'authenticated', role: 'authenticated', sub: clienteFinal.id, email: emailFinal, empresas_vinculadas: clienteFinal.empresas_vinculadas || [] },
         process.env.SUPABASE_JWT_SECRET,
-        { expiresIn: '8h' } // <-- 🛑 MÁGICA 4: Token de 30 dias reduzido para 8 horas
+        { expiresIn: '8h' }
       );
 
-      return NextResponse.json({ success: true, tipo: 'cliente', nome: nomePainel, id: clienteFinal.id, token: token });
+      return NextResponse.json({ success: true, tipo: 'cliente', nome: nomePainel, id: clienteFinal.id, token: token, empresas_vinculadas: clienteFinal.empresas_vinculadas || [] });
     } else {
       return NextResponse.json({ success: false, error: 'Senha incorreta para esta conta.' }, { status: 401 });
     }
