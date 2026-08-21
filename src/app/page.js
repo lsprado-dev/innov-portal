@@ -2340,6 +2340,12 @@ export default function AdminPage() {
              const s = b.status.toLowerCase().trim();
              return !s.includes('cancelado');
           });
+
+          // PUXANDO DE VOLTA OS PAGOS/RECEBIDOS
+          const boletosPagos = boletosAtivos.filter(b => {
+             const s = b.status.toLowerCase().trim();
+             return s.includes('pago') || s.includes('recebido') || s.includes('liquidado');
+          });
           
           const boletosAtrasados = boletosAtivos.filter(b => {
              const s = b.status.toLowerCase().trim();
@@ -2355,6 +2361,7 @@ export default function AdminPage() {
           
           const valorAtrasado = boletosAtrasados.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
           const valorPendente = boletosPendentes.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+          const valorRecebido = boletosPagos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
 
           // LÓGICA DE AGRUPAMENTO MENSAL
           const getMesAno = (dataStr) => {
@@ -2364,16 +2371,13 @@ export default function AdminPage() {
           };
           
           const resumoAtrasado = {};
-          boletosAtrasados.forEach(b => {
-             const ma = getMesAno(b.data_vencimento);
-             resumoAtrasado[ma] = (resumoAtrasado[ma] || 0) + Number(b.valor || 0);
-          });
+          boletosAtrasados.forEach(b => { const ma = getMesAno(b.data_vencimento); resumoAtrasado[ma] = (resumoAtrasado[ma] || 0) + Number(b.valor || 0); });
           
           const resumoPendente = {};
-          boletosPendentes.forEach(b => {
-             const ma = getMesAno(b.data_vencimento);
-             resumoPendente[ma] = (resumoPendente[ma] || 0) + Number(b.valor || 0);
-          });
+          boletosPendentes.forEach(b => { const ma = getMesAno(b.data_vencimento); resumoPendente[ma] = (resumoPendente[ma] || 0) + Number(b.valor || 0); });
+
+          const resumoRecebido = {};
+          boletosPagos.forEach(b => { const ma = getMesAno(b.data_vencimento); resumoRecebido[ma] = (resumoRecebido[ma] || 0) + Number(b.valor || 0); });
 
           // ORDENA OS MESES
           const ordernarMeses = (resumo) => Object.keys(resumo).sort((a, b) => {
@@ -2384,6 +2388,7 @@ export default function AdminPage() {
 
           const mesesAtrasoOrdenados = ordernarMeses(resumoAtrasado);
           const mesesPendenteOrdenados = ordernarMeses(resumoPendente);
+          const mesesRecebidoOrdenados = ordernarMeses(resumoRecebido);
 
           const inadimplentes = [];
           const comPendentes = [];
@@ -2418,46 +2423,63 @@ export default function AdminPage() {
           return (
             <div className="space-y-6 animate-in fade-in duration-300">
               
-              {/* DASHBOARD FINANCEIRO */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* DASHBOARD FINANCEIRO (AGORA COM 3 COLUNAS) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
                 {/* CARD EM ATRASO */}
-                <div className="bg-[#1b263b] p-6 rounded-xl border border-red-500/30 shadow-xl flex flex-col justify-between">
-                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso / Vencidos</p>
-                  <p className="text-4xl font-black text-white mb-4">R$ {valorAtrasado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                <div className="bg-[#1b263b] p-5 rounded-xl border border-red-500/30 shadow-xl flex flex-col justify-between">
+                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso</p>
+                  <p className="text-3xl font-black text-white mb-4">R$ {valorAtrasado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                   
                   <div className="border-t border-zinc-800/80 pt-4">
                     <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês:</p>
                     <div className="flex flex-wrap gap-2 mb-3">
                        {mesesAtrasoOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum atraso no período.</span>}
                        {mesesAtrasoOrdenados.map(mes => (
-                          <div key={mes} className="bg-[#0d1b2a] border border-red-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[80px]">
+                          <div key={mes} className="bg-[#0d1b2a] border border-red-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[70px]">
                              <span className="text-[10px] text-zinc-400 font-bold">{mes}</span>
                              <span className="text-xs font-black text-red-400">R$ {resumoAtrasado[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
                           </div>
                        ))}
                     </div>
-                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50">Total de <strong className="text-red-400">{inadimplentes.length}</strong> empresas inadimplentes.</p>
                   </div>
                 </div>
 
                 {/* CARD PENDENTES (A VENCER) */}
-                <div className="bg-[#1b263b] p-6 rounded-xl border border-blue-500/30 shadow-xl flex flex-col justify-between">
+                <div className="bg-[#1b263b] p-5 rounded-xl border border-blue-500/30 shadow-xl flex flex-col justify-between">
                   <p className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconClock /> A Vencer (No Prazo)</p>
-                  <p className="text-4xl font-black text-white mb-4">R$ {valorPendente.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  <p className="text-3xl font-black text-white mb-4">R$ {valorPendente.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                   
                   <div className="border-t border-zinc-800/80 pt-4">
                     <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês:</p>
                     <div className="flex flex-wrap gap-2 mb-3">
-                       {mesesPendenteOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum boleto em aberto no momento.</span>}
+                       {mesesPendenteOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum boleto em aberto.</span>}
                        {mesesPendenteOrdenados.map(mes => (
-                          <div key={mes} className="bg-[#0d1b2a] border border-blue-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[80px]">
+                          <div key={mes} className="bg-[#0d1b2a] border border-blue-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[70px]">
                              <span className="text-[10px] text-zinc-400 font-bold">{mes}</span>
                              <span className="text-xs font-black text-blue-400">R$ {resumoPendente[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
                           </div>
                        ))}
                     </div>
-                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50">Total de <strong className="text-blue-400">{comPendentes.length}</strong> empresas com boletos a vencer.</p>
+                  </div>
+                </div>
+
+                {/* CARD RECEBIDOS (MENSAL) */}
+                <div className="bg-[#1b263b] p-5 rounded-xl border border-emerald-500/30 shadow-xl flex flex-col justify-between">
+                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconCheck /> Total Recebido</p>
+                  <p className="text-3xl font-black text-white mb-4">R$ {valorRecebido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  
+                  <div className="border-t border-zinc-800/80 pt-4">
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês:</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                       {mesesRecebidoOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum recebimento no período.</span>}
+                       {mesesRecebidoOrdenados.map(mes => (
+                          <div key={mes} className="bg-[#0d1b2a] border border-emerald-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[70px]">
+                             <span className="text-[10px] text-zinc-400 font-bold">{mes}</span>
+                             <span className="text-xs font-black text-emerald-400">R$ {resumoRecebido[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                          </div>
+                       ))}
+                    </div>
                   </div>
                 </div>
 
@@ -2484,8 +2506,8 @@ export default function AdminPage() {
                          const mesesAtraso = cli.atrasos.map(a => a.mes_ref).join(', ');
                          const msgWhats = encodeURIComponent(`Olá ${cli.nome_contato.split(' ')[0]}, tudo bem? Notamos que consta em nosso sistema uma pendência referente à(s) mensalidade(s) de *${mesesAtraso}*. Se precisar de ajuda para emitir a segunda via, basta acessar nosso portal ou me avisar por aqui!`);
 
-                         const boletosBaixaveis = cli.atrasos.filter(b => b.status.toLowerCase() !== 'expirado' && b.url_pdf);
-                         const todosExpirados = cli.atrasos.length > 0 && boletosBaixaveis.length === 0;
+                         // MÁGICA DOS DOWNLOADS: Agora libera qualquer boleto que tenha PDF
+                         const boletosBaixaveis = cli.atrasos.filter(b => b.url_pdf);
 
                          return (
                            <div key={cli.id} className="p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 hover:bg-zinc-800/20 transition">
@@ -2497,8 +2519,8 @@ export default function AdminPage() {
                                  
                                  <div className="mt-2 flex flex-wrap gap-2">
                                     {cli.atrasos.map(b => (
-                                      <span key={b.id} className={`text-[10px] px-2 py-0.5 rounded font-bold border ${b.status.toLowerCase() === 'expirado' ? 'bg-zinc-800 text-zinc-400 border-zinc-700' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
-                                        Ref: {b.mes_ref} {b.status.toLowerCase() === 'expirado' && '(Expirado)'} - R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                      <span key={b.id} className={`text-[10px] px-2 py-0.5 rounded font-bold border ${b.status.toLowerCase().includes('expirado') ? 'bg-zinc-800 text-zinc-400 border-zinc-700' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
+                                        Ref: {b.mes_ref} ({b.status.toLowerCase().includes('expirado') ? 'Expirado' : 'Atrasado'}) - R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                       </span>
                                     ))}
                                  </div>
@@ -2508,11 +2530,7 @@ export default function AdminPage() {
                                  <p className="text-sm font-black text-red-500 mb-1">Total: R$ {cli.valorDevido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                                  
                                  <div className="flex flex-col sm:flex-row gap-2 w-full">
-                                    {todosExpirados ? (
-                                       <span className="text-[10px] bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg font-bold border border-zinc-700 flex items-center gap-1 h-9">
-                                          ⚠️ Boletos Expirados
-                                       </span>
-                                    ) : boletosBaixaveis.length === 1 ? (
+                                    {boletosBaixaveis.length === 1 ? (
                                        <button onClick={() => window.open(boletosBaixaveis[0].url_pdf, '_blank')} className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 h-9">
                                          <IconDocument /> Baixar Boleto
                                        </button>
@@ -2560,7 +2578,7 @@ export default function AdminPage() {
                                  <div className="mt-2 flex flex-wrap gap-2">
                                     {cli.pendentes.map(b => (
                                       <span key={b.id} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded font-bold">
-                                        Ref: {b.mes_ref} (R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})})
+                                        Ref: {b.mes_ref} (A vencer) - R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                       </span>
                                     ))}
                                  </div>
