@@ -119,6 +119,9 @@ export default function AdminPage() {
   const [subAbaDemanda, setSubAbaDemanda] = useState('pendentes'); 
   const [subAbaAlerta, setSubAbaAlerta] = useState('historico_cobrancas'); 
   
+  const [subAbaFinanceiro, setSubAbaFinanceiro] = useState('inadimplentes'); // <-- NOVO
+  const [boletosAdmin, setBoletosAdmin] = useState([]); // <-- NOVO
+
   // NOVO ESTADO: Guarda os processos ativos de todos os clientes
   const [processosSocietarios, setProcessosSocietarios] = useState([]);
 
@@ -383,7 +386,7 @@ export default function AdminPage() {
     // 🛑 COLUNAS BLINDADAS: Apenas as exatas do banco. "senha" e a inexistente "status" ficam de fora!
     const COLUNAS_SEGURAS = 'id, nome_empresa, cnpj, cpf, nome_contato, email, celular, regime_tributario, tipo_conta, ultimo_login, ultima_cidade, empresas_vinculadas, socios, clientes_van, senha_alterada';
 
-    if (abaAtiva === 'ativos' || abaAtiva === 'senhas') {
+    if (abaAtiva === 'ativos' || abaAtiva === 'senhas' || abaAtiva === 'financeiro_admin') {
       // Ampliando o limite de segurança para 5.000 clientes (Evita limite padrão do PostgREST)
       const { data, error } = await supabase
         .from('clientes')
@@ -439,6 +442,11 @@ export default function AdminPage() {
         if (error) console.error('🚨 Erro (Auditoria):', error);
         if (clis) setClientes(clis);
       }
+    }
+    else if (abaAtiva === 'financeiro_admin') {
+      const { data } = await supabase.from('boletos_api').select('*').order('data_vencimento', { ascending: false });
+      if (data) setBoletosAdmin(data);
+      setTemMaisDados(false);
     }
 
     // Se vieram exatos 50 itens (TAMANHO_PAGINA), significa que provavelmente ainda tem mais!
@@ -2035,6 +2043,7 @@ export default function AdminPage() {
               )}
             </button>
             <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Gestão de Acessos</button>
+            <button onClick={() => { setAbaAtiva('financeiro_admin'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'financeiro_admin' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Gestão Financeira</button>
             <button onClick={() => { setAbaAtiva('auditoria'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>
             <span className="text-sm text-zinc-400 hidden lg:inline">
               Conectado como: <strong className="text-[#d4af37] font-semibold">{operador}</strong>
@@ -2313,6 +2322,127 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+          );
+        })()}
+
+        {abaAtiva === 'financeiro_admin' && (() => {
+          const boletosAtivos = boletosAdmin.filter(b => b.status !== 'cancelado');
+          const boletosPagos = boletosAtivos.filter(b => b.status === 'pago' || b.status === 'pago via pix');
+          const boletosAtrasados = boletosAtivos.filter(b => b.status === 'atrasado' || b.status === 'expirado');
+          
+          const valorRecebido = boletosPagos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+          const valorAtrasado = boletosAtrasados.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+
+          const inadimplentes = [];
+          const emDia = [];
+
+          // Removemos societários do cálculo (pois são faturados à parte)
+          const clientesMensalistas = clientes.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')));
+
+          clientesMensalistas.forEach(cli => {
+            const boletosCliente = boletosAtivos.filter(b => b.cliente_id === cli.id);
+            if (boletosCliente.length === 0) return; // Ignora se a API não gerou boletos para ele
+
+            const atrasos = boletosCliente.filter(b => b.status === 'atrasado' || b.status === 'expirado');
+            if (atrasos.length > 0) {
+              const valorDevido = atrasos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+              inadimplentes.push({ ...cli, atrasos, valorDevido });
+            } else {
+              emDia.push(cli);
+            }
+          });
+
+          inadimplentes.sort((a, b) => b.valorDevido - a.valorDevido);
+
+          return (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* DASHBOARD */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#1b263b] p-6 rounded-xl border border-red-500/30 shadow-xl flex flex-col justify-between">
+                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso / A Receber</p>
+                  <p className="text-4xl font-black text-white mb-2">R$ {valorAtrasado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  <div className="flex gap-2 border-t border-zinc-800/80 pt-3">
+                    <span className="text-xs text-zinc-400">Total de <strong className="text-red-400">{inadimplentes.length}</strong> clientes inadimplentes.</span>
+                  </div>
+                </div>
+
+                <div className="bg-[#1b263b] p-6 rounded-xl border border-emerald-500/30 shadow-xl flex flex-col justify-between">
+                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconCheck /> Total Recebido</p>
+                  <p className="text-4xl font-black text-white mb-2">R$ {valorRecebido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  <div className="flex gap-2 border-t border-zinc-800/80 pt-3">
+                    <span className="text-xs text-zinc-400"><strong className="text-emerald-400">{emDia.length}</strong> clientes 100% em dia.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* LISTA DE CLIENTES */}
+              <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
+                <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
+                  <h2 className="text-lg font-bold text-[#d4af37]">Detalhamento de Cobranças</h2>
+                  <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full sm:w-auto">
+                    <button onClick={() => setSubAbaFinanceiro('inadimplentes')} className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all ${subAbaFinanceiro === 'inadimplentes' ? 'bg-red-500/10 text-red-400 shadow-sm border border-red-500/20' : 'text-zinc-400 hover:text-white'}`}>Inadimplentes ({inadimplentes.length})</button>
+                    <button onClick={() => setSubAbaFinanceiro('pagos')} className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all ${subAbaFinanceiro === 'pagos' ? 'bg-emerald-500/10 text-emerald-400 shadow-sm border border-emerald-500/20' : 'text-zinc-400 hover:text-white'}`}>Em Dia ({emDia.length})</button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-zinc-800">
+                  {subAbaFinanceiro === 'inadimplentes' ? (
+                    inadimplentes.length === 0 ? (
+                       <p className="text-zinc-500 text-center py-8">Nenhum cliente inadimplente. Parabéns!</p>
+                    ) : (
+                       inadimplentes.map(cli => {
+                         const fonesWhats = cli.celular ? cli.celular.replace(/\D/g, '') : '';
+                         const numWhats = fonesWhats.length >= 10 ? `55${fonesWhats}` : '';
+                         const mesesAtraso = cli.atrasos.map(a => a.mes_ref).join(', ');
+                         const msgWhats = encodeURIComponent(`Olá ${cli.nome_contato.split(' ')[0]}, tudo bem? Notamos que consta em nosso sistema uma pendência referente à(s) mensalidade(s) de *${mesesAtraso}*. Se precisar de ajuda para emitir a segunda via do boleto, basta acessar nosso portal ou me avisar por aqui!`);
+
+                         return (
+                           <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-zinc-800/20 transition">
+                              <div className="flex-1 w-full">
+                                 <h3 className="font-bold text-white text-sm flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</h3>
+                                 <p className="text-xs text-zinc-400 mt-1">Responsável: <strong className="text-zinc-300">{cli.nome_contato}</strong> | {cli.celular}</p>
+                                 <div className="mt-2 flex flex-wrap gap-2">
+                                    {cli.atrasos.map(b => (
+                                      <span key={b.id} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-bold">
+                                        Ref: {b.mes_ref} (R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})})
+                                      </span>
+                                    ))}
+                                 </div>
+                              </div>
+                              <div className="flex flex-col gap-2 w-full sm:w-auto">
+                                 <p className="text-sm font-black text-red-500 text-left sm:text-right sm:pr-2 mb-1">Total: R$ {cli.valorDevido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                 <a 
+                                   href={numWhats ? `https://wa.me/${numWhats}?text=${msgWhats}` : '#'}
+                                   target={numWhats ? "_blank" : "_self"}
+                                   className={`w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm ${numWhats ? 'bg-[#25D366] hover:bg-[#20bd5a] text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+                                 >
+                                   <i className="fab fa-whatsapp text-sm"></i> Cobrar via WhatsApp
+                                 </a>
+                              </div>
+                           </div>
+                         );
+                       })
+                    )
+                  ) : (
+                    emDia.length === 0 ? (
+                       <p className="text-zinc-500 text-center py-8">Nenhum cliente com pagamentos registrados.</p>
+                    ) : (
+                       emDia.map(cli => (
+                         <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-zinc-800/20 transition">
+                            <div>
+                               <h3 className="font-bold text-white text-sm flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</h3>
+                               <p className="text-xs text-zinc-400 mt-1">Responsável: {cli.nome_contato}</p>
+                            </div>
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg font-bold">
+                              100% Em Dia ✓
+                            </span>
+                         </div>
+                       ))
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
           );
         })()}
 
