@@ -19,7 +19,8 @@ export async function POST(request) {
         role: decoded.role, 
         sub: decoded.sub, 
         email: decoded.email, 
-        is_admin: decoded.is_admin 
+        is_admin: decoded.is_admin,
+        empresas_vinculadas: decoded.empresas_vinculadas || [] // <-- 🚀 CORREÇÃO: Repassa os vínculos para o novo crachá!
       },
       process.env.SUPABASE_JWT_SECRET,
       { expiresIn: '8h' } // <-- MÁGICA: Mantém a regra rigorosa de 8 horas na renovação!
