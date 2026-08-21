@@ -2333,27 +2333,34 @@ export default function AdminPage() {
         })()}
 
         {abaAtiva === 'financeiro_admin' && (() => {
-          // BLINDAGEM: Converte o status para minúsculo e FILTRA apenas de Junho/2026 em diante (Ignora o lixo do passado)
-          const boletosAtivos = boletosAdmin.filter(b => b.data_vencimento >= '2026-06-01' && b.status && b.status.toLowerCase() !== 'cancelado');
-          
-          const boletosPagos = boletosAtivos.filter(b => {
-             const s = b.status.toLowerCase();
-             return s === 'pago' || s === 'pago via pix' || s === 'liquidado';
+          // BLINDAGEM MÁXIMA: Ignora de Maio/26 para trás e resolve conflitos de status
+          const boletosAtivos = boletosAdmin.filter(b => {
+             if (!b.status) return false;
+             if (b.data_vencimento && b.data_vencimento < '2026-06-01') return false;
+             const s = b.status.toLowerCase().trim();
+             return !s.includes('cancelado');
           });
           
           const boletosAtrasados = boletosAtivos.filter(b => {
-             const s = b.status.toLowerCase();
-             return s === 'atrasado' || s === 'expirado' || s === 'vencido';
+             const s = b.status.toLowerCase().trim();
+             // Se tiver qualquer indício de pago, bloqueia de aparecer como atrasado!
+             return !s.includes('pago') && !s.includes('recebido') && !s.includes('liquidado') && (s.includes('atrasado') || s.includes('expirado') || s.includes('vencido'));
+          });
+
+          const boletosPendentes = boletosAtivos.filter(b => {
+             const s = b.status.toLowerCase().trim();
+             // Puxa os que estão abertos (no prazo) e blinda contra os pagos
+             return !s.includes('pago') && !s.includes('recebido') && !s.includes('liquidado') && (s.includes('pendente') || s.includes('aberto'));
           });
           
-          const valorRecebido = boletosPagos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
           const valorAtrasado = boletosAtrasados.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+          const valorPendente = boletosPendentes.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
 
           // LÓGICA DE AGRUPAMENTO MENSAL
           const getMesAno = (dataStr) => {
              if (!dataStr) return 'Desconhecido';
              const [ano, mes] = dataStr.split('-');
-             return `${mes}/${ano}`; // Retorna formato 06/2026
+             return `${mes}/${ano}`; 
           };
           
           const resumoAtrasado = {};
@@ -2362,61 +2369,65 @@ export default function AdminPage() {
              resumoAtrasado[ma] = (resumoAtrasado[ma] || 0) + Number(b.valor || 0);
           });
           
-          const resumoRecebido = {};
-          boletosPagos.forEach(b => {
+          const resumoPendente = {};
+          boletosPendentes.forEach(b => {
              const ma = getMesAno(b.data_vencimento);
-             resumoRecebido[ma] = (resumoRecebido[ma] || 0) + Number(b.valor || 0);
+             resumoPendente[ma] = (resumoPendente[ma] || 0) + Number(b.valor || 0);
           });
 
-          // ORDENA OS MESES PARA APARECEREM NA SEQUÊNCIA (ex: 06/2026, 07/2026)
-          const mesesAtrasoOrdenados = Object.keys(resumoAtrasado).sort((a, b) => {
+          // ORDENA OS MESES
+          const ordernarMeses = (resumo) => Object.keys(resumo).sort((a, b) => {
+             if (a === 'Desconhecido') return 1; if (b === 'Desconhecido') return -1;
              const [mA, aA] = a.split('/'); const [mB, aB] = b.split('/');
              return new Date(aA, mA - 1) - new Date(aB, mB - 1);
           });
-          const mesesRecebidoOrdenados = Object.keys(resumoRecebido).sort((a, b) => {
-             const [mA, aA] = a.split('/'); const [mB, aB] = b.split('/');
-             return new Date(aA, mA - 1) - new Date(aB, mB - 1);
-          });
+
+          const mesesAtrasoOrdenados = ordernarMeses(resumoAtrasado);
+          const mesesPendenteOrdenados = ordernarMeses(resumoPendente);
 
           const inadimplentes = [];
-          const emDia = [];
+          const comPendentes = [];
 
           // Removemos societários do cálculo (pois são faturados à parte)
           const clientesMensalistas = clientes.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')));
 
           clientesMensalistas.forEach(cli => {
             const boletosCliente = boletosAtivos.filter(b => b.cliente_id === cli.id);
-            if (boletosCliente.length === 0) return; // Ignora se a API não gerou boletos para ele desde Jun/26
+            if (boletosCliente.length === 0) return; 
 
-            const atrasos = boletosCliente.filter(b => {
-               const s = b.status.toLowerCase();
-               return s === 'atrasado' || s === 'expirado' || s === 'vencido';
-            });
+            const atrasos = boletosCliente.filter(b => boletosAtrasados.includes(b));
+            const pendentes = boletosCliente.filter(b => boletosPendentes.includes(b));
             
             if (atrasos.length > 0) {
               const valorDevido = atrasos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
               inadimplentes.push({ ...cli, atrasos, valorDevido });
-            } else {
-              emDia.push(cli);
+            }
+            if (pendentes.length > 0) {
+              const valorAberto = pendentes.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+              comPendentes.push({ ...cli, pendentes, valorAberto });
             }
           });
 
-          // Ordena pelo maior devedor
+          // Ordena pelo maior valor na frente
           inadimplentes.sort((a, b) => b.valorDevido - a.valorDevido);
+          comPendentes.sort((a, b) => b.valorAberto - a.valorAberto);
+
+          // Força a aba correta caso o admin tenha clicado na antiga "Pagos"
+          const abaReal = (subAbaFinanceiro === 'pagos' || subAbaFinanceiro === 'inadimplentes') ? 'inadimplentes' : 'pendentes';
 
           return (
             <div className="space-y-6 animate-in fade-in duration-300">
               
-              {/* DASHBOARD MENSAL NO TOPO */}
+              {/* DASHBOARD FINANCEIRO */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 {/* CARD EM ATRASO */}
                 <div className="bg-[#1b263b] p-6 rounded-xl border border-red-500/30 shadow-xl flex flex-col justify-between">
-                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso / A Receber (Geral)</p>
+                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso / Vencidos</p>
                   <p className="text-4xl font-black text-white mb-4">R$ {valorAtrasado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                   
                   <div className="border-t border-zinc-800/80 pt-4">
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês de Vencimento:</p>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês:</p>
                     <div className="flex flex-wrap gap-2 mb-3">
                        {mesesAtrasoOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum atraso no período.</span>}
                        {mesesAtrasoOrdenados.map(mes => (
@@ -2426,27 +2437,27 @@ export default function AdminPage() {
                           </div>
                        ))}
                     </div>
-                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50">Total de <strong className="text-red-400">{inadimplentes.length}</strong> clientes inadimplentes.</p>
+                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50">Total de <strong className="text-red-400">{inadimplentes.length}</strong> empresas inadimplentes.</p>
                   </div>
                 </div>
 
-                {/* CARD RECEBIDOS */}
-                <div className="bg-[#1b263b] p-6 rounded-xl border border-emerald-500/30 shadow-xl flex flex-col justify-between">
-                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconCheck /> Total Recebido (Geral)</p>
-                  <p className="text-4xl font-black text-white mb-4">R$ {valorRecebido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                {/* CARD PENDENTES (A VENCER) */}
+                <div className="bg-[#1b263b] p-6 rounded-xl border border-blue-500/30 shadow-xl flex flex-col justify-between">
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconClock /> A Vencer (No Prazo)</p>
+                  <p className="text-4xl font-black text-white mb-4">R$ {valorPendente.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                   
                   <div className="border-t border-zinc-800/80 pt-4">
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês de Vencimento:</p>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês:</p>
                     <div className="flex flex-wrap gap-2 mb-3">
-                       {mesesRecebidoOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum recebimento no período.</span>}
-                       {mesesRecebidoOrdenados.map(mes => (
-                          <div key={mes} className="bg-[#0d1b2a] border border-emerald-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[80px]">
+                       {mesesPendenteOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum boleto em aberto no momento.</span>}
+                       {mesesPendenteOrdenados.map(mes => (
+                          <div key={mes} className="bg-[#0d1b2a] border border-blue-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[80px]">
                              <span className="text-[10px] text-zinc-400 font-bold">{mes}</span>
-                             <span className="text-xs font-black text-emerald-400">R$ {resumoRecebido[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                             <span className="text-xs font-black text-blue-400">R$ {resumoPendente[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
                           </div>
                        ))}
                     </div>
-                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50"><strong className="text-emerald-400">{emDia.length}</strong> clientes 100% em dia.</p>
+                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50">Total de <strong className="text-blue-400">{comPendentes.length}</strong> empresas com boletos a vencer.</p>
                   </div>
                 </div>
 
@@ -2457,18 +2468,22 @@ export default function AdminPage() {
                 <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
                   <h2 className="text-lg font-bold text-[#d4af37]">Detalhamento de Cobranças</h2>
                   <div className="flex bg-[#1b263b] p-1 rounded-lg border border-zinc-700 w-full sm:w-auto">
-                    <button onClick={() => setSubAbaFinanceiro('inadimplentes')} className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all ${subAbaFinanceiro === 'inadimplentes' ? 'bg-red-500/10 text-red-400 shadow-sm border border-red-500/20' : 'text-zinc-400 hover:text-white'}`}>Inadimplentes ({inadimplentes.length})</button>
-                    <button onClick={() => setSubAbaFinanceiro('pagos')} className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all ${subAbaFinanceiro === 'pagos' ? 'bg-emerald-500/10 text-emerald-400 shadow-sm border border-emerald-500/20' : 'text-zinc-400 hover:text-white'}`}>Em Dia ({emDia.length})</button>
+                    <button onClick={() => setSubAbaFinanceiro('inadimplentes')} className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all ${abaReal === 'inadimplentes' ? 'bg-red-500/10 text-red-400 shadow-sm border border-red-500/20' : 'text-zinc-400 hover:text-white'}`}>Inadimplentes ({inadimplentes.length})</button>
+                    <button onClick={() => setSubAbaFinanceiro('pendentes')} className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all ${abaReal === 'pendentes' ? 'bg-blue-500/10 text-blue-400 shadow-sm border border-blue-500/20' : 'text-zinc-400 hover:text-white'}`}>Boletos Abertos ({comPendentes.length})</button>
                   </div>
                 </div>
 
                 <div className="divide-y divide-zinc-800">
-                  {subAbaFinanceiro === 'inadimplentes' ? (
+                  {abaReal === 'inadimplentes' ? (
                     inadimplentes.length === 0 ? (
-                       <p className="text-zinc-500 text-center py-8">Nenhum cliente inadimplente desde Junho/2026. Parabéns!</p>
+                       <p className="text-zinc-500 text-center py-8">Nenhuma empresa inadimplente desde Junho/2026. Parabéns!</p>
                     ) : (
                        inadimplentes.map(cli => {
-                         // Filtra os boletos que ainda podem ser baixados
+                         const fonesWhats = cli.celular ? cli.celular.replace(/\D/g, '') : '';
+                         const numWhats = fonesWhats.length >= 10 ? `55${fonesWhats}` : '';
+                         const mesesAtraso = cli.atrasos.map(a => a.mes_ref).join(', ');
+                         const msgWhats = encodeURIComponent(`Olá ${cli.nome_contato.split(' ')[0]}, tudo bem? Notamos que consta em nosso sistema uma pendência referente à(s) mensalidade(s) de *${mesesAtraso}*. Se precisar de ajuda para emitir a segunda via, basta acessar nosso portal ou me avisar por aqui!`);
+
                          const boletosBaixaveis = cli.atrasos.filter(b => b.status.toLowerCase() !== 'expirado' && b.url_pdf);
                          const todosExpirados = cli.atrasos.length > 0 && boletosBaixaveis.length === 0;
 
@@ -2492,57 +2507,93 @@ export default function AdminPage() {
                               <div className="flex flex-col gap-2 w-full lg:w-auto items-start lg:items-end">
                                  <p className="text-sm font-black text-red-500 mb-1">Total: R$ {cli.valorDevido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                                  
-                                 {todosExpirados ? (
-                                    <span className="text-[10px] bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg font-bold border border-zinc-700 flex items-center gap-1">
-                                       ⚠️ Boletos Expirados (Reemitir)
-                                    </span>
-                                 ) : boletosBaixaveis.length === 1 ? (
-                                    <button 
-                                      onClick={() => window.open(boletosBaixaveis[0].url_pdf, '_blank')}
-                                      className="w-full lg:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2.5 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500"
-                                    >
-                                      <IconDocument /> Baixar Boleto
-                                    </button>
-                                 ) : boletosBaixaveis.length > 1 ? (
-                                    <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
-                                       <select id={`boleto-sel-${cli.id}`} className="w-full sm:w-auto bg-[#0d1b2a] border border-zinc-700 text-white text-xs font-bold px-3 py-2.5 rounded-lg focus:border-[#d4af37] focus:outline-none">
-                                          {boletosBaixaveis.map(b => (
-                                             <option key={b.id} value={b.url_pdf}>{b.mes_ref} - R$ {Number(b.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</option>
-                                          ))}
-                                       </select>
-                                       <button 
-                                          onClick={() => {
-                                             const url = document.getElementById(`boleto-sel-${cli.id}`).value;
-                                             if(url) window.open(url, '_blank');
-                                          }}
-                                          className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2.5 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500"
-                                       >
-                                          <IconDocument /> Baixar
+                                 <div className="flex flex-col sm:flex-row gap-2 w-full">
+                                    {todosExpirados ? (
+                                       <span className="text-[10px] bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg font-bold border border-zinc-700 flex items-center gap-1 h-9">
+                                          ⚠️ Boletos Expirados
+                                       </span>
+                                    ) : boletosBaixaveis.length === 1 ? (
+                                       <button onClick={() => window.open(boletosBaixaveis[0].url_pdf, '_blank')} className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 h-9">
+                                         <IconDocument /> Baixar Boleto
                                        </button>
-                                    </div>
-                                 ) : null}
+                                    ) : boletosBaixaveis.length > 1 ? (
+                                       <div className="flex items-center gap-2 w-full sm:w-auto">
+                                          <select id={`boleto-sel-${cli.id}`} className="bg-[#0d1b2a] border border-zinc-700 text-white text-xs font-bold px-2 py-2 rounded-lg h-9 w-full sm:w-36">
+                                             {boletosBaixaveis.map(b => (
+                                                <option key={b.id} value={b.url_pdf}>{b.mes_ref}</option>
+                                             ))}
+                                          </select>
+                                          <button onClick={() => { const url = document.getElementById(`boleto-sel-${cli.id}`).value; if(url) window.open(url, '_blank'); }} className="flex items-center justify-center text-xs font-bold px-3 py-2 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 h-9">
+                                             Baixar
+                                          </button>
+                                       </div>
+                                    ) : null}
+
+                                    <a href={numWhats ? `https://wa.me/${numWhats}?text=${msgWhats}` : '#'} target={numWhats ? "_blank" : "_self"} className={`w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm h-9 ${numWhats ? 'bg-[#25D366] hover:bg-[#20bd5a] text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
+                                      <i className="fab fa-whatsapp text-sm"></i> Cobrar
+                                    </a>
+                                 </div>
                               </div>
                            </div>
                          );
                        })
                     )
                   ) : (
-                    emDia.length === 0 ? (
-                       <p className="text-zinc-500 text-center py-8">Nenhum cliente com pagamentos registrados desde Junho/2026.</p>
+                    comPendentes.length === 0 ? (
+                       <p className="text-zinc-500 text-center py-8">Nenhum boleto aguardando pagamento.</p>
                     ) : (
-                       emDia.map(cli => (
-                         <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-zinc-800/20 transition">
-                            <div>
-                               <Link href={`/cliente/${cli.id}`} className="font-bold text-[#d4af37] hover:text-yellow-400 hover:underline text-sm flex items-center gap-2 transition w-max">
-                                  <IconCompany /> {cli.nome_empresa}
-                               </Link>
-                               <p className="text-xs text-zinc-400 mt-1">Responsável: {cli.nome_contato}</p>
-                            </div>
-                            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg font-bold">
-                              100% Em Dia ✓
-                            </span>
-                         </div>
-                       ))
+                       comPendentes.map(cli => {
+                         const fonesWhats = cli.celular ? cli.celular.replace(/\D/g, '') : '';
+                         const numWhats = fonesWhats.length >= 10 ? `55${fonesWhats}` : '';
+                         const mesesAberto = cli.pendentes.map(a => a.mes_ref).join(', ');
+                         const msgWhats = encodeURIComponent(`Olá ${cli.nome_contato.split(' ')[0]}, tudo bem? Passando para avisar que a mensalidade referente à(s) competência(s) de *${mesesAberto}* já se encontra disponível no seu portal. Qualquer dúvida, estou à disposição!`);
+                         
+                         const boletosBaixaveis = cli.pendentes.filter(b => b.url_pdf);
+
+                         return (
+                           <div key={cli.id} className="p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 hover:bg-zinc-800/20 transition">
+                              <div className="flex-1 w-full">
+                                 <Link href={`/cliente/${cli.id}`} className="font-bold text-[#d4af37] hover:text-yellow-400 hover:underline text-sm flex items-center gap-2 transition w-max">
+                                    <IconCompany /> {cli.nome_empresa}
+                                 </Link>
+                                 <p className="text-xs text-zinc-400 mt-1">Responsável: <strong className="text-zinc-300">{cli.nome_contato}</strong> | {cli.celular}</p>
+                                 <div className="mt-2 flex flex-wrap gap-2">
+                                    {cli.pendentes.map(b => (
+                                      <span key={b.id} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded font-bold">
+                                        Ref: {b.mes_ref} (R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})})
+                                      </span>
+                                    ))}
+                                 </div>
+                              </div>
+                              <div className="flex flex-col gap-2 w-full lg:w-auto items-start lg:items-end">
+                                 <p className="text-sm font-black text-blue-400 mb-1">Total: R$ {cli.valorAberto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                 
+                                 <div className="flex flex-col sm:flex-row gap-2 w-full">
+                                    {boletosBaixaveis.length === 1 ? (
+                                       <button onClick={() => window.open(boletosBaixaveis[0].url_pdf, '_blank')} className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 h-9">
+                                         <IconDocument /> Baixar Boleto
+                                       </button>
+                                    ) : boletosBaixaveis.length > 1 ? (
+                                       <div className="flex items-center gap-2 w-full sm:w-auto">
+                                          <select id={`boleto-pend-sel-${cli.id}`} className="bg-[#0d1b2a] border border-zinc-700 text-white text-xs font-bold px-2 py-2 rounded-lg h-9 w-full sm:w-36">
+                                             {boletosBaixaveis.map(b => (
+                                                <option key={b.id} value={b.url_pdf}>{b.mes_ref}</option>
+                                             ))}
+                                          </select>
+                                          <button onClick={() => { const url = document.getElementById(`boleto-pend-sel-${cli.id}`).value; if(url) window.open(url, '_blank'); }} className="flex items-center justify-center text-xs font-bold px-3 py-2 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500 h-9">
+                                             Baixar
+                                          </button>
+                                       </div>
+                                    ) : null}
+
+                                    <a href={numWhats ? `https://wa.me/${numWhats}?text=${msgWhats}` : '#'} target={numWhats ? "_blank" : "_self"} className={`w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm h-9 ${numWhats ? 'bg-[#25D366] hover:bg-[#20bd5a] text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
+                                      <i className="fab fa-whatsapp text-sm"></i> Enviar Lembrete
+                                    </a>
+                                 </div>
+                              </div>
+                           </div>
+                         );
+                       })
                     )
                   )}
                 </div>
