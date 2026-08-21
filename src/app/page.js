@@ -2326,9 +2326,18 @@ export default function AdminPage() {
         })()}
 
         {abaAtiva === 'financeiro_admin' && (() => {
-          const boletosAtivos = boletosAdmin.filter(b => b.status !== 'cancelado');
-          const boletosPagos = boletosAtivos.filter(b => b.status === 'pago' || b.status === 'pago via pix');
-          const boletosAtrasados = boletosAtivos.filter(b => b.status === 'atrasado' || b.status === 'expirado');
+          // BLINDAGEM: Converte o status para minúsculo para garantir o match com a API e o Webhook
+          const boletosAtivos = boletosAdmin.filter(b => b.status && b.status.toLowerCase() !== 'cancelado');
+          
+          const boletosPagos = boletosAtivos.filter(b => {
+             const s = b.status.toLowerCase();
+             return s === 'pago' || s === 'pago via pix';
+          });
+          
+          const boletosAtrasados = boletosAtivos.filter(b => {
+             const s = b.status.toLowerCase();
+             return s === 'atrasado' || s === 'expirado';
+          });
           
           const valorRecebido = boletosPagos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
           const valorAtrasado = boletosAtrasados.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
