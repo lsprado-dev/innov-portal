@@ -140,6 +140,7 @@ export default function LoginPage() {
     aceito_lgpd: false, // <-- NOVO: Consentimento explícito LGPD
     fantasma: '' // <-- NOVO: O nosso Pote de Mel (Honeypot)
   });
+  const [erroContaExistente, setErroContaExistente] = useState(null); // <-- NOVO: Controle do aviso de conta existente
 
   const router = useRouter();
 
@@ -267,6 +268,20 @@ export default function LoginPage() {
       return;
     }
 
+    // 🚀 NOVO: Verifica se o cliente já existe antes de enviar a solicitação
+    const { data: clienteExiste } = await supabase
+      .from('clientes')
+      .select('cnpj, email')
+      .or(`cnpj.eq.${formCadastro.cnpj},email.eq.${formCadastro.email}`)
+      .maybeSingle();
+
+    if (clienteExiste) {
+      const dadoDuplicado = clienteExiste.cnpj === formCadastro.cnpj ? 'CNPJ' : 'E-mail';
+      setErroContaExistente(dadoDuplicado);
+      setCarregando(false);
+      return;
+    }
+
     const { error } = await supabase.from('solicitacoes_cadastro').insert([{
       nome_empresa: formCadastro.nome_empresa,
       cnpj: formCadastro.cnpj,
@@ -346,7 +361,33 @@ export default function LoginPage() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* ALERTA DE CONTA EXISTENTE COM BOTÃO DO WHATSAPP */}
+            {erroContaExistente && (
+              <div className="mb-6 bg-red-500/10 border border-red-500/30 p-5 rounded-xl flex flex-col items-center text-center gap-3 animate-in fade-in zoom-in-95">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 text-xl">
+                  <i className="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                  <h3 className="text-red-400 font-bold text-sm">Conta já registrada!</h3>
+                  <p className="text-xs text-red-200/80 mt-1 leading-relaxed">
+                    Identificamos que este <strong>{erroContaExistente}</strong> já possui um cadastro ativo na nossa plataforma.
+                  </p>
+                </div>
+                <a 
+                  href="https://wa.me/5511989326649?text=Ol%C3%A1%2C%20tentei%20solicitar%20um%20acesso%20no%20portal%2C%20mas%20o%20sistema%20informou%20que%20meu%20CNPJ%2FEmail%20j%C3%A1%20est%C3%A1%20cadastrado.%20Podem%20me%20ajudar%20a%20recuperar%20meu%20acesso%3F" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="w-full bg-[#25D366] text-white font-bold px-4 py-3 rounded-lg text-sm hover:bg-[#20bd5a] transition shadow-lg flex items-center justify-center gap-2"
+                >
+                  <i className="fab fa-whatsapp text-lg"></i> Falar com Suporte no WhatsApp
+                </a>
+                <button type="button" onClick={() => setErroContaExistente(null)} className="text-[10px] text-zinc-400 underline hover:text-white mt-1">
+                  Corrigir o {erroContaExistente} e tentar novamente
+                </button>
+              </div>
+            )}
+
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-5 ${erroContaExistente ? 'opacity-30 pointer-events-none' : ''}`}>
               
               {/* 🍯 CAMPO FANTASMA (HONEYPOT) - Invisível para humanos, visível (e tentador) para bots */}
               <div style={{ display: 'none' }} aria-hidden="true">

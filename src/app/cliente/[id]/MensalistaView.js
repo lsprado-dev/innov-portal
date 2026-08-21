@@ -4087,7 +4087,7 @@ export default function MensalistaView({ params: paramsPromise }) {
               {!isInterno && (
                 <div className="border-t border-zinc-800 pt-5 mt-2">
                   <h4 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    🛡️ Privacidade e Dados (LGPD)
+                     Privacidade e Dados (LGPD)
                   </h4>
                   <p className="text-xs text-zinc-400 mb-4">Você tem o direito de solicitar a exclusão dos seus dados pessoais do nosso portal. Note que dados fiscais e contábeis podem ser retidos por exigência legal, mesmo após o pedido (Art. 16, LGPD).</p>
                   <button 
