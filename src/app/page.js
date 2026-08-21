@@ -401,6 +401,13 @@ export default function AdminPage() {
       const { data: procs } = await supabase.from('processos_societarios').select('*').limit(5000);
       if (procs) setProcessosSocietarios(procs);
 
+      // 🚀 CORREÇÃO: Carrega os boletos AQUI DENTRO, porque o sistema não chega no 'else if' lá de baixo!
+      if (abaAtiva === 'financeiro_admin') {
+        const { data: boletos, error: errBol } = await supabase.from('boletos_api').select('*').order('data_vencimento', { ascending: false });
+        if (errBol) console.error(' Erro RLS nos boletos:', errBol);
+        if (boletos) setBoletosAdmin(boletos);
+      }
+
       setTemMaisDados(false); 
     } 
     else if (abaAtiva === 'pendentes') {
