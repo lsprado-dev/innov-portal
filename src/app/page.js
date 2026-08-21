@@ -394,7 +394,7 @@ export default function AdminPage() {
         .order('nome_empresa')
         .limit(5000);
       
-      if (error) console.error('🚨 Erro ao buscar clientes (Coluna inválida?):', error);
+      if (error) console.error('Erro ao buscar clientes (Coluna inválida?):', error);
       if (data) setClientes(data);
       
       // Carrega os processos vinculados a esses clientes
@@ -431,7 +431,7 @@ export default function AdminPage() {
       setAlertas(prev => recarregar ? novaBusca : [...prev, ...novaBusca]);
       if (recarregar) {
         const { data: clis, error } = await supabase.from('clientes').select(COLUNAS_SEGURAS).order('nome_empresa');
-        if (error) console.error('🚨 Erro (Alertas):', error);
+        if (error) console.error('Erro (Alertas):', error);
         if (clis) setClientes(clis);
       }
     } 
