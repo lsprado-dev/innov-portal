@@ -2530,7 +2530,7 @@ export default function AdminPage() {
                         <div className="flex justify-between items-start mb-4 gap-3 min-h-[3.5rem]">
                           <h3 className="text-lg font-bold text-white leading-tight line-clamp-2 break-words" title={cli.nome_empresa || cli.nome_contato}>
                             {cli.nome_empresa || cli.nome_contato}
-                            {cli.ultimo_login && <IconVerified />}
+                            {(cli.ultimo_login || (cli.empresas_vinculadas || []).some(vid => clientes.find(c => c.id === vid)?.ultimo_login)) && <IconVerified />}
                           </h3>
                           <div className="flex-shrink-0 pt-0.5">
                             <span className={`text-[10px] font-bold border px-2 py-0.5 rounded whitespace-nowrap ${isEspecial ? 'text-purple-400 border-purple-400/30 bg-purple-500/10' : 'text-[#d4af37] border-[#d4af37]/30 bg-[#0d1b2a]'}`}>
@@ -2581,16 +2581,34 @@ export default function AdminPage() {
 
                           {/* TEXTO DE LOGIN FIXO PARA NÃO QUEBRAR O LAYOUT */}
                           <div className="pt-3 mt-3 border-t border-zinc-800/40 min-h-[36px] flex items-center">
-                            {cli.ultimo_login ? (
-                              <p className="text-[10px] text-zinc-500 truncate">
-                                Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
-                                {cli.ultima_cidade && (
-                                  <span className="ml-1 text-zinc-400 hidden lg:inline">em <strong className="text-zinc-300">{cli.ultima_cidade}</strong></span>
-                                )}
-                              </p>
-                            ) : (
-                              <p className="text-[10px] text-zinc-600 italic">Nunca acessou o portal</p>
-                            )}
+                            {(() => {
+                              const vinculadasComLogin = (cli.empresas_vinculadas || [])
+                                .map(vid => clientes.find(c => c.id === vid))
+                                .filter(c => c && c.ultimo_login)
+                                .sort((a, b) => new Date(b.ultimo_login) - new Date(a.ultimo_login));
+                              
+                              const melhorVinculo = vinculadasComLogin[0];
+                              
+                              const dataPropria = cli.ultimo_login ? new Date(cli.ultimo_login) : new Date(0);
+                              const dataVinculo = melhorVinculo ? new Date(melhorVinculo.ultimo_login) : new Date(0);
+
+                              if (cli.ultimo_login && dataPropria >= dataVinculo) {
+                                return (
+                                  <p className="text-[10px] text-zinc-500 truncate">
+                                    Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
+                                    {cli.ultima_cidade && <span className="ml-1 text-zinc-400 hidden lg:inline">em <strong className="text-zinc-300">{cli.ultima_cidade}</strong></span>}
+                                  </p>
+                                );
+                              } else if (melhorVinculo && dataVinculo > dataPropria) {
+                                return (
+                                  <p className="text-[10px] text-zinc-500 truncate" title={`Acesso indireto utilizando a conta da empresa ${melhorVinculo.nome_empresa}`}>
+                                    Acessado via <strong className="text-[#d4af37]">{melhorVinculo.nome_empresa.split(' ')[0]}</strong>: <span className="text-blue-400/80 font-medium">{formatarDataHora(melhorVinculo.ultimo_login)}</span>
+                                  </p>
+                                );
+                              } else {
+                                return <p className="text-[10px] text-zinc-600 italic">Nunca acessou o portal</p>;
+                              }
+                            })()}
                           </div>
                         </div>
                       </div>
