@@ -2165,7 +2165,16 @@ export default function AdminPage() {
                   <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-center gap-4 hover:bg-zinc-800/20 transition">
                     <div className="flex-1 w-full">
                       <h3 className="font-bold text-white text-sm">{cli.nome_empresa || cli.nome_contato}</h3>
-                      <p className="text-xs text-zinc-400">{cli.cnpj ? `CNPJ: ${cli.cnpj}` : `CPF: ${cli.cpf || 'Não informado'}`} | Contato: {cli.nome_contato}</p>
+                      <p className="text-xs text-zinc-400 mt-1">{cli.cnpj ? `CNPJ: ${cli.cnpj}` : `CPF: ${cli.cpf || 'Não informado'}`} | Contato: {cli.nome_contato}</p>
+                      <p className="text-xs text-[#d4af37] mt-0.5">{cli.email || 'E-mail não informado'}</p>
+                      {cli.ultimo_login ? (
+                        <p className="text-[10px] text-zinc-500 mt-1.5 truncate">
+                          Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
+                          {cli.ultima_cidade && <span className="ml-1 hidden sm:inline">em <strong className="text-zinc-400">{cli.ultima_cidade}</strong></span>}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-zinc-600 italic mt-1.5">Nunca acessou o portal</p>
+                      )}
                     </div>
                     <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-4 min-w-[200px] bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
                       <span className="text-xs font-bold text-zinc-500 uppercase">Senha Atual:</span>
