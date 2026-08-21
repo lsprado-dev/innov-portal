@@ -1823,6 +1823,7 @@ export default function AdminPage() {
       const termo = buscaCliente.toLowerCase().trim();
       
       if (termo === 'clientesvan') return c.clientes_van === true;
+      if (termo === '#sem_acesso#' || termo === '#com_acesso#') return true;
 
       return (
         (c.nome_empresa?.toLowerCase() || '').includes(termo) || 
@@ -2148,20 +2149,86 @@ export default function AdminPage() {
           setMensagensNaoLidas={setMensagensNaoLidas} 
         />
 
-        {abaAtiva === 'senhas' && (
-          <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
-            <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
-              <div>
-                <h2 className="text-lg font-bold text-[#d4af37]">Gestão de Acessos</h2>
-                <p className="text-xs text-zinc-400">Consulte logins, e-mails e redefina a senha inicial dos clientes.</p>
+        {abaAtiva === 'senhas' && (() => {
+          const isFiltroSemAcesso = buscaCliente === '#SEM_ACESSO#';
+          const isFiltroComAcesso = buscaCliente === '#COM_ACESSO#';
+          const isFiltroTodos = !isFiltroSemAcesso && !isFiltroComAcesso && buscaCliente === '';
+
+          // Cálculos apenas para Mensalistas
+          const clientesMensalistas = clientes.filter(c => !(c.tipo_conta === 'especiais' || c.tipo_conta === 'especial' || (c.cpf && c.cpf.trim() !== '')));
+          const totalMensalistas = clientesMensalistas.length;
+          
+          const mensalistasComAcesso = clientesMensalistas.filter(cli => {
+            const vinculadasComLogin = (cli.empresas_vinculadas || [])
+              .map(vid => clientes.find(c => c.id === vid))
+              .filter(c => c && c.ultimo_login);
+            return cli.ultimo_login || vinculadasComLogin.length > 0;
+          }).length;
+          
+          const mensalistasSemAcesso = totalMensalistas - mensalistasComAcesso;
+
+          const listaExibicaoAcessos = clientesFiltrados.filter(cli => {
+            const isMensalista = !(cli.tipo_conta === 'especiais' || cli.tipo_conta === 'especial' || (cli.cpf && cli.cpf.trim() !== ''));
+            if (isFiltroSemAcesso) {
+              if (!isMensalista) return false;
+              const vinculadasComLogin = (cli.empresas_vinculadas || [])
+                .map(vid => clientes.find(c => c.id === vid))
+                .filter(c => c && c.ultimo_login);
+              return !cli.ultimo_login && vinculadasComLogin.length === 0;
+            }
+            if (isFiltroComAcesso) {
+              if (!isMensalista) return false;
+              const vinculadasComLogin = (cli.empresas_vinculadas || [])
+                .map(vid => clientes.find(c => c.id === vid))
+                .filter(c => c && c.ultimo_login);
+              return cli.ultimo_login || vinculadasComLogin.length > 0;
+            }
+            return true;
+          });
+
+          return (
+            <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
+              <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex flex-col gap-5">
+                
+                <div className="flex justify-between items-start sm:items-center gap-4 flex-wrap">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#d4af37]">Gestão de Acessos</h2>
+                    <p className="text-xs text-zinc-400">Consulte logins, e-mails e redefina a senha inicial dos clientes.</p>
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Procurar empresa ou CNPJ..." 
+                    value={isFiltroSemAcesso || isFiltroComAcesso ? '' : buscaCliente} 
+                    onChange={(e) => setBuscaCliente(e.target.value)} 
+                    className="w-full sm:w-64 bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" 
+                  />
+                </div>
+
+                {/* 🚀 DASHBOARD DE ACESSOS */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div onClick={() => setBuscaCliente('')} className={`p-4 rounded-lg border cursor-pointer transition shadow-inner ${isFiltroTodos ? 'bg-[#d4af37]/10 border-[#d4af37]/50' : 'bg-[#1b263b] border-zinc-700/50 hover:border-[#d4af37]/50'}`}>
+                    <p className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${isFiltroTodos ? 'text-[#d4af37]' : 'text-zinc-400'}`}>Total Mensalistas</p>
+                    <p className="text-2xl font-black text-white">{totalMensalistas}</p>
+                  </div>
+                  <div onClick={() => setBuscaCliente('#COM_ACESSO#')} className={`p-4 rounded-lg border cursor-pointer transition shadow-inner ${isFiltroComAcesso ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-[#1b263b] border-zinc-700/50 hover:border-emerald-500/50'}`}>
+                    <p className={`text-[10px] uppercase font-bold tracking-wider mb-1 flex items-center gap-1 ${isFiltroComAcesso ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                      <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                      Já Acessaram
+                    </p>
+                    <p className="text-2xl font-black text-emerald-400">{mensalistasComAcesso}</p>
+                  </div>
+                  <div onClick={() => setBuscaCliente('#SEM_ACESSO#')} className={`p-4 rounded-lg border cursor-pointer transition shadow-inner ${isFiltroSemAcesso ? 'bg-red-500/10 border-red-500/50' : 'bg-[#1b263b] border-zinc-700/50 hover:border-red-500/50'}`}>
+                    <p className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${isFiltroSemAcesso ? 'text-red-400' : 'text-zinc-400'}`}>Sem Acesso (Pendentes)</p>
+                    <p className="text-2xl font-black text-red-400">{mensalistasSemAcesso}</p>
+                  </div>
+                </div>
+
               </div>
-              <input type="text" placeholder="Procurar empresa ou CNPJ..." value={buscaCliente} onChange={(e) => setBuscaCliente(e.target.value)} className="w-full sm:w-64 bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
-            </div>
-            <div className="divide-y divide-zinc-800">
-              {clientesFiltrados.length === 0 ? (
-                <p className="text-zinc-500 text-center py-8">Nenhum cliente encontrado.</p>
-              ) : (
-                clientesFiltrados.map(cli => (
+              <div className="divide-y divide-zinc-800">
+                {listaExibicaoAcessos.length === 0 ? (
+                  <p className="text-zinc-500 text-center py-8">Nenhum cliente encontrado nesta categoria.</p>
+                ) : (
+                  listaExibicaoAcessos.map(cli => (
                   <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-center gap-4 hover:bg-zinc-800/20 transition">
                     <div className="flex-1 w-full">
                       <h3 className="font-bold text-white text-sm">{cli.nome_empresa || cli.nome_contato}</h3>
@@ -2246,7 +2313,8 @@ export default function AdminPage() {
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ==========================================
             ABA NOVA: VISUALIZADOR DE LOGS E SAÚDE DO SISTEMA
