@@ -2167,14 +2167,35 @@ export default function AdminPage() {
                       <h3 className="font-bold text-white text-sm">{cli.nome_empresa || cli.nome_contato}</h3>
                       <p className="text-xs text-zinc-400 mt-1">{cli.cnpj ? `CNPJ: ${cli.cnpj}` : `CPF: ${cli.cpf || 'Não informado'}`} | Contato: {cli.nome_contato}</p>
                       <p className="text-xs text-[#d4af37] mt-0.5">{cli.email || 'E-mail não informado'}</p>
-                      {cli.ultimo_login ? (
-                        <p className="text-[10px] text-zinc-500 mt-1.5 truncate">
-                          Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
-                          {cli.ultima_cidade && <span className="ml-1 hidden sm:inline">em <strong className="text-zinc-400">{cli.ultima_cidade}</strong></span>}
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-zinc-600 italic mt-1.5">Nunca acessou o portal</p>
-                      )}
+                      {(() => {
+                        // Busca as empresas vinculadas e pega a que tem o login mais recente
+                        const vinculadasComLogin = (cli.empresas_vinculadas || [])
+                          .map(vid => clientes.find(c => c.id === vid))
+                          .filter(c => c && c.ultimo_login)
+                          .sort((a, b) => new Date(b.ultimo_login) - new Date(a.ultimo_login));
+                        
+                        const melhorVinculo = vinculadasComLogin[0];
+                        
+                        const dataPropria = cli.ultimo_login ? new Date(cli.ultimo_login) : new Date(0);
+                        const dataVinculo = melhorVinculo ? new Date(melhorVinculo.ultimo_login) : new Date(0);
+
+                        if (cli.ultimo_login && dataPropria >= dataVinculo) {
+                          return (
+                            <p className="text-[10px] text-zinc-500 mt-1.5 truncate">
+                              Último acesso: <span className="text-blue-400/80 font-medium">{formatarDataHora(cli.ultimo_login)}</span>
+                              {cli.ultima_cidade && <span className="ml-1 hidden sm:inline">em <strong className="text-zinc-400">{cli.ultima_cidade}</strong></span>}
+                            </p>
+                          );
+                        } else if (melhorVinculo && dataVinculo > dataPropria) {
+                          return (
+                            <p className="text-[10px] text-zinc-500 mt-1.5 truncate" title={`Acesso indireto utilizando a conta da empresa ${melhorVinculo.nome_empresa}`}>
+                              Acessado via <strong className="text-[#d4af37]">{melhorVinculo.nome_empresa.split(' ')[0]}</strong>: <span className="text-blue-400/80 font-medium">{formatarDataHora(melhorVinculo.ultimo_login)}</span>
+                            </p>
+                          );
+                        } else {
+                          return <p className="text-[10px] text-zinc-600 italic mt-1.5">Nunca acessou o portal</p>;
+                        }
+                      })()}
                     </div>
                     <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-4 min-w-[200px] bg-[#0d1b2a] p-3 rounded-lg border border-zinc-800/50">
                       <span className="text-xs font-bold text-zinc-500 uppercase">Senha Atual:</span>
