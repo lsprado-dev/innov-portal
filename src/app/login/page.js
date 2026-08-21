@@ -268,15 +268,21 @@ export default function LoginPage() {
       return;
     }
 
-    // 🚀 NOVO: Verifica se o cliente já existe antes de enviar a solicitação
-    const { data: clienteExiste } = await supabase
+    // 🚀 NOVO: Verifica de forma precisa qual campo já existe no banco
+    const { data: clientePorCnpj } = await supabase
       .from('clientes')
-      .select('cnpj, email')
-      .or(`cnpj.eq.${formCadastro.cnpj},email.eq.${formCadastro.email}`)
+      .select('id')
+      .eq('cnpj', formCadastro.cnpj)
       .maybeSingle();
 
-    if (clienteExiste) {
-      const dadoDuplicado = clienteExiste.cnpj === formCadastro.cnpj ? 'CNPJ' : 'E-mail';
+    const { data: clientePorEmail } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('email', formCadastro.email)
+      .maybeSingle();
+
+    if (clientePorCnpj || clientePorEmail) {
+      const dadoDuplicado = clientePorCnpj ? 'CNPJ' : 'E-mail';
       setErroContaExistente(dadoDuplicado);
       setCarregando(false);
       return;
@@ -374,7 +380,7 @@ export default function LoginPage() {
                   </p>
                 </div>
                 <a 
-                  href="https://wa.me/5511989326649?text=Ol%C3%A1%2C%20tentei%20solicitar%20um%20acesso%20no%20portal%2C%20mas%20o%20sistema%20informou%20que%20meu%20CNPJ%2FEmail%20j%C3%A1%20est%C3%A1%20cadastrado.%20Podem%20me%20ajudar%20a%20recuperar%20meu%20acesso%3F" 
+                  href={`https://wa.me/5511989326649?text=${encodeURIComponent(`Olá, tentei solicitar um acesso no portal, mas o sistema informou que o meu ${erroContaExistente} já está cadastrado. Podem me ajudar a recuperar meu acesso?`)}`}
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="w-full bg-[#25D366] text-white font-bold px-4 py-3 rounded-lg text-sm hover:bg-[#20bd5a] transition shadow-lg flex items-center justify-center gap-2"
