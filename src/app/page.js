@@ -2333,21 +2333,50 @@ export default function AdminPage() {
         })()}
 
         {abaAtiva === 'financeiro_admin' && (() => {
-          // BLINDAGEM: Converte o status para minúsculo para garantir o match com a API e o Webhook
-          const boletosAtivos = boletosAdmin.filter(b => b.status && b.status.toLowerCase() !== 'cancelado');
+          // BLINDAGEM: Converte o status para minúsculo e FILTRA apenas de Junho/2026 em diante (Ignora o lixo do passado)
+          const boletosAtivos = boletosAdmin.filter(b => b.data_vencimento >= '2026-06-01' && b.status && b.status.toLowerCase() !== 'cancelado');
           
           const boletosPagos = boletosAtivos.filter(b => {
              const s = b.status.toLowerCase();
-             return s === 'pago' || s === 'pago via pix';
+             return s === 'pago' || s === 'pago via pix' || s === 'liquidado';
           });
           
           const boletosAtrasados = boletosAtivos.filter(b => {
              const s = b.status.toLowerCase();
-             return s === 'atrasado' || s === 'expirado';
+             return s === 'atrasado' || s === 'expirado' || s === 'vencido';
           });
           
           const valorRecebido = boletosPagos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
           const valorAtrasado = boletosAtrasados.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
+
+          // LÓGICA DE AGRUPAMENTO MENSAL
+          const getMesAno = (dataStr) => {
+             if (!dataStr) return 'Desconhecido';
+             const [ano, mes] = dataStr.split('-');
+             return `${mes}/${ano}`; // Retorna formato 06/2026
+          };
+          
+          const resumoAtrasado = {};
+          boletosAtrasados.forEach(b => {
+             const ma = getMesAno(b.data_vencimento);
+             resumoAtrasado[ma] = (resumoAtrasado[ma] || 0) + Number(b.valor || 0);
+          });
+          
+          const resumoRecebido = {};
+          boletosPagos.forEach(b => {
+             const ma = getMesAno(b.data_vencimento);
+             resumoRecebido[ma] = (resumoRecebido[ma] || 0) + Number(b.valor || 0);
+          });
+
+          // ORDENA OS MESES PARA APARECEREM NA SEQUÊNCIA (ex: 06/2026, 07/2026)
+          const mesesAtrasoOrdenados = Object.keys(resumoAtrasado).sort((a, b) => {
+             const [mA, aA] = a.split('/'); const [mB, aB] = b.split('/');
+             return new Date(aA, mA - 1) - new Date(aB, mB - 1);
+          });
+          const mesesRecebidoOrdenados = Object.keys(resumoRecebido).sort((a, b) => {
+             const [mA, aA] = a.split('/'); const [mB, aB] = b.split('/');
+             return new Date(aA, mA - 1) - new Date(aB, mB - 1);
+          });
 
           const inadimplentes = [];
           const emDia = [];
@@ -2357,9 +2386,13 @@ export default function AdminPage() {
 
           clientesMensalistas.forEach(cli => {
             const boletosCliente = boletosAtivos.filter(b => b.cliente_id === cli.id);
-            if (boletosCliente.length === 0) return; // Ignora se a API não gerou boletos para ele
+            if (boletosCliente.length === 0) return; // Ignora se a API não gerou boletos para ele desde Jun/26
 
-            const atrasos = boletosCliente.filter(b => b.status === 'atrasado' || b.status === 'expirado');
+            const atrasos = boletosCliente.filter(b => {
+               const s = b.status.toLowerCase();
+               return s === 'atrasado' || s === 'expirado' || s === 'vencido';
+            });
+            
             if (atrasos.length > 0) {
               const valorDevido = atrasos.reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
               inadimplentes.push({ ...cli, atrasos, valorDevido });
@@ -2368,27 +2401,55 @@ export default function AdminPage() {
             }
           });
 
+          // Ordena pelo maior devedor
           inadimplentes.sort((a, b) => b.valorDevido - a.valorDevido);
 
           return (
             <div className="space-y-6 animate-in fade-in duration-300">
-              {/* DASHBOARD */}
+              
+              {/* DASHBOARD MENSAL NO TOPO */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* CARD EM ATRASO */}
                 <div className="bg-[#1b263b] p-6 rounded-xl border border-red-500/30 shadow-xl flex flex-col justify-between">
-                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso / A Receber</p>
-                  <p className="text-4xl font-black text-white mb-2">R$ {valorAtrasado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                  <div className="flex gap-2 border-t border-zinc-800/80 pt-3">
-                    <span className="text-xs text-zinc-400">Total de <strong className="text-red-400">{inadimplentes.length}</strong> clientes inadimplentes.</span>
+                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconAlert /> Em Atraso / A Receber (Geral)</p>
+                  <p className="text-4xl font-black text-white mb-4">R$ {valorAtrasado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  
+                  <div className="border-t border-zinc-800/80 pt-4">
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês de Vencimento:</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                       {mesesAtrasoOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum atraso no período.</span>}
+                       {mesesAtrasoOrdenados.map(mes => (
+                          <div key={mes} className="bg-[#0d1b2a] border border-red-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[80px]">
+                             <span className="text-[10px] text-zinc-400 font-bold">{mes}</span>
+                             <span className="text-xs font-black text-red-400">R$ {resumoAtrasado[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                          </div>
+                       ))}
+                    </div>
+                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50">Total de <strong className="text-red-400">{inadimplentes.length}</strong> clientes inadimplentes.</p>
                   </div>
                 </div>
 
+                {/* CARD RECEBIDOS */}
                 <div className="bg-[#1b263b] p-6 rounded-xl border border-emerald-500/30 shadow-xl flex flex-col justify-between">
-                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconCheck /> Total Recebido</p>
-                  <p className="text-4xl font-black text-white mb-2">R$ {valorRecebido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                  <div className="flex gap-2 border-t border-zinc-800/80 pt-3">
-                    <span className="text-xs text-zinc-400"><strong className="text-emerald-400">{emDia.length}</strong> clientes 100% em dia.</span>
+                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2"><IconCheck /> Total Recebido (Geral)</p>
+                  <p className="text-4xl font-black text-white mb-4">R$ {valorRecebido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  
+                  <div className="border-t border-zinc-800/80 pt-4">
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Desdobramento por Mês de Vencimento:</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                       {mesesRecebidoOrdenados.length === 0 && <span className="text-xs text-zinc-400">Nenhum recebimento no período.</span>}
+                       {mesesRecebidoOrdenados.map(mes => (
+                          <div key={mes} className="bg-[#0d1b2a] border border-emerald-500/20 px-3 py-1.5 rounded-lg flex flex-col min-w-[80px]">
+                             <span className="text-[10px] text-zinc-400 font-bold">{mes}</span>
+                             <span className="text-xs font-black text-emerald-400">R$ {resumoRecebido[mes].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                          </div>
+                       ))}
+                    </div>
+                    <p className="text-xs text-zinc-400 pt-2 border-t border-zinc-800/50"><strong className="text-emerald-400">{emDia.length}</strong> clientes 100% em dia.</p>
                   </div>
                 </div>
+
               </div>
 
               {/* LISTA DE CLIENTES */}
@@ -2404,36 +2465,62 @@ export default function AdminPage() {
                 <div className="divide-y divide-zinc-800">
                   {subAbaFinanceiro === 'inadimplentes' ? (
                     inadimplentes.length === 0 ? (
-                       <p className="text-zinc-500 text-center py-8">Nenhum cliente inadimplente. Parabéns!</p>
+                       <p className="text-zinc-500 text-center py-8">Nenhum cliente inadimplente desde Junho/2026. Parabéns!</p>
                     ) : (
                        inadimplentes.map(cli => {
-                         const fonesWhats = cli.celular ? cli.celular.replace(/\D/g, '') : '';
-                         const numWhats = fonesWhats.length >= 10 ? `55${fonesWhats}` : '';
-                         const mesesAtraso = cli.atrasos.map(a => a.mes_ref).join(', ');
-                         const msgWhats = encodeURIComponent(`Olá ${cli.nome_contato.split(' ')[0]}, tudo bem? Notamos que consta em nosso sistema uma pendência referente à(s) mensalidade(s) de *${mesesAtraso}*. Se precisar de ajuda para emitir a segunda via do boleto, basta acessar nosso portal ou me avisar por aqui!`);
+                         // Filtra os boletos que ainda podem ser baixados
+                         const boletosBaixaveis = cli.atrasos.filter(b => b.status.toLowerCase() !== 'expirado' && b.url_pdf);
+                         const todosExpirados = cli.atrasos.length > 0 && boletosBaixaveis.length === 0;
 
                          return (
-                           <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-zinc-800/20 transition">
+                           <div key={cli.id} className="p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 hover:bg-zinc-800/20 transition">
                               <div className="flex-1 w-full">
-                                 <h3 className="font-bold text-white text-sm flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</h3>
+                                 <Link href={`/cliente/${cli.id}`} className="font-bold text-[#d4af37] hover:text-yellow-400 hover:underline text-sm flex items-center gap-2 transition w-max">
+                                    <IconCompany /> {cli.nome_empresa}
+                                 </Link>
                                  <p className="text-xs text-zinc-400 mt-1">Responsável: <strong className="text-zinc-300">{cli.nome_contato}</strong> | {cli.celular}</p>
+                                 
                                  <div className="mt-2 flex flex-wrap gap-2">
                                     {cli.atrasos.map(b => (
-                                      <span key={b.id} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-bold">
-                                        Ref: {b.mes_ref} (R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})})
+                                      <span key={b.id} className={`text-[10px] px-2 py-0.5 rounded font-bold border ${b.status.toLowerCase() === 'expirado' ? 'bg-zinc-800 text-zinc-400 border-zinc-700' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
+                                        Ref: {b.mes_ref} {b.status.toLowerCase() === 'expirado' && '(Expirado)'} - R$ {Number(b.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                                       </span>
                                     ))}
                                  </div>
                               </div>
-                              <div className="flex flex-col gap-2 w-full sm:w-auto">
-                                 <p className="text-sm font-black text-red-500 text-left sm:text-right sm:pr-2 mb-1">Total: R$ {cli.valorDevido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                                 <a 
-                                   href={numWhats ? `https://wa.me/${numWhats}?text=${msgWhats}` : '#'}
-                                   target={numWhats ? "_blank" : "_self"}
-                                   className={`w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm ${numWhats ? 'bg-[#25D366] hover:bg-[#20bd5a] text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
-                                 >
-                                   <i className="fab fa-whatsapp text-sm"></i> Cobrar via WhatsApp
-                                 </a>
+
+                              <div className="flex flex-col gap-2 w-full lg:w-auto items-start lg:items-end">
+                                 <p className="text-sm font-black text-red-500 mb-1">Total: R$ {cli.valorDevido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                 
+                                 {todosExpirados ? (
+                                    <span className="text-[10px] bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg font-bold border border-zinc-700 flex items-center gap-1">
+                                       ⚠️ Boletos Expirados (Reemitir)
+                                    </span>
+                                 ) : boletosBaixaveis.length === 1 ? (
+                                    <button 
+                                      onClick={() => window.open(boletosBaixaveis[0].url_pdf, '_blank')}
+                                      className="w-full lg:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2.5 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500"
+                                    >
+                                      <IconDocument /> Baixar Boleto
+                                    </button>
+                                 ) : boletosBaixaveis.length > 1 ? (
+                                    <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
+                                       <select id={`boleto-sel-${cli.id}`} className="w-full sm:w-auto bg-[#0d1b2a] border border-zinc-700 text-white text-xs font-bold px-3 py-2.5 rounded-lg focus:border-[#d4af37] focus:outline-none">
+                                          {boletosBaixaveis.map(b => (
+                                             <option key={b.id} value={b.url_pdf}>{b.mes_ref} - R$ {Number(b.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</option>
+                                          ))}
+                                       </select>
+                                       <button 
+                                          onClick={() => {
+                                             const url = document.getElementById(`boleto-sel-${cli.id}`).value;
+                                             if(url) window.open(url, '_blank');
+                                          }}
+                                          className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-bold px-4 py-2.5 rounded-lg transition-all shadow-sm bg-[#d4af37] text-[#0d1b2a] hover:bg-yellow-500"
+                                       >
+                                          <IconDocument /> Baixar
+                                       </button>
+                                    </div>
+                                 ) : null}
                               </div>
                            </div>
                          );
@@ -2441,12 +2528,14 @@ export default function AdminPage() {
                     )
                   ) : (
                     emDia.length === 0 ? (
-                       <p className="text-zinc-500 text-center py-8">Nenhum cliente com pagamentos registrados.</p>
+                       <p className="text-zinc-500 text-center py-8">Nenhum cliente com pagamentos registrados desde Junho/2026.</p>
                     ) : (
                        emDia.map(cli => (
                          <div key={cli.id} className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-zinc-800/20 transition">
                             <div>
-                               <h3 className="font-bold text-white text-sm flex items-center gap-2"><IconCompany /> {cli.nome_empresa}</h3>
+                               <Link href={`/cliente/${cli.id}`} className="font-bold text-[#d4af37] hover:text-yellow-400 hover:underline text-sm flex items-center gap-2 transition w-max">
+                                  <IconCompany /> {cli.nome_empresa}
+                               </Link>
                                <p className="text-xs text-zinc-400 mt-1">Responsável: {cli.nome_contato}</p>
                             </div>
                             <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg font-bold">
