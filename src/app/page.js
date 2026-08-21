@@ -2033,7 +2033,7 @@ export default function AdminPage() {
                 </span>
               )}
             </button>
-            <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Senhas</button>
+            <button onClick={() => { setAbaAtiva('senhas'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'senhas' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Gestão de Acessos</button>
             <button onClick={() => { setAbaAtiva('auditoria'); rolarPara('conteudo-admin'); }} className={`flex-1 sm:flex-none justify-center text-xs px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-all font-bold border flex items-center gap-1 ${abaAtiva === 'auditoria' ? 'bg-[#d4af37] text-[#0d1b2a] border-[#d4af37]' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'}`}>Auditoria</button>
             <span className="text-sm text-zinc-400 hidden lg:inline">
               Conectado como: <strong className="text-[#d4af37] font-semibold">{operador}</strong>
@@ -2152,8 +2152,8 @@ export default function AdminPage() {
           <div className="bg-[#1b263b] rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
             <div className="bg-[#0d1b2a] p-5 border-b border-zinc-800 flex justify-between items-center gap-4 flex-wrap">
               <div>
-                <h2 className="text-lg font-bold text-[#d4af37]">Central de Acessos e Senhas</h2>
-                <p className="text-xs text-zinc-400">Consulte se o cliente alterou a senha inicial de 6 dígitos.</p>
+                <h2 className="text-lg font-bold text-[#d4af37]">Gestão de Acessos</h2>
+                <p className="text-xs text-zinc-400">Consulte logins, e-mails e redefina a senha inicial dos clientes.</p>
               </div>
               <input type="text" placeholder="Procurar empresa ou CNPJ..." value={buscaCliente} onChange={(e) => setBuscaCliente(e.target.value)} className="w-full sm:w-64 bg-[#1b263b] border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#d4af37]" />
             </div>
