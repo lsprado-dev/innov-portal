@@ -115,7 +115,7 @@ export default function EspecialView({ params }) {
     
     e.target.value = null; // MÁGICA: Limpa a memória do input
 
-    if (file.size > (file.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('Arquivo excede o limite permitido (50MB p/ planilhas).', 'erro');
+    if (file.size > (file.name?.match(/\.(csv|xls|xlsx|zip)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('Arquivo excede o limite permitido (50MB p/ planilhas).', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -546,7 +546,7 @@ export default function EspecialView({ params }) {
   async function handleEnviarDocumento(e, departamentoDestino) {
     e.preventDefault();
     if (!arquivoDoc || !descricaoDoc.trim()) return mostrarToast('Preencha a descrição e selecione o arquivo.', 'erro');
-    if (arquivoDoc.size > (arquivoDoc.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('Arquivo excede o limite permitido (50MB p/ planilhas).', 'erro');
+    if (arquivoDoc.size > (arquivoDoc.name?.match(/\.(csv|xls|xlsx|zip)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('Arquivo excede o limite permitido (50MB p/ planilhas).', 'erro');
     
     // Trava de segurança: impede documentos fantasmas se houver múltiplos processos
     if (processos.length > 1 && !processoSelecionadoDoc) return mostrarToast('Por favor, selecione para qual processo este documento pertence.', 'erro');
@@ -1021,7 +1021,7 @@ export default function EspecialView({ params }) {
                 </div>
                 <div className="md:col-span-4 w-full">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
-                  <input type="file" required accept=".pdf,image/*,.csv,.xls,.xlsx" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full max-w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
+                  <input type="file" required accept=".pdf,image/*,.csv,.xls,.xlsx,.zip" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full max-w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                 </div>
                 <div className="md:col-span-3 w-full mt-2 md:mt-0">
                   <button type="submit" disabled={subindoArquivo} className="w-full bg-purple-500 text-white font-extrabold px-4 py-2.5 rounded-lg text-sm hover:bg-purple-400 transition shadow-lg disabled:opacity-50">
@@ -1064,7 +1064,7 @@ export default function EspecialView({ params }) {
                     {isInterno && (
                       <label className="text-[10px] bg-purple-500 hover:bg-purple-400 text-white px-3 py-1.5 rounded transition font-bold cursor-pointer shadow-sm">
                         + Publicar Doc
-                        <input type="file" accept=".pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={(e) => handleUploadAdminDoc(e, processos[0]?.id || null)} disabled={subindoArquivo} />
+                        <input type="file" accept=".pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={(e) => handleUploadAdminDoc(e, processos[0]?.id || null)} disabled={subindoArquivo} />
                       </label>
                     )}
                   </div>
@@ -1128,7 +1128,7 @@ export default function EspecialView({ params }) {
                             {isInterno && (
                               <label className="text-[9px] bg-purple-500 hover:bg-purple-400 text-white px-3 py-1.5 rounded transition font-bold cursor-pointer whitespace-nowrap shadow-sm">
                                 + Publicar Doc
-                                <input type="file" accept=".pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={(e) => handleUploadAdminDoc(e, proc.id)} disabled={subindoArquivo} />
+                                <input type="file" accept=".pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={(e) => handleUploadAdminDoc(e, proc.id)} disabled={subindoArquivo} />
                               </label>
                             )}
                           </div>
@@ -1240,7 +1240,7 @@ export default function EspecialView({ params }) {
                                    {!isInterno && (
                                      <label className="block text-center mt-2 w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2 rounded-lg text-[10px] hover:bg-yellow-500 transition shadow-sm">
                                         {subindoArquivo ? 'Aguarde...' : '+ Anexar Comprovante'}
-                                        <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={e => handleAnexarComprovanteTaxa(e, proc, taxa.id)} disabled={subindoArquivo} />
+                                        <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={e => handleAnexarComprovanteTaxa(e, proc, taxa.id)} disabled={subindoArquivo} />
                                      </label>
                                    )}
                                 </div>
@@ -1313,7 +1313,7 @@ export default function EspecialView({ params }) {
                                 {!proc.honorario_pago && !honorarioPagoManual[proc.id] && (
                                   <label className="block w-full cursor-pointer bg-[#d4af37] text-[#0d1b2a] font-extrabold py-2.5 rounded-lg text-[10px] uppercase tracking-wider hover:bg-yellow-500 transition shadow-sm text-center">
                                     {subindoArquivo ? 'Aguarde...' : 'Anexar Comprovante de Pagamento'}
-                                    <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={async (e) => {
+                                    <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={async (e) => {
                                       const file = e.target.files[0];
                                       if(!file) return;
                                       setSubindoArquivo(true);
@@ -1431,7 +1431,7 @@ export default function EspecialView({ params }) {
                 </div>
                 <div className="w-full">
                   <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Anexar Comprovante</label>
-                  <input type="file" required accept=".pdf,image/*,.csv,.xls,.xlsx" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full max-w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#d4af37]/20 file:text-[#d4af37]" />
+                  <input type="file" required accept=".pdf,image/*,.csv,.xls,.xlsx,.zip" onChange={e => setArquivoDoc(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full max-w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#d4af37]/20 file:text-[#d4af37]" />
                 </div>
                 <button type="submit" disabled={subindoArquivo} className="w-full bg-[#d4af37] text-[#0d1b2a] font-extrabold px-4 py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-lg disabled:opacity-50 mt-2">
                   {subindoArquivo ? 'A enviar...' : 'Confirmar e Enviar'}
@@ -1572,7 +1572,7 @@ export default function EspecialView({ params }) {
                           ) : (
                             <div>
                               <label className="block text-[9px] text-zinc-400 uppercase mb-0.5">Anexar Guia/Boleto (PDF ou Imagem)</label>
-                              <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-1 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
+                              <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" onChange={e => setTaxaBoleto(e.target.files[0])} className="text-[10px] text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded p-1 w-full file:bg-zinc-800 file:text-white file:border-0 file:rounded cursor-pointer" />
                             </div>
                           )}
                           

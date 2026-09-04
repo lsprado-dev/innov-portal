@@ -1209,7 +1209,7 @@ export default function MensalistaView({ params: paramsPromise }) {
   // ===============================================
   
   async function fazerUploadUnitario(file, targetPastaId, directDriveId = null) {
-    if (file.size > (file.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) {
+    if (file.size > (file.name?.match(/\.(csv|xls|xlsx|zip)$/i) ? 50 : 4.4) * 1024 * 1024) {
       mostrarToast(`Ignorado: "${file.name}" excede o limite permitido.`, 'erro');
       return false;
     }
@@ -1330,7 +1330,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     
     e.target.value = null; // MÁGICA: Libera o input para tentar novamente
 
-    if (file.size > (file.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('O arquivo excede o limite permitido.', 'erro');
+    if (file.size > (file.name?.match(/\.(csv|xls|xlsx|zip)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('O arquivo excede o limite permitido.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -2054,7 +2054,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (validos.length === 0) return mostrarToast('Preencha a descrição e selecione um arquivo.', 'erro');
 
     for (const item of validos) {
-      if (item.arquivo.size > (item.arquivo.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede o limite permitido.`, 'erro');
+      if (item.arquivo.size > (item.arquivo.name?.match(/\.(csv|xls|xlsx|zip)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede o limite permitido.`, 'erro');
     }
 
     setSubindoArquivo(true);
@@ -2912,7 +2912,7 @@ export default function MensalistaView({ params: paramsPromise }) {
 
                               <label className="block text-center text-[10px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition cursor-pointer shadow-sm mt-1">
                                 {subindoArquivo ? 'Aguarde...' : '+ Anexar Comprovante'}
-                                <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={(e) => handleUploadFinanceiro(e, mes.ref)} disabled={subindoArquivo} />
+                                <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={(e) => handleUploadFinanceiro(e, mes.ref)} disabled={subindoArquivo} />
                               </label>
                             </div>
                           ) : (
@@ -2997,7 +2997,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                         </button>
                         <label className="flex-1 sm:flex-none bg-[#d4af37] text-[#0d1b2a] px-3 sm:px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-xs sm:text-sm text-center whitespace-nowrap">
                           {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivos'}
-                          <input type="file" multiple accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
+                          <input type="file" multiple accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
                         </label>
                       </div>
                     )}
@@ -3235,7 +3235,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                       </div>
                       <div className="lg:col-span-3">
                         <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
-                        <input type="file" required accept="application/pdf,image/*,.csv,.xls,.xlsx" onChange={(e) => alterarArquivo(item.id, e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
+                        <input type="file" required accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" onChange={(e) => alterarArquivo(item.id, e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                       </div>
                       {enviosPre.length > 1 && (
                         <div className="lg:col-span-1 flex justify-end">
@@ -3390,7 +3390,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">Anexar Documento (Opcional)</label>
-                  <input type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" onChange={(e) => setArquivoPedido(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" />
+                  <input type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.zip" onChange={(e) => setArquivoPedido(e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" />
                 </div>
                 <div className="flex justify-end border-t border-zinc-800/60 pt-5 mt-2">
                   <button type="submit" disabled={subindoArquivo} className="bg-[#d4af37] text-[#0d1b2a] font-extrabold px-8 py-3 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.2)] disabled:opacity-50 w-full sm:w-auto">
@@ -3594,7 +3594,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                           ) : (
                             <label className="block w-full text-center bg-[#d4af37] text-[#0d1b2a] font-extrabold px-6 py-3.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.3)] cursor-pointer whitespace-nowrap">
                               {subindoArquivo ? 'A Enviar...' : <><IconClip /> Anexar Arquivo</>}
-                              <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={(e) => handleResponderAlerta(e, alerta)} disabled={subindoArquivo} />
+                              <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx,.zip" className="hidden" onChange={(e) => handleResponderAlerta(e, alerta)} disabled={subindoArquivo} />
                             </label>
                           )}
 
@@ -4159,7 +4159,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                 <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Anexar Documento (Opcional)</label>
                 <input 
                   type="file" 
-                  accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                  accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.zip" 
                   onChange={(e) => setModalRespostaPedido({...modalRespostaPedido, arquivo: e.target.files[0]})}
                   className="text-xs text-zinc-400 bg-[#0d1b2a] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" 
                 />

@@ -863,7 +863,7 @@ export default function AdminPage() {
 
     
     if (arquivo) {
-      if (arquivo.size > (arquivo.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) {
+      if (arquivo.size > (arquivo.name?.match(/\.(csv|xls|xlsx|zip)$/i) ? 50 : 4.4) * 1024 * 1024) {
         mostrarToast('O arquivo excede o limite permitido.', 'erro');
         setSubindo(false);
         return;
@@ -3550,7 +3550,7 @@ export default function AdminPage() {
                     <input 
                       type="file" 
                       required 
-                      accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                      accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.zip" 
                       onChange={e => setFormAlerta({...formAlerta, arquivo_envio: e.target.files[0]})} 
                       className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-700 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20" 
                     />
@@ -4131,7 +4131,7 @@ export default function AdminPage() {
                 <label className="block text-xs font-bold text-zinc-400 uppercase mb-2">Anexar Documento (Opcional)</label>
                 <input 
                   type="file" 
-                  accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" 
+                  accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.zip" 
                   onChange={(e) => setModalRespostaPedido({...modalRespostaPedido, arquivo: e.target.files[0]})}
                   className="text-xs text-zinc-400 bg-[#0d1b2a] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-[#d4af37]/10 file:text-[#d4af37] hover:file:bg-[#d4af37]/20" 
                 />
