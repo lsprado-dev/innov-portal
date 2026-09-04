@@ -863,8 +863,8 @@ export default function AdminPage() {
 
     
     if (arquivo) {
-      if (arquivo.size > 4.4 * 1024 * 1024) {
-        mostrarToast('O arquivo excede o limite de 4.4MB.', 'erro');
+      if (arquivo.size > (arquivo.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite permitido.', 'erro');
         setSubindo(false);
         return;
       }

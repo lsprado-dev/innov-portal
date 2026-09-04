@@ -1209,8 +1209,8 @@ export default function MensalistaView({ params: paramsPromise }) {
   // ===============================================
   
   async function fazerUploadUnitario(file, targetPastaId, directDriveId = null) {
-    if (file.size > 4.4 * 1024 * 1024) {
-      mostrarToast(`Ignorado: "${file.name}" excede 4.4MB.`, 'erro');
+    if (file.size > (file.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) {
+      mostrarToast(`Ignorado: "${file.name}" excede o limite permitido.`, 'erro');
       return false;
     }
 
@@ -1330,7 +1330,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     
     e.target.value = null; // MÁGICA: Libera o input para tentar novamente
 
-    if (file.size > 4.4 * 1024 * 1024) return mostrarToast('O arquivo excede 4.4MB.', 'erro');
+    if (file.size > (file.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast('O arquivo excede o limite permitido.', 'erro');
 
     setSubindoArquivo(true);
     const timestamp = Date.now();
@@ -2054,7 +2054,7 @@ export default function MensalistaView({ params: paramsPromise }) {
     if (validos.length === 0) return mostrarToast('Preencha a descrição e selecione um arquivo.', 'erro');
 
     for (const item of validos) {
-      if (item.arquivo.size > 4.4 * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede 4.4MB.`, 'erro');
+      if (item.arquivo.size > (item.arquivo.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) return mostrarToast(`O arquivo "${item.arquivo.name}" excede o limite permitido.`, 'erro');
     }
 
     setSubindoArquivo(true);
@@ -2115,8 +2115,8 @@ export default function MensalistaView({ params: paramsPromise }) {
     let nomeOriginal = null;
 
     if (arquivoPedido) {
-      if (arquivoPedido.size > 4.4 * 1024 * 1024) {
-        mostrarToast('O arquivo excede o limite de 4.4MB.', 'erro');
+      if (arquivoPedido.size > (arquivoPedido.name?.match(/\.(csv|xls|xlsx)$/i) ? 50 : 4.4) * 1024 * 1024) {
+        mostrarToast('O arquivo excede o limite permitido.', 'erro');
         setSubindoArquivo(false); return;
       }
       const timestamp = Date.now();
@@ -2912,7 +2912,7 @@ export default function MensalistaView({ params: paramsPromise }) {
 
                               <label className="block text-center text-[10px] border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d1b2a] py-1.5 rounded font-bold transition cursor-pointer shadow-sm mt-1">
                                 {subindoArquivo ? 'Aguarde...' : '+ Anexar Comprovante'}
-                                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => handleUploadFinanceiro(e, mes.ref)} disabled={subindoArquivo} />
+                                <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={(e) => handleUploadFinanceiro(e, mes.ref)} disabled={subindoArquivo} />
                               </label>
                             </div>
                           ) : (
@@ -2997,7 +2997,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                         </button>
                         <label className="flex-1 sm:flex-none bg-[#d4af37] text-[#0d1b2a] px-3 sm:px-4 py-2.5 rounded-lg font-bold hover:bg-yellow-500 transition shadow-lg cursor-pointer text-xs sm:text-sm text-center whitespace-nowrap">
                           {subindoArquivo ? 'A Enviar...' : 'Enviar Arquivos'}
-                          <input type="file" multiple accept="application/pdf,image/*" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
+                          <input type="file" multiple accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={handleUpload} disabled={subindoArquivo} />
                         </label>
                       </div>
                     )}
@@ -3235,7 +3235,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                       </div>
                       <div className="lg:col-span-3">
                         <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1">Escolher Arquivo</label>
-                        <input type="file" required accept="application/pdf,image/*" onChange={(e) => alterarArquivo(item.id, e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
+                        <input type="file" required accept="application/pdf,image/*,.csv,.xls,.xlsx" onChange={(e) => alterarArquivo(item.id, e.target.files[0])} className="text-xs text-zinc-400 bg-[#1b263b] border border-zinc-800 rounded-lg p-2 w-full cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200" />
                       </div>
                       {enviosPre.length > 1 && (
                         <div className="lg:col-span-1 flex justify-end">
@@ -3594,7 +3594,7 @@ export default function MensalistaView({ params: paramsPromise }) {
                           ) : (
                             <label className="block w-full text-center bg-[#d4af37] text-[#0d1b2a] font-extrabold px-6 py-3.5 rounded-lg text-sm hover:bg-yellow-500 transition shadow-[0_0_15px_rgba(212,175,55,0.3)] cursor-pointer whitespace-nowrap">
                               {subindoArquivo ? 'A Enviar...' : <><IconClip /> Anexar Arquivo</>}
-                              <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => handleResponderAlerta(e, alerta)} disabled={subindoArquivo} />
+                              <input type="file" accept="application/pdf,image/*,.csv,.xls,.xlsx" className="hidden" onChange={(e) => handleResponderAlerta(e, alerta)} disabled={subindoArquivo} />
                             </label>
                           )}
 
